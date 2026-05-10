@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tradingagents"
+name = "trade4u"
 version = "0.2.4"
-description = "TradingAgents: Multi-Agents LLM Financial Trading Framework"
+description = "Trade4u: Multi-Agents LLM Financial Trading Framework"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -30,10 +30,11 @@ dependencies = [
     "tqdm>=4.67.1",
     "typing-extensions>=4.14.0",
     "yfinance>=0.2.63",
+    "streamlit>=1.28.0",
 ]
 
 [project.scripts]
-tradingagents = "cli.main:app"
+trade4u = "cli.main:app"
 
 [tool.setuptools.packages.find]
 include = ["tradingagents*", "cli*"]
