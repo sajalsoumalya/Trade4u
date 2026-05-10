@@ -3,56 +3,45 @@ FROM python:3.13-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-WORKDIR /home/appuser/app
+WORKDIR /app
 
-# Install dependencies first
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
+# Install all dependencies in one layer
 RUN pip install --no-cache-dir \
-    langchain-core langchain-anthropic langchain-openai langgraph \
-    yfinance pandas streamlit rich typer question tqdm requests pytz \
-    langgraph-checkpoint-sqlite backtrader stockstats parsel \
-    python-dotenv pydantic-settings setuptools frozendict \
-    multidict frozenlist aiosignal yarl propcache attrs aiohappyeyeballs \
-    aiohttp dataclasses-json marshmallow typing-inspect typing-inspect \
-    pydantic pydantic-core typing-extensions annotated-types \
-    distro docstring-parser jiter sniffio anyio \
-    idna certifi httpcore h11 httpx \
-    openai tiktoken regex \
-    google-genai google-auth websockets cryptography cffi pyasn1 pyasn1-modules \
-    langchain-experimental langchain-community langchain-classic \
-    langchain-google-genai SQLAlchemy \
-    beautifulsoup4 frozendict peewee multitasking platformdirs \
-    beautifulsoup4 curl_cffi protobuf pyarrow pillow \
-    blinker cachetools gitpython pydeck toml starlette uvicorn \
-    httptools python-multipart itsdangerous watchdog \
-    altair jsonschema narwhals markdown-it-py mdurl pygments \
-    rich prompt_toolkit wcwidth soupsieve jsonpointer jsonschema-specifications \
-    referencing rpds-py smmap gitdb lxml cssselect jmespath w3lib \
-    greenlet narwhals orjson ormsgpack xxhash zstandard \
-    packaging python-multipart python-dateutil six \
-    numpy pandas pyyaml jsonpatch langchain-protocol langsmith uuid-utils \
-    tenacity uuid-utils urllib3 charset_normalizer certifi \
-    toml tqdm shellingham annotated-doc
+    "langchain-core>=0.3.81" \
+    "langchain-anthropic>=0.3.15" \
+    "langchain-openai>=0.3.23" \
+    "langgraph>=0.4.8" \
+    "langgraph-checkpoint-sqlite>=2.0.0" \
+    "yfinance>=0.2.63" \
+    "pandas>=2.3.0" \
+    "streamlit>=1.28.0" \
+    "rich>=14.0.0" \
+    "typer>=0.21.0" \
+    "questionary>=2.1.0" \
+    "requests>=2.32.4" \
+    "pytz>=2025.2" \
+    "backtrader>=1.9.78.123" \
+    "stockstats>=0.6.5" \
+    "parsel>=1.10.0" \
+    "python-dotenv>=0.21.0" \
+    "pydantic-settings>=2.10.1" \
+    "setuptools>=80.9.0" \
+    "numpy>=2.1.0" \
+    "pytest"
 
-# Copy source code
-COPY tradingagents/ ./tradingagents/
-COPY tradingagents_web/ ./tradingagents_web/
-COPY main.py .
-COPY README.md .
+# Copy source
+COPY tradingagents/ /app/tradingagents/
+COPY tradingagents_web/ /app/tradingagents_web/
+COPY main.py /app/main.py
+COPY README.md /app/README.md
 
 # Streamlit config
-RUN mkdir -p /home/appuser/.streamlit && \
-    echo '[server]' > /home/appuser/.streamlit/config.toml && \
-    echo 'port = 8501' >> /home/appuser/.streamlit/config.toml && \
-    echo 'headless = true' >> /home/appuser/.streamlit/config.toml && \
-    echo 'enableCORS = false' >> /home/appuser/.streamlit/config.toml && \
-    echo 'enableXsrfProtection = true' >> /home/appuser/.streamlit/config.toml && \
-    echo '' >> /home/appuser/.streamlit/config.toml && \
-    echo '[browser]' >> /home/appuser/.streamlit/config.toml && \
-    echo 'serverAddress = "0.0.0.0"' >> /home/appuser/.streamlit/config.toml && \
-    echo 'gatherUsageStats = false' >> /home/appuser/.streamlit/config.toml
+RUN mkdir -p /root/.streamlit && \
+    echo '[server]' > /root/.streamlit/config.toml && \
+    echo 'port = 8501' >> /root/.streamlit/config.toml && \
+    echo 'headless = true' >> /root/.streamlit/config.toml && \
+    echo 'enableCORS = false' >> /root/.streamlit/config.toml && \
+    echo 'enableXsrfProtection = true' >> /root/.streamlit/config.toml
 
 EXPOSE 8501
 
