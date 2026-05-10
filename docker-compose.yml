@@ -2,14 +2,18 @@ services:
   tradingagents:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.web
     env_file:
       - .env
+    environment:
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
     ports:
       - "8501:8501"
     volumes:
       - tradingagents_data:/home/appuser/.tradingagents
+      - streamlit_config:/home/appuser/.streamlit
     restart: unless-stopped
 
 volumes:
   tradingagents_data:
+  streamlit_config:
