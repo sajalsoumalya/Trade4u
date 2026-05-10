@@ -1,0 +1,19 @@
+# Server Dockerfile
+FROM node:20-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY server/package*.json ./
+RUN npm install --production
+
+# Copy server code
+COPY server/src ./src
+
+# Environment variables
+ENV NODE_ENV=production
+ENV PORT=3001
+
+EXPOSE 3001
+
+CMD ["node", "src/index.js"]

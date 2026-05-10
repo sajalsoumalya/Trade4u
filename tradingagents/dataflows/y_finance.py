@@ -6,6 +6,36 @@ import yfinance as yf
 import os
 from .stockstats_utils import StockstatsUtils, _clean_dataframe, yf_retry, load_ohlcv, filter_financials_by_date
 
+def _normalize_crypto_symbol(symbol: str) -> str:
+    """Convert crypto/forex symbols to yfinance format.
+
+    Examples:
+    - BTC/USDT -> BTC-USD
+    - ETH/USDT -> ETH-USD
+    - BTC-USD -> BTC-USD (unchanged)
+    - EURUSD -> EURUSD=X (forex suffix)
+    - USDJPY -> USDJPY=X (forex suffix)
+    """
+    symbol = symbol.upper().strip()
+
+    # Handle slash-based crypto pairs (e.g., BTC/USDT, ETH/USDT)
+    if "/" in symbol:
+        base, quote = symbol.split("/", 1)
+        # Map common quote currencies to USD for yfinance
+        if quote in ("USDT", "USD", "USDC"):
+            quote = "USD"
+        return f"{base}-{quote}"
+
+    # Handle forex pairs (3-6 char symbols without slash)
+    # yfinance uses =X suffix for forex
+    fiat_quotes = ["EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "CNY"]
+    for quote in fiat_quotes:
+        if symbol.endswith(quote) and len(symbol) == 6:
+            return f"{symbol}=X"
+
+    return symbol
+
+
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
     start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
@@ -15,8 +45,9 @@ def get_YFin_data_online(
     datetime.strptime(start_date, "%Y-%m-%d")
     datetime.strptime(end_date, "%Y-%m-%d")
 
-    # Create ticker object
-    ticker = yf.Ticker(symbol.upper())
+    # Create ticker object (normalize crypto symbols like BTC/USDT -> BTC-USD)
+    normalized_symbol = _normalize_crypto_symbol(symbol.upper())
+    ticker = yf.Ticker(normalized_symbol)
 
     # Fetch historical data for the specified date range
     data = yf_retry(lambda: ticker.history(start=start_date, end=end_date))
@@ -417,6 +448,48 @@ def get_insider_transactions(
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         
         return header + csv_string
-        
+
     except Exception as e:
         return f"Error retrieving insider transactions for {ticker}: {str(e)}"
+
+
+def get_live_price(symbol: Annotated[str, "ticker symbol"]) -> str:
+    """Get current/realtime price data for a symbol.
+
+    Returns live price data including current price, day high/low, volume.
+    Updates on market hours - otherwise shows previous close.
+    """
+    import time as time_module
+
+    normalized_symbol = _normalize_crypto_symbol(symbol.upper())
+    ticker = yf.Ticker(normalized_symbol)
+
+    try:
+        # Get fast_info for latest data (uses cache, refreshes during market hours)
+        info = ticker.fast_info
+
+        # Extract live data
+        current_price = info.get("lastPrice") or info.get("previousClose")
+        day_high = info.get("dayHigh")
+        day_low = info.get("dayLow")
+        volume = info.get("volume")
+        avg_volume = info.get("fifty_day_average_volume")
+        market_cap = info.get("market_cap")
+        timestamp = info.get("lastTimestamp")
+
+        # Build result
+        result = f"# Live Price Data for {symbol.upper()}\n"
+        result += f"# Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        result += f"Current Price: {current_price}\n"
+        result += f"Day High: {day_high}\n"
+        result += f"Day Low: {day_low}\n"
+        result += f"Volume: {volume:,}" if volume else "Volume: N/A\n"
+        if avg_volume:
+            result += f"Avg Volume (20d): {avg_volume:,}\n"
+        if market_cap:
+            result += f"Market Cap: {market_cap:,}\n"
+
+        return result
+
+    except Exception as e:
+        return f"Error getting live price for {symbol}: {str(e)}"

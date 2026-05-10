@@ -1,0 +1,21 @@
+# Trade4u Full Stack - Docker Compose for Coolify
+# Deploy to trade4u.soumalya.in with Coolify proxy (automatic SSL)
+
+services:
+  trade4u:
+    build:
+      context: .
+      dockerfile: Dockerfile.full
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
+      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
+      - LLM_PROVIDER=opencode
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
+    env_file:
+      - .env.full

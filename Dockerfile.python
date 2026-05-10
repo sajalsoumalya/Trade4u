@@ -1,0 +1,19 @@
+# Python Analysis Engine Dockerfile
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt ./
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install local packages
+COPY main.py ./
+COPY tradingagents/ ./tradingagents/
+RUN pip install --no-cache-dir -e .
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH="/app:$PYTHONPATH"
+
+CMD ["python", "-c", "print('Python analysis ready')"]

@@ -30,14 +30,35 @@ from cli.models import AnalystType
 from cli.utils import *
 from cli.announcements import fetch_announcements, display_announcements
 from cli.stats_handler import StatsCallbackHandler
+from cli.monitor import LiveMonitor
 
 console = Console()
 
 app = typer.Typer(
     name="TradingAgents",
     help="TradingAgents CLI: Multi-Agents LLM Financial Trading Framework",
-    add_completion=True,  # Enable shell completion
+    invoke_without_command=True,
 )
+
+
+@app.callback()
+def main_callback():
+    """TradingAgents - AI-powered stock analysis."""
+    import sys
+
+    # Check if running in terminal with interactive input
+    if sys.stdin.isatty():
+        # Interactive mode - show settings menu
+        selections = show_settings_menu()
+    else:
+        # Non-interactive - use saved settings with today's date
+        from cli.config import load_settings, get_live_date
+        settings = load_settings()
+        # Always use today's date for non-TTY
+        settings["analysis_date"] = get_live_date()
+        selections = settings
+
+    run_analysis(checkpoint=False, selections=selections)
 
 
 # Create a deque to store recent messages with a maximum length
@@ -536,9 +557,8 @@ def get_user_selections():
         )
     )
     selected_analysts = select_analysts()
-    console.print(
-        f"[green]Selected analysts:[/green] {', '.join(analyst.value for analyst in selected_analysts)}"
-    )
+    analysts_display = ", ".join(a.value if hasattr(a, 'value') else str(a) for a in selected_analysts)
+    console.print(f"[green]Selected analysts:[/green] {analysts_display}")
 
     # Step 5: Research depth
     console.print(
@@ -926,18 +946,19 @@ def format_tool_args(args, max_length=80) -> str:
         return result[:max_length - 3] + "..."
     return result
 
-def run_analysis(checkpoint: bool = False):
-    # First get all user selections
-    selections = get_user_selections()
+def run_analysis(checkpoint: bool = False, selections: dict = None):
+    # Get user selections (from saved config or passed in)
+    if selections is None:
+        selections = get_user_selections()
 
     # Create config with selected research depth
     config = DEFAULT_CONFIG.copy()
-    config["max_debate_rounds"] = selections["research_depth"]
-    config["max_risk_discuss_rounds"] = selections["research_depth"]
-    config["quick_think_llm"] = selections["shallow_thinker"]
-    config["deep_think_llm"] = selections["deep_thinker"]
-    config["backend_url"] = selections["backend_url"]
-    config["llm_provider"] = selections["llm_provider"].lower()
+    config["max_debate_rounds"] = selections.get("research_depth", 3)
+    config["max_risk_discuss_rounds"] = selections.get("research_depth", 3)
+    config["quick_think_llm"] = selections.get("quick_think_llm", selections.get("shallow_thinker", "gpt-5.4-mini"))
+    config["deep_think_llm"] = selections.get("deep_think_llm", selections.get("deep_thinker", "gpt-5.4"))
+    config["backend_url"] = selections.get("backend_url", "")
+    config["llm_provider"] = selections.get("llm_provider", "openai").lower()
     # Provider-specific thinking configuration
     config["google_thinking_level"] = selections.get("google_thinking_level")
     config["openai_reasoning_effort"] = selections.get("openai_reasoning_effort")
@@ -949,7 +970,14 @@ def run_analysis(checkpoint: bool = False):
     stats_handler = StatsCallbackHandler()
 
     # Normalize analyst selection to predefined order (selection is a 'set', order is fixed)
-    selected_set = {analyst.value for analyst in selections["analysts"]}
+    # Handle both string lists and AnalystType enums
+    analysts_list = selections.get("analysts", ["market", "social", "news", "fundamentals"])
+    selected_set = set()
+    for a in analysts_list:
+        if hasattr(a, 'value'):  # It's an enum
+            selected_set.add(a.value)
+        else:  # It's a string
+            selected_set.add(a)
     selected_analyst_keys = [a for a in ANALYST_ORDER if a in selected_set]
 
     # Initialize the graph with callbacks bound to LLMs
@@ -1023,17 +1051,22 @@ def run_analysis(checkpoint: bool = False):
 
         # Add initial messages
         message_buffer.add_message("System", f"Selected ticker: {selections['ticker']}")
-        message_buffer.add_message(
-            "System", f"Analysis date: {selections['analysis_date']}"
-        )
-        message_buffer.add_message(
-            "System",
-            f"Selected analysts: {', '.join(analyst.value for analyst in selections['analysts'])}",
-        )
+        message_buffer.add_message("System", f"Analysis date: {selections['analysis_date']}")
+        analyst_items = selections["analysts"]
+        analysts_list = []
+        for a in analyst_items:
+            if hasattr(a, 'value'):
+                analysts_list.append(str(a.value).capitalize())
+            else:
+                analysts_list.append(str(a).capitalize())
+        analysts_str = ", ".join(analysts_list)
+        message_buffer.add_message("System", f"Selected analysts: {analysts_str}")
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
         # Update agent status to in_progress for the first analyst
-        first_analyst = f"{selections['analysts'][0].value.capitalize()} Analyst"
+        first = selections["analysts"][0]
+        first_str = str(first.value if hasattr(first, 'value') else first)
+        first_analyst = f"{first_str.capitalize()} Analyst"
         message_buffer.update_agent_status(first_analyst, "in_progress")
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
@@ -1199,6 +1232,13 @@ def run_analysis(checkpoint: bool = False):
 
 @app.command()
 def analyze(
+    ticker: str = typer.Option(None, "--ticker", "-t", help="Ticker symbol (uses saved if not provided)"),
+    live: bool = typer.Option(
+        False,
+        "--live",
+        "-l",
+        help="Use today's date for live market analysis",
+    ),
     checkpoint: bool = typer.Option(
         False,
         "--checkpoint",
@@ -1209,12 +1249,55 @@ def analyze(
         "--clear-checkpoints",
         help="Delete all saved checkpoints before running (force fresh start).",
     ),
+    quick: bool = typer.Option(
+        False,
+        "--quick",
+        "-q",
+        help="Run immediately with saved settings (skip setup menu)",
+    ),
+    setup: bool = typer.Option(
+        False,
+        "--setup",
+        "-s",
+        help="Open settings menu to configure options",
+    ),
 ):
     if clear_checkpoints:
         from tradingagents.graph.checkpointer import clear_all_checkpoints
+        from cli.config import get_live_date
         n = clear_all_checkpoints(DEFAULT_CONFIG["data_cache_dir"])
         console.print(f"[yellow]Cleared {n} checkpoint(s).[/yellow]")
-    run_analysis(checkpoint=checkpoint)
+
+    # Show settings menu if --setup or no options given
+    if setup or (not ticker and not quick):
+        selections = show_settings_menu()
+    else:
+        # Quick mode - load saved settings and override with CLI args
+        from cli.config import load_settings, get_live_date
+        selections = load_settings()
+        if ticker:
+            selections["ticker"] = ticker
+        if live:
+            selections["analysis_date"] = get_live_date()
+
+    run_analysis(checkpoint=checkpoint, selections=selections)
+
+
+@app.command()
+def monitor(
+    symbols: str = typer.Option(..., "--symbols", "-s", help="Comma-separated symbols to monitor (e.g., SPY,BTC-USD,AAPL)"),
+    interval: int = typer.Option(5, "--interval", "-i", help="Refresh interval in seconds"),
+):
+    """Monitor live prices in real-time."""
+    symbol_list = [s.strip() for s in symbols.split(",")]
+    monitor_obj = LiveMonitor(symbol_list, interval)
+    try:
+        console.print(f"[green]Monitoring: {', '.join(symbol_list)}[/green]")
+        console.print("[dim]Press Ctrl+C to stop[/dim]\n")
+        monitor_obj.start()
+    except KeyboardInterrupt:
+        monitor_obj.stop()
+        console.print("\n[yellow]Stopped[/yellow]")
 
 
 if __name__ == "__main__":

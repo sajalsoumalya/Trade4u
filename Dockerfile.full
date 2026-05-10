@@ -1,0 +1,25 @@
+# Trade4u Full Stack - Single Dockerfile for Coolify
+# Node.js API Server with React frontend
+
+FROM node:20-slim
+
+WORKDIR /app
+
+# ============ Install Node.js dependencies ============
+COPY server/package*.json ./
+RUN npm install --production
+
+# Copy server source
+COPY server/src ./src
+
+# ============ Environment ============
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV PYTHONUNBUFFERED=1
+
+# For analysis - reference the Python from the host if needed
+# But we'll use REST API calls instead
+
+EXPOSE 3001
+
+CMD ["node", "src/index.js"]

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 
 # Import TradingAgents core
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -126,10 +127,101 @@ def get_task_result(task_id: int) -> dict:
     return json.loads(row[0]) if row and row[0] else {}
 
 # =============================================================================
-# TradingAgents Execution
+# Live Monitor Page (Real-time)
 # =============================================================================
 
-def run_analysis(task_id: int, ticker: str, analysis_date: str, settings: dict):
+def page_monitor():
+    """Live Monitor - Real-time price monitoring."""
+    import time as time_module
+    import yfinance as yf
+    from datetime import datetime
+
+    st.title("Live Monitor")
+
+    # Sidebar controls
+    st.sidebar.subheader("Monitor Settings")
+
+    # Get symbols from config or use default
+    settings = get_settings()
+    default_symbols = settings.get("ticker", "SPY")
+
+    # Symbol input (comma-separated)
+    symbols_input = st.sidebar.text_input(
+        "Symbols (comma-separated)",
+        value=default_symbols,
+        help="e.g., SPY, BTC-USD, AAPL, NVDA"
+    )
+
+    # Refresh interval
+    interval = st.sidebar.slider("Refresh Interval (seconds)", 1, 30, 5)
+
+    # Normalize symbol helper
+    def _normalize(symbol: str) -> str:
+        symbol = symbol.upper().strip()
+        if "/" in symbol:
+            base, quote = symbol.split("/", 1)
+            if quote in ("USDT", "USD", "USDC"):
+                quote = "USD"
+            return f"{base}-{quote}"
+        return symbol
+
+    # Parse symbols
+    symbol_list = [_normalize(s.strip()) for s in symbols_input.split(",") if s.strip()]
+
+    if not symbol_list:
+        st.warning("Please enter at least one symbol.")
+        return
+
+    # Manual refresh
+    if st.sidebar.button("Refresh Now", type="primary"):
+        st.rerun()
+
+    st.divider()
+
+    # Display live prices
+    st.subheader(f"Live Prices: {', '.join(symbol_list)}")
+    st.caption(f"Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Get prices
+    price_data = []
+    for symbol in symbol_list:
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.fast_info
+            price_data.append({
+                "symbol": symbol,
+                "price": info.get("lastPrice") or info.get("previousClose"),
+                "change": info.get("regularMarketChange"),
+                "change_pct": info.get("regularMarketChangePercent"),
+                "high": info.get("dayHigh"),
+                "low": info.get("dayLow"),
+                "volume": info.get("volume"),
+            })
+        except Exception as e:
+            price_data.append({
+                "symbol": symbol,
+                "error": str(e)
+            })
+
+    # Display as table
+    if price_data:
+        cols = st.columns(len(price_data))
+        for i, data in enumerate(price_data):
+            with cols[i]:
+                if "error" in data:
+                    st.error(f"{data['symbol']}: {data['error']}")
+                else:
+                    st.metric(
+                        label=data["symbol"],
+                        value=f"${data['price']:.2f}" if data["price"] else "N/A",
+                        delta=f"{data['change_pct']:.2f}%" if data.get("change_pct") else None
+                    )
+                    st.caption(f"High: ${data['high']:.2f} | Low: ${data['low']:.2f}")
+
+
+# =============================================================================
+# Operations Page - with quick settings
+# =============================================================================
     """Run TradingAgents analysis in background thread."""
     update_task_status(task_id, "running")
 
@@ -495,11 +587,28 @@ def main():
 
     # Sidebar navigation
     st.sidebar.title("TradingAgents")
-    page = st.sidebar.radio("Navigate", ["Dashboard", "Operations", "Settings", "Results"])
+
+    # Quick settings shortcut
+    with st.sidebar.expander("⚡ Quick Settings", expanded=True):
+        settings = get_settings()
+        new_ticker = st.text_input("Ticker", value=settings.get("ticker", "SPY"))
+        new_date = st.text_input("Date", value=datetime.now().strftime("%Y-%m-%d"))
+        if new_ticker != settings.get("ticker"):
+            settings["ticker"] = new_ticker
+            save_settings(settings)
+            st.rerun()
+        if new_date != settings.get("analysis_date"):
+            settings["analysis_date"] = new_date
+            save_settings(settings)
+            st.rerun()
+
+    page = st.sidebar.radio("Navigate", ["Dashboard", "Monitor", "Operations", "Settings", "Results"])
 
     # Route to page
     if page == "Dashboard":
         page_dashboard()
+    elif page == "Monitor":
+        page_monitor()
     elif page == "Operations":
         page_operations()
     elif page == "Settings":

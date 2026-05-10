@@ -8,7 +8,7 @@ from tradingagents.llm_clients.model_catalog import get_model_options
 
 console = Console()
 
-TICKER_INPUT_EXAMPLES = "Examples: SPY, CNC.TO, 7203.T, 0700.HK"
+TICKER_INPUT_EXAMPLES = "Examples: SPY, CNC.TO, BTC/USDT, 0700.HK"
 
 ANALYST_ORDER = [
     ("Market Analyst", AnalystType.MARKET),
@@ -359,3 +359,92 @@ def ask_output_language() -> str:
         ).ask().strip()
 
     return choice
+
+
+def show_settings_menu() -> dict:
+    """Show settings menu and allow quick updates."""
+    from cli.config import load_settings, save_settings, DEFAULT_SETTINGS
+    from cli.models import AnalystType
+
+    settings = load_settings()
+
+    # Settings menu options
+    menu_options = [
+        ("Run Analysis with Saved Settings", "run"),
+        ("Change Ticker", "ticker"),
+        ("Change Analysis Date", "date"),
+        ("Change Analysts", "analysts"),
+        ("Change Research Depth", "depth"),
+        ("Change Output Language", "language"),
+        ("Change LLM Provider", "provider"),
+        ("Change Deep Think Model", "deep_model"),
+        ("Change Quick Think Model", "quick_model"),
+        ("Reset to Defaults", "reset"),
+    ]
+
+    while True:
+        # Show current settings summary
+        analyst_names = {
+            "market": "Market", "social": "Social", "news": "News",
+            "fundamentals": "Fundamentals"
+        }
+        selected = [analyst_names.get(a, a) for a in settings.get("analysts", [])]
+
+        choice = questionary.select(
+            f"[bold]Settings Menu[/bold]\n\n"
+            f"Current: [cyan]{settings['ticker']}[/cyan] | "
+            f"Date: [cyan]{settings['analysis_date']}[/cyan] | "
+            f"Analysts: [cyan]{', '.join(selected)}[/cyan]\n\n"
+            f"Provider: [cyan]{settings['llm_provider']}[/cyan] | "
+            f"Models: [cyan]{settings['deep_think_llm']}[/cyan]",
+            choices=[questionary.Choice(display, value=value) for display, value in menu_options],
+            style=questionary.Style([
+                ("selected", "fg:green noinherit"),
+                ("highlighted", "fg:green noinherit"),
+            ]),
+        ).ask()
+
+        if choice == "run":
+            return settings
+        elif choice == "reset":
+            save_settings(DEFAULT_SETTINGS.copy())
+            settings = DEFAULT_SETTINGS.copy()
+            console.print("[yellow]Settings reset to defaults.[/yellow]")
+        elif choice == "ticker":
+            settings["ticker"] = get_ticker()
+        elif choice == "date":
+            settings["analysis_date"] = get_analysis_date()
+        elif choice == "analysts":
+            settings["analysts"] = select_analysts()
+        elif choice == "depth":
+            settings["research_depth"] = select_research_depth()
+        elif choice == "language":
+            settings["output_language"] = ask_output_language()
+        elif choice == "provider":
+            provider, url = select_llm_provider()
+            settings["llm_provider"] = provider
+            settings["backend_url"] = url or ""
+            settings["deep_think_llm"] = (
+                select_deep_thinking_agent(provider) if provider.lower() != "openai"
+                else select_deep_thinking_agent("openai")
+            )
+            settings["quick_think_llm"] = (
+                select_shallow_thinking_agent(provider) if provider.lower() != "openai"
+                else select_shallow_thinking_agent("openai")
+            )
+        elif choice == "deep_model":
+            provider = settings["llm_provider"]
+            settings["deep_think_llm"] = (
+                select_deep_thinking_agent(provider) if provider.lower() != "openai"
+                else select_deep_thinking_agent("openai")
+            )
+        elif choice == "quick_model":
+            provider = settings["llm_provider"]
+            settings["quick_think_llm"] = (
+                select_shallow_thinking_agent(provider) if provider.lower() != "openai"
+                else select_shallow_thinking_agent("openai")
+            )
+
+        if choice != "run" and choice != "reset":
+            save_settings(settings)
+            console.print(f"[green]Saved: {choice} = {settings.get(choice, 'updated')}[/green]")

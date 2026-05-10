@@ -20,3 +20,21 @@ def get_stock_data(
         str: A formatted dataframe containing the stock price data for the specified ticker symbol in the specified date range.
     """
     return route_to_vendor("get_stock_data", symbol, start_date, end_date)
+
+
+@tool
+def get_live_price(
+    symbol: Annotated[str, "ticker symbol of the company or crypto"],
+) -> str:
+    """
+    Get realtime/live price data for a ticker symbol.
+    Returns current price, day high/low, volume during market hours.
+    Outside market hours shows previous close data.
+
+    Args:
+        symbol (str): Ticker symbol, e.g. SPY, BTC-USD, AAPL
+
+    Returns:
+        str: Live price data including current price, day high/low, volume.
+    """
+    return route_to_vendor("get_live_price", symbol)
