@@ -25,14 +25,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Install package as root before user switch
+RUN pip install --no-cache-dir -e .
+
 RUN useradd --create-home appuser
 USER appuser
 WORKDIR /home/appuser/app
 
 COPY --from=builder --chown=appuser:appuser /build .
-
-# Re-install package so it's importable
-RUN /opt/venv/bin/pip install -e .
 
 # Streamlit config
 RUN mkdir -p /home/appuser/.streamlit && \
