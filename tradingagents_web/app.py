@@ -195,8 +195,7 @@ def page_dashboard():
     # Quick actions
     st.divider()
     st.subheader("Quick Actions")
-    if st.button("Run New Analysis", type="primary"):
-        st.switch_page("Operations")
+    st.info("Use the sidebar to navigate to Operations")
 
 
 def page_operations():
