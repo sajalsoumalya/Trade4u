@@ -1,22 +1,17 @@
-# Trade4u - Streamlit Web App (Python)
-# Original Streamlit interface
+# Trade4u - Streamlit Web App for Coolify
+# Deploy to trade4u.soumalya.in with SSL
 
 services:
   web:
     build:
       context: .
       dockerfile: Dockerfile.web
-    env_file:
-      - .env.full
-    environment:
-      - LLM_PROVIDER=${LLM_PROVIDER:-opencode}
+    restart: unless-stopped
     ports:
       - "8501:8501"
-    volumes:
-      - tradingagents_data:/home/appuser/.tradingagents
-      - streamlit_config:/home/appuser/.streamlit
-    restart: unless-stopped
-
-volumes:
-  tradingagents_data:
-  streamlit_config:
+    environment:
+      - LLM_PROVIDER=opencode
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env.full
