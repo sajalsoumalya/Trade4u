@@ -1,34 +1,7 @@
-import { useState } from 'react';
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isRegister, setIsRegister] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleGoogle = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const provider = new GoogleAuthProvider();
-      // Note: This requires firebase auth to be initialized in App.tsx
-      // For now, show a message
-      setError('Google login not configured - use email/password');
-    } catch (e: unknown) {
-      setError((e as Error).message);
-    }
-    setLoading(false);
-  };
-
-  const handleEmail = async () => {
-    setLoading(true);
-    setError('');
-    // Note: This requires firebase auth to be initialized
-    setError('Email login not configured - use the deployed Streamlit app');
-    setLoading(false);
-  };
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -38,18 +11,18 @@ export default function Login() {
           <p className="text-gray-400">AI-Powered Trading Platform</p>
         </div>
 
-        <div className="card">
-          <p className="text-center mb-4 text-gray-400">
-            Please use the Streamlit web interface at:
-            <br />
-            <a href="https://trade4u.soumalya.in" className="text-primary hover:underline">
-              https://trade4u.soumalya.in
-            </a>
+        <div className="card text-center">
+          <p className="mb-6 text-gray-300">
+            Welcome to the Trade4u trading platform.
+            Run AI-powered analysis and track your paper trades.
           </p>
 
-          <p className="text-center text-sm text-gray-500">
-            The React app is coming soon with full trading features.
-          </p>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="btn-primary w-full"
+          >
+            Enter Demo
+          </button>
         </div>
       </div>
     </div>
