@@ -17,6 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONPATH="/home/appuser/app:$PYTHONPATH"
 
 RUN useradd --create-home appuser
 USER appuser

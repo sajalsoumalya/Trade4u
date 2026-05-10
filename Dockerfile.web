@@ -29,11 +29,18 @@ RUN pip install --no-cache-dir \
     "numpy>=2.1.0" \
     "pytest"
 
-# Copy source
+# Copy source and package metadata
+COPY pyproject.toml /app/
 COPY tradingagents/ /app/tradingagents/
 COPY tradingagents_web/ /app/tradingagents_web/
 COPY main.py /app/main.py
 COPY README.md /app/README.md
+
+# Install local package so tradingagents is available from any working directory
+RUN pip install --no-cache-dir .
+
+# Ensure the app source directory is always on Python path
+ENV PYTHONPATH="/app:$PYTHONPATH"
 
 # Streamlit config
 RUN mkdir -p /root/.streamlit && \
