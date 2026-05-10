@@ -1,6 +1,4 @@
 // Firebase Configuration
-// Replace these values with your Firebase project config
-
 export const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_PROJECT.firebaseapp.com",
@@ -15,10 +13,11 @@ export const API_BASE = '/api';
 
 // Get auth headers
 export const getAuthHeaders = () => {
-  const token = localStorage.getItem('firebaseToken');
+  const token = localStorage.getItem('firebaseToken') || '';
+  const uid = localStorage.getItem('userUid') || '';
   return {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
-    'X-UID': localStorage.getItem('userUid')
+    'X-UID': uid
   };
 };

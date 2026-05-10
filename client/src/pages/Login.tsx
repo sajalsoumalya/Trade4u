@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { getAuth } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -14,7 +13,9 @@ export default function Login() {
     setError('');
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(getAuth(), provider);
+      // Note: This requires firebase auth to be initialized in App.tsx
+      // For now, show a message
+      setError('Google login not configured - use email/password');
     } catch (e: unknown) {
       setError((e as Error).message);
     }
@@ -24,16 +25,8 @@ export default function Login() {
   const handleEmail = async () => {
     setLoading(true);
     setError('');
-    try {
-      const auth = getAuth();
-      if (isRegister) {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-    } catch (e: unknown) {
-      setError((e as Error).message);
-    }
+    // Note: This requires firebase auth to be initialized
+    setError('Email login not configured - use the deployed Streamlit app');
     setLoading(false);
   };
 
@@ -46,56 +39,17 @@ export default function Login() {
         </div>
 
         <div className="card">
-          <button
-            onClick={handleGoogle}
-            disabled={loading}
-            className="w-full btn-primary mb-4 flex items-center justify-center gap-2"
-          >
-            <span>🔵</span>
-            Continue with Google
-          </button>
-
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-surface text-gray-500">or</span>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input w-full"
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input w-full"
-            />
-            <button
-              onClick={handleEmail}
-              disabled={loading || !email || !password}
-              className="w-full btn-primary"
-            >
-              {loading ? 'Loading...' : isRegister ? 'Create Account' : 'Sign In'}
-            </button>
-          </div>
-
-          <p className="text-center mt-4 text-sm text-gray-400">
-            {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
-            <button onClick={() => setIsRegister(!isRegister)} className="text-primary hover:underline">
-              {isRegister ? 'Sign In' : 'Register'}
-            </button>
+          <p className="text-center mb-4 text-gray-400">
+            Please use the Streamlit web interface at:
+            <br />
+            <a href="https://trade4u.soumalya.in" className="text-primary hover:underline">
+              https://trade4u.soumalya.in
+            </a>
           </p>
 
-          {error && <p className="mt-4 text-sm text-secondary">{error}</p>}
+          <p className="text-center text-sm text-gray-500">
+            The React app is coming soon with full trading features.
+          </p>
         </div>
       </div>
     </div>

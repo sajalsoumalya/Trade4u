@@ -1,4 +1,4 @@
-import { API_BASE, getAuthHeaders } from '../lib/firebase';
+import { API_BASE, getAuthHeaders } from './firebase';
 
 // Market API
 export const fetchPrice = async (symbol: string) => {
@@ -21,7 +21,7 @@ export const fetchPrices = async (symbols: string[]) => {
 };
 
 // Analysis API
-export const runAnalysis = async (symbol: string, date?: string, options?: object) => {
+export const runAnalysis = async (symbol: string, date?: string, options?: Record<string, string>) => {
   const res = await fetch(`${API_BASE}/analysis/run`, {
     method: 'POST',
     headers: getAuthHeaders(),

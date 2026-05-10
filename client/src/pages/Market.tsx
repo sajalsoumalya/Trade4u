@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, IChartApi, ISeriesApi, LineData, HistogramData } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, LineData } from 'lightweight-charts';
 import { fetchPrice, fetchHistory } from '../lib/api';
 
 export default function Market() {
