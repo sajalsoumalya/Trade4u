@@ -1,0 +1,47 @@
+FROM python:3.13-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /build
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY tradingagents/ ./tradingagents/
+COPY tradingagents_web/ ./tradingagents_web/
+COPY main.py .
+COPY pyproject.toml .
+COPY README.md .
+RUN pip install --no-cache-dir -e .
+
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN useradd --create-home appuser
+USER appuser
+WORKDIR /home/appuser/app
+
+COPY --from=builder --chown=appuser:appuser /build .
+
+# Streamlit config
+RUN mkdir -p /home/appuser/.streamlit && \
+    echo '[server]' > /home/appuser/.streamlit/config.toml && \
+    echo 'port = 8501' >> /home/appuser/.streamlit/config.toml && \
+    echo 'headless = true' >> /home/appuser/.streamlit/config.toml && \
+    echo 'enableCORS = false' >> /home/appuser/.streamlit/config.toml && \
+    echo 'enableXsrfProtection = true' >> /home/appuser/.streamlit/config.toml && \
+    echo '' >> /home/appuser/.streamlit/config.toml && \
+    echo '[browser]' >> /home/appuser/.streamlit/config.toml && \
+    echo 'serverAddress = "0.0.0.0"' >> /home/appuser/.streamlit/config.toml && \
+    echo 'gatherUsageStats = false' >> /home/appuser/.streamlit/config.toml
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "tradingagents_web/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
