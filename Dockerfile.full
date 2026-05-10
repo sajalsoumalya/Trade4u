@@ -10,14 +10,21 @@ RUN npm install
 COPY client/ ./
 RUN npm run build
 
-# ============ Stage 2: Python Dependencies ============
+# ============ Stage 2: Build Server dependencies ============
+FROM node:20-slim as server-deps
+
+WORKDIR /server
+COPY server/package*.json ./
+RUN npm install --production
+
+# ============ Stage 3: Python Dependencies ============
 FROM python:3.13-slim as python-deps
 
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ============ Stage 3: Final Image ============
+# ============ Stage 4: Final Image ============
 FROM python:3.13-slim
 
 # Install Node.js for server
@@ -35,7 +42,9 @@ COPY --from=python-deps /app /app
 COPY main.py ./
 COPY pyproject.toml ./
 COPY tradingagents/ ./tradingagents/
-COPY server/ ./server/
+
+# Copy server with dependencies
+COPY --from=server-deps /server ./server
 
 # Copy built React files
 COPY --from=react-build /client/dist ./public
