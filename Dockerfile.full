@@ -1,25 +1,43 @@
-# Trade4u Full Stack - Single Dockerfile for Coolify
-# Node.js API Server with React frontend
+# Trade4u - Full Stack (Node.js + React) Dockerfile
+# Build React first, then serve with Node.js
 
-FROM node:20-slim
+FROM python:3.13-slim as builder
+
+# ============ Install Node.js for building React ============
+RUN apt-get update && apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /client
+
+# ============ Build React Client ============
+COPY client/package*.json ./
+RUN npm install
+COPY client/ ./
+RUN npm run build
+
+# ============ Python Dependencies ============
+FROM python:3.13-slim
 
 WORKDIR /app
 
-# ============ Install Node.js dependencies ============
-COPY server/package*.json ./
-RUN npm install --production
+# Install Python deps
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy server source
-COPY server/src ./src
+# Install local package
+COPY main.py ./
+COPY tradingagents/ ./tradingagents/
+COPY tradingagents_web/ ./tradingagents_web/
+RUN pip install --no-cache-dir -e .
 
-# ============ Environment ============
-ENV NODE_ENV=production
-ENV PORT=3001
+# Copy built React files to be served
+COPY --from=builder /client/dist ./public
+
+ENV PYTHONPATH="/app:$PYTHONPATH"
 ENV PYTHONUNBUFFERED=1
 
-# For analysis - reference the Python from the host if needed
-# But we'll use REST API calls instead
+EXPOSE 8501
 
-EXPOSE 3001
-
-CMD ["node", "src/index.js"]
+CMD ["python", "-c", "print('Use Streamlit: streamlit run tradingagents_web/app.py --server.port 8501')"]
