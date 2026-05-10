@@ -36,11 +36,14 @@ COPY main.py ./
 COPY pyproject.toml ./
 COPY tradingagents/ ./tradingagents/
 
-# Copy server with dependencies
+# Copy server directory and install deps
 COPY server/ ./server/
-RUN cd server && npm install --production
+WORKDIR /app/server
+RUN npm install --production
 
-# Copy built React files
+WORKDIR /app
+
+# Copy built React files to public
 COPY --from=react-build /client/dist ./public
 
 ENV PYTHONPATH="/app:$PYTHONPATH"
