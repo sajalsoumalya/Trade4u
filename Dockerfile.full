@@ -31,17 +31,14 @@ WORKDIR /app
 # Copy Python deps
 COPY --from=python-deps /app /app
 
-# Copy source
+# Copy root level files
 COPY main.py ./
+COPY pyproject.toml ./
 COPY tradingagents/ ./tradingagents/
-COPY tradingagents_web/ ./tradingagents_web/
 COPY server/ ./server/
 
 # Copy built React files
 COPY --from=react-build /client/dist ./public
-
-# Install package
-RUN pip install --no-cache-dir -e .
 
 ENV PYTHONPATH="/app:$PYTHONPATH"
 ENV PYTHONUNBUFFERED=1
@@ -50,5 +47,5 @@ ENV PORT=8501
 
 EXPOSE 8501
 
-# Start Node.js server (serves React) + Python available for API calls
+# Start Node.js server (serves React static + API)
 CMD ["node", "server/src/index.js"]
