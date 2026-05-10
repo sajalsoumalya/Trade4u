@@ -1,43 +1,54 @@
 # Trade4u - Full Stack (Node.js + React) Dockerfile
-# Build React first, then serve with Node.js
+# Multi-stage build: Build React, then serve with Node.js
 
-FROM python:3.13-slim as builder
-
-# ============ Install Node.js for building React ============
-RUN apt-get update && apt-get install -y curl && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+# ============ Stage 1: Build React Client ============
+FROM node:20-slim as react-build
 
 WORKDIR /client
-
-# ============ Build React Client ============
 COPY client/package*.json ./
 RUN npm install
 COPY client/ ./
 RUN npm run build
 
-# ============ Python Dependencies ============
-FROM python:3.13-slim
+# ============ Stage 2: Python Dependencies ============
+FROM python:3.13-slim as python-deps
 
 WORKDIR /app
-
-# Install Python deps
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install local package
+# ============ Stage 3: Final Image ============
+FROM python:3.13-slim
+
+# Install Node.js for server
+RUN apt-get update && apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy Python deps
+COPY --from=python-deps /app /app
+
+# Copy source
 COPY main.py ./
 COPY tradingagents/ ./tradingagents/
 COPY tradingagents_web/ ./tradingagents_web/
-RUN pip install --no-cache-dir -e .
+COPY server/ ./server/
 
-# Copy built React files to be served
-COPY --from=builder /client/dist ./public
+# Copy built React files
+COPY --from=react-build /client/dist ./public
+
+# Install package
+RUN pip install --no-cache-dir -e .
 
 ENV PYTHONPATH="/app:$PYTHONPATH"
 ENV PYTHONUNBUFFERED=1
+ENV NODE_ENV=production
+ENV PORT=8501
 
 EXPOSE 8501
 
-CMD ["python", "-c", "print('Use Streamlit: streamlit run tradingagents_web/app.py --server.port 8501')"]
+# Start Node.js server (serves React) + Python available for API calls
+CMD ["node", "server/src/index.js"]

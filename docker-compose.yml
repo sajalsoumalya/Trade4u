@@ -1,15 +1,21 @@
-# Trade4u - Streamlit Web App (Working)
-# For Coolify deployment
+# Trade4u - Full Stack (React + Node.js) for Coolify
+# Serves React frontend on port 8501
 
 services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile.web
+      dockerfile: Dockerfile.full
     restart: unless-stopped
     ports:
       - "8501:8501"
     environment:
+      - NODE_ENV=production
+      - PORT=8501
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
+      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
       - LLM_PROVIDER=opencode
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
     env_file:
       - .env.full
