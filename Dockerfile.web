@@ -1,42 +1,46 @@
-FROM python:3.13-slim AS builder
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
-
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-WORKDIR /build
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY tradingagents/ ./tradingagents/
-COPY tradingagents_web/ ./tradingagents_web/
-COPY main.py .
-COPY pyproject.toml .
-COPY README.md .
-COPY cli/ ./cli/
-RUN pip install --no-cache-dir .
-
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:$PATH"
+    PYTHONUNBUFFERED=1
 
-COPY --from=builder /opt/venv /opt/venv
-
-RUN useradd --create-home appuser
-USER appuser
 WORKDIR /home/appuser/app
 
-COPY --from=builder --chown=appuser:appuser /build/tradingagents /home/appuser/app/tradingagents
-COPY --from=builder --chown=appuser:appuser /build/tradingagents_web /home/appuser/app/tradingagents_web
-COPY --from=builder --chown=appuser:appuser /build/main.py /home/appuser/app/main.py
-COPY --from=builder --chown=appuser:appuser /build/README.md /home/appuser/app/README.md
+# Install dependencies first
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies for the user
-RUN /opt/venv/bin/pip install --user -r /build/requirements.txt && \
-    /opt/venv/bin/pip install --user pandas streamlit
+RUN pip install --no-cache-dir \
+    langchain-core langchain-anthropic langchain-openai langgraph \
+    yfinance pandas streamlit rich typer question tqdm requests pytz \
+    langgraph-checkpoint-sqlite backtrader stockstats parsel \
+    python-dotenv pydantic-settings setuptools frozendict \
+    multidict frozenlist aiosignal yarl propcache attrs aiohappyeyeballs \
+    aiohttp dataclasses-json marshmallow typing-inspect typing-inspect \
+    pydantic pydantic-core typing-extensions annotated-types \
+    distro docstring-parser jiter sniffio anyio \
+    idna certifi httpcore h11 httpx \
+    openai tiktoken regex \
+    google-genai google-auth websockets cryptography cffi pyasn1 pyasn1-modules \
+    langchain-experimental langchain-community langchain-classic \
+    langchain-google-genai SQLAlchemy \
+    beautifulsoup4 frozendict peewee multitasking platformdirs \
+    beautifulsoup4 curl_cffi protobuf pyarrow pillow \
+    blinker cachetools gitpython pydeck toml starlette uvicorn \
+    httptools python-multipart itsdangerous watchdog \
+    altair jsonschema narwhals markdown-it-py mdurl pygments \
+    rich prompt_toolkit wcwidth soupsieve jsonpointer jsonschema-specifications \
+    referencing rpds-py smmap gitdb lxml cssselect jmespath w3lib \
+    greenlet narwhals orjson ormsgpack xxhash zstandard \
+    packaging python-multipart python-dateutil six \
+    numpy pandas pyyaml jsonpatch langchain-protocol langsmith uuid-utils \
+    tenacity uuid-utils urllib3 charset_normalizer certifi \
+    toml tqdm shellingham annotated-doc
+
+# Copy source code
+COPY tradingagents/ ./tradingagents/
+COPY tradingagents_web/ ./tradingagents_web/
+COPY main.py .
+COPY README.md .
 
 # Streamlit config
 RUN mkdir -p /home/appuser/.streamlit && \
@@ -52,4 +56,4 @@ RUN mkdir -p /home/appuser/.streamlit && \
 
 EXPOSE 8501
 
-CMD ["/opt/venv/bin/streamlit", "run", "tradingagents_web/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "tradingagents_web/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
