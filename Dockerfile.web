@@ -14,6 +14,7 @@ COPY tradingagents_web/ ./tradingagents_web/
 COPY main.py .
 COPY pyproject.toml .
 COPY README.md .
+COPY cli/ ./cli/
 RUN pip install --no-cache-dir -e .
 
 FROM python:3.13-slim
@@ -29,6 +30,9 @@ USER appuser
 WORKDIR /home/appuser/app
 
 COPY --from=builder --chown=appuser:appuser /build .
+
+# Re-install package so it's importable
+RUN /opt/venv/bin/pip install -e .
 
 # Streamlit config
 RUN mkdir -p /home/appuser/.streamlit && \
