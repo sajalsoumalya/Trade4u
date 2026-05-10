@@ -1,11 +1,12 @@
 // Firebase Configuration
-export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+// Runtime config injected by server
+const firebaseConfig = JSON.parse(document.getElementById('firebase-config')?.textContent || '{}') || {
+  apiKey: "AIzaSyDemoKey",
+  authDomain: "sajalsoumalya.firebaseapp.com",
+  projectId: "sajalsoumalya",
+  storageBucket: "sajalsoumalya.appspot.com",
+  messagingSenderId: "000000000000",
+  appId: "1:000000000000:web:0000000000000000000000"
 };
 
 // API base URL
@@ -21,3 +22,5 @@ export const getAuthHeaders = () => {
     'X-UID': uid
   };
 };
+
+export { firebaseConfig };

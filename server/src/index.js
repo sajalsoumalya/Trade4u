@@ -5,6 +5,10 @@ import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
+import fs from 'fs';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -13,12 +17,34 @@ const io = new Server(httpServer, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
+// Firebase config from environment
+const firebaseConfig = {
+  apiKey: process.env.FIREBASE_API_KEY || 'AIzaSyDemo',
+  authDomain: (process.env.FIREBASE_PROJECT_ID || 'demo') + '.firebaseapp.com',
+  projectId: process.env.FIREBASE_PROJECT_ID || 'demo',
+  storageBucket: (process.env.FIREBASE_PROJECT_ID || 'demo') + '.appspot.com',
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || '000000000000',
+  appId: process.env.FIREBASE_APP_ID || '1:000000000000:web:0000000000000000000000'
+};
+
+const staticPath = path.join(__dirname, '../../public');
+
 app.use(cors());
 app.use(express.json());
-
-// Serve static files from React build
-const staticPath = path.join(__dirname, '../../public');
 app.use(express.static(staticPath));
+
+// Inject Firebase config into HTML
+app.get('*', (req, res, next) => {
+  if (req.path === '/index.html' || req.path === '/') {
+    const indexPath = path.join(staticPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      let html = fs.readFileSync(indexPath, 'utf8');
+      html = html.replace('</head>', `<script id="firebase-config" type="application/json">${JSON.stringify(firebaseConfig)}</script></head>`);
+      return res.send(html);
+    }
+  }
+  next();
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -54,7 +80,7 @@ app.post('/api/analysis/run', async (req, res) => {
 // Catch-all for React SPA
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, '../../public', 'index.html'));
+    res.sendFile(path.join(staticPath, 'index.html'));
   }
 });
 
