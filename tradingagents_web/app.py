@@ -261,7 +261,8 @@ def page_operations():
                     elif status == "completed":
                         st.success(f"Completed [{task['analysis_date']}]")
                     elif status == "failed":
-                        st.error(f"Failed [{task['analysis_date']}]")
+                        error_msg = task.get("error", "Unknown error")
+                        st.error(f"Failed [{task['analysis_date']}]: {error_msg}")
                     else:
                         st.write(f"{status} [{task['analysis_date']}]")
                 with c3:
