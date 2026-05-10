@@ -1,12 +1,15 @@
+# Trade4u - Streamlit Web App (Python)
+# Original Streamlit interface
+
 services:
-  tradingagents:
+  web:
     build:
       context: .
       dockerfile: Dockerfile.web
     env_file:
-      - .env
+      - .env.full
     environment:
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_PROVIDER=${LLM_PROVIDER:-opencode}
     ports:
       - "8501:8501"
     volumes:
