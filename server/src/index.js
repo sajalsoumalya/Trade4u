@@ -17,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 // Serve static files from React build
-const staticPath = path.join(__dirname, '../public');
+const staticPath = path.join(__dirname, '../../public');
 app.use(express.static(staticPath));
 
 // Health check
@@ -54,7 +54,7 @@ app.post('/api/analysis/run', async (req, res) => {
 // Catch-all for React SPA
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(staticPath, 'index.html'));
+    res.sendFile(path.join(__dirname, '../../public', 'index.html'));
   }
 });
 
