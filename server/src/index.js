@@ -44,13 +44,13 @@ app.use(express.json());
 import analysisRoutes from './routes/analysis.js';
 import cryptoRoutes from './routes/crypto.js';
 import tradingRoutes from './routes/trading.js';
-import marketRoutes from './routes/market.js';
+import autotradeRoutes from './routes/autotrade.js';
 
 // Use routes
 app.use('/api/analysis', analysisRoutes);
 app.use('/api/crypto', cryptoRoutes);
 app.use('/api/trading', tradingRoutes);
-app.use('/api/market', marketRoutes);
+app.use('/api/autotrade', autotradeRoutes);
 
 // Inject Firebase config into HTML (before static middleware)
 app.get('*', (req, res, next) => {
