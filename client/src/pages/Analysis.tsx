@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { runAnalysis, getAnalysisHistory } from '../lib/api';
+import { useAppStore } from '../store/appStore';
 import { Brain, Play, Clock, TrendingUp, TrendingDown, Minus, ChevronRight, Sparkles, Loader2, FileText, CheckCircle2 } from 'lucide-react';
 
 export default function Analysis() {
@@ -7,6 +8,8 @@ export default function Analysis() {
   const [running, setRunning] = useState(false);
   const [analyses, setAnalyses] = useState<any[]>([]);
   const [selectedAnalysis, setSelectedAnalysis] = useState<any>(null);
+
+  const { llmProvider, apiKey, deepModel, quickModel } = useAppStore();
 
   useEffect(() => {
     loadHistory();
@@ -25,7 +28,12 @@ export default function Analysis() {
     if (!symbol) return;
     setRunning(true);
     try {
-      await runAnalysis(symbol);
+      await runAnalysis(symbol, {
+        provider: llmProvider,
+        deepModel,
+        quickModel,
+        apiKey
+      });
       await loadHistory();
     } catch (e) {
       console.error(e);

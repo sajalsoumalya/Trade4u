@@ -1,21 +1,20 @@
 import { useState } from 'react';
-import { useAppStore } from '../store/appStore';
+import { useAppStore, modelOptions } from '../store/appStore';
 import {
-  Settings as SettingsIcon,
-  Coins,
   Sparkles,
-  Shield,
   Info,
   Save,
   Check,
-  ChevronRight,
   Globe,
   Key,
   AlertCircle,
   Zap,
   Scale,
   User,
-  Bell
+  Bell,
+  Brain,
+  Cpu,
+  ChevronDown
 } from 'lucide-react';
 
 const llmProviders = [
@@ -27,10 +26,16 @@ const llmProviders = [
 ];
 
 export default function Settings() {
-  const { llmProvider, apiKey, setLlmProvider, setApiKey, tradingMode, setTradingMode } = useAppStore();
+  const {
+    llmProvider, apiKey, deepModel, quickModel,
+    setLlmProvider, setApiKey, setDeepModel, setQuickModel,
+    tradingMode, setTradingMode
+  } = useAppStore();
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const models = modelOptions[llmProvider] || modelOptions.opencode;
 
   const handleSave = async () => {
     setSaving(true);
@@ -48,7 +53,6 @@ export default function Settings() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Settings */}
         <div className="lg:col-span-2 space-y-6">
           {/* Trading Mode */}
           <div className="card p-6">
@@ -99,7 +103,7 @@ export default function Settings() {
               >
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-12 h-12 rounded-xl bg-secondary/20 flex items-center justify-center">
-                    <Coins className="w-6 h-6 text-secondary" />
+                    <Scale className="w-6 h-6 text-secondary" />
                   </div>
                   {tradingMode === 'live' && (
                     <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center">
@@ -123,7 +127,7 @@ export default function Settings() {
                   <div>
                     <p className="text-sm font-medium text-white">Live Trading Warning</p>
                     <p className="text-xs text-muted mt-1">
-                      You're about to enable live trading. Real money will be at risk. Make sure you understand the risks involved.
+                      You're about to enable live trading. Real money will be at risk.
                     </p>
                   </div>
                 </div>
@@ -139,37 +143,90 @@ export default function Settings() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white">AI Configuration</h2>
-                <p className="text-sm text-muted">Configure your AI analysis provider</p>
+                <p className="text-sm text-muted">Configure your AI analysis provider and models</p>
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* LLM Provider Selection */}
               <div>
                 <label className="block text-sm text-muted mb-3">LLM Provider</label>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                   {llmProviders.map((provider) => (
                     <button
                       key={provider.id}
-                      onClick={() => setLlmProvider(provider.id)}
-                      className={`relative p-4 rounded-xl border transition-all text-left ${
+                      onClick={() => {
+                        const newModels = modelOptions[provider.id];
+                        setLlmProvider(provider.id);
+                        if (newModels) {
+                          const quickModels = newModels.quick || [];
+                          const deepModels = newModels.deep || [];
+                          if (quickModels.length > 0) setQuickModel(quickModels[0].id);
+                          if (deepModels.length > 0) setDeepModel(deepModels[0].id);
+                        }
+                      }}
+                      className={`relative p-3 rounded-xl border transition-all text-center ${
                         llmProvider === provider.id
-                          ? 'border-accent bg-accent/5'
+                          ? 'border-accent bg-accent/10'
                           : 'border-border hover:border-gray-600'
                       }`}
                     >
                       {llmProvider === provider.id && (
-                        <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-accent flex items-center justify-center">
-                          <Check className="w-3 h-3 text-white" />
+                        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent flex items-center justify-center">
+                          <Check className="w-2 h-2 text-white" />
                         </div>
                       )}
-                      <span className="text-2xl mb-2 block">{provider.icon}</span>
-                      <h4 className="font-semibold text-white">{provider.name}</h4>
-                      <p className="text-xs text-muted">{provider.description}</p>
+                      <span className="text-xl mb-1 block">{provider.icon}</span>
+                      <span className="text-xs font-medium text-white">{provider.name}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Model Selection */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Quick Model */}
+                <div className="p-4 rounded-xl bg-background/50 border border-border">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Cpu className="w-4 h-4 text-primary" />
+                    <label className="text-sm font-medium text-white">Quick Model</label>
+                    <span className="text-xs text-muted">(Fast responses)</span>
+                  </div>
+                  <select
+                    value={quickModel}
+                    onChange={(e) => setQuickModel(e.target.value)}
+                    className="input w-full"
+                  >
+                    {models.quick.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name} {model.cost && `(${model.cost})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Deep Model */}
+                <div className="p-4 rounded-xl bg-background/50 border border-border">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Brain className="w-4 h-4 text-accent" />
+                    <label className="text-sm font-medium text-white">Deep Model</label>
+                    <span className="text-xs text-muted">(Complex analysis)</span>
+                  </div>
+                  <select
+                    value={deepModel}
+                    onChange={(e) => setDeepModel(e.target.value)}
+                    className="input w-full"
+                  >
+                    {models.deep.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name} {model.cost && `(${model.cost})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* API Key */}
               <div>
                 <label className="block text-sm text-muted mb-3">API Key</label>
                 <div className="relative">
@@ -206,41 +263,26 @@ export default function Settings() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white">About Trade4u</h2>
-                <p className="text-sm text-muted">Platform information and credits</p>
+                <p className="text-sm text-muted">Platform information</p>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between py-3 border-b border-border/50">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                    <Sparkles className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-white">Trade4u</p>
-                    <p className="text-xs text-muted">AI-Powered Trading Platform</p>
-                  </div>
-                </div>
-                <span className="badge-info">v1.0.0</span>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 rounded-xl bg-background/50">
+                <p className="text-sm text-muted mb-1">Frontend</p>
+                <p className="font-medium text-white text-sm">React + Vite</p>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-background/50">
-                  <p className="text-sm text-muted mb-1">Frontend</p>
-                  <p className="font-medium text-white">React + Vite + TypeScript</p>
-                </div>
-                <div className="p-4 rounded-xl bg-background/50">
-                  <p className="text-sm text-muted mb-1">Backend</p>
-                  <p className="font-medium text-white">Node.js + Express</p>
-                </div>
-                <div className="p-4 rounded-xl bg-background/50">
-                  <p className="text-sm text-muted mb-1">AI Engine</p>
-                  <p className="font-medium text-white">TradingAgents (LangGraph)</p>
-                </div>
-                <div className="p-4 rounded-xl bg-background/50">
-                  <p className="text-sm text-muted mb-1">Database</p>
-                  <p className="font-medium text-white">Firebase Firestore</p>
-                </div>
+              <div className="p-4 rounded-xl bg-background/50">
+                <p className="text-sm text-muted mb-1">Backend</p>
+                <p className="font-medium text-white text-sm">Node.js</p>
+              </div>
+              <div className="p-4 rounded-xl bg-background/50">
+                <p className="text-sm text-muted mb-1">AI Engine</p>
+                <p className="font-medium text-white text-sm">TradingAgents</p>
+              </div>
+              <div className="p-4 rounded-xl bg-background/50">
+                <p className="text-sm text-muted mb-1">Database</p>
+                <p className="font-medium text-white text-sm">Firebase</p>
               </div>
             </div>
           </div>
@@ -248,7 +290,6 @@ export default function Settings() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Quick Actions */}
           <div className="card p-6">
             <h3 className="font-semibold text-white mb-4">Quick Actions</h3>
             <div className="space-y-2">
@@ -257,69 +298,55 @@ export default function Settings() {
                   <User className="w-5 h-5 text-primary" />
                   <span className="text-sm text-white">Edit Profile</span>
                 </div>
-                <ChevronRight className="w-4 h-4 text-muted" />
               </button>
               <button className="w-full flex items-center justify-between p-3 rounded-xl bg-background/50 hover:bg-background transition-colors text-left">
                 <div className="flex items-center gap-3">
                   <Bell className="w-5 h-5 text-accent" />
                   <span className="text-sm text-white">Notifications</span>
                 </div>
-                <ChevronRight className="w-4 h-4 text-muted" />
-              </button>
-              <button className="w-full flex items-center justify-between p-3 rounded-xl bg-background/50 hover:bg-background transition-colors text-left">
-                <div className="flex items-center gap-3">
-                  <Shield className="w-5 h-5 text-info" />
-                  <span className="text-sm text-white">Security</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted" />
               </button>
             </div>
           </div>
 
-          {/* Current Config */}
           <div className="card p-6 bg-gradient-to-br from-primary/5 to-accent/5">
             <h3 className="font-semibold text-white mb-4">Current Configuration</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted">Trading Mode</span>
-                <span className={`text-sm font-medium ${tradingMode === 'paper' ? 'text-primary' : 'text-secondary'}`}>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted">Trading</span>
+                <span className={tradingMode === 'paper' ? 'text-primary' : 'text-secondary'}>
                   {tradingMode === 'paper' ? 'Paper' : 'Live'}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted">AI Provider</span>
-                <span className="text-sm font-medium text-white capitalize">{llmProvider}</span>
+              <div className="flex justify-between">
+                <span className="text-muted">Provider</span>
+                <span className="text-white capitalize">{llmProvider}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted">API Key</span>
-                <span className="text-sm font-medium text-white">
-                  {apiKey ? '••••••••' : 'Not set'}
-                </span>
+              <div className="flex justify-between">
+                <span className="text-muted">Quick Model</span>
+                <span className="text-white text-xs">{quickModel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Deep Model</span>
+                <span className="text-white text-xs">{deepModel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">API Key</span>
+                <span className="text-white">{apiKey ? '••••••' : 'Not set'}</span>
               </div>
             </div>
           </div>
 
-          {/* Save Button */}
           <button
             onClick={handleSave}
             disabled={saving}
             className="w-full btn-primary flex items-center justify-center gap-2"
           >
             {saving ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Saving...
-              </>
+              <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Saving...</>
             ) : saved ? (
-              <>
-                <Check className="w-5 h-5" />
-                Saved!
-              </>
+              <><Check className="w-5 h-5" />Saved!</>
             ) : (
-              <>
-                <Save className="w-5 h-5" />
-                Save Settings
-              </>
+              <><Save className="w-5 h-5" />Save Settings</>
             )}
           </button>
         </div>

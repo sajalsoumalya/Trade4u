@@ -43,6 +43,7 @@ router.post('/run', requireAuth, async (req, res) => {
       '--date', analysisDate
     ];
 
+    // Pass provider and models from request (set by frontend from settings)
     if (provider) args.push('--provider', provider);
     if (deepModel) args.push('--deep-model', deepModel);
     if (quickModel) args.push('--quick-model', quickModel);
@@ -52,7 +53,10 @@ router.post('/run', requireAuth, async (req, res) => {
         ...process.env,
         PYTHONPATH: process.env.PYTHONPATH,
         OPENCODE_API_KEY: process.env.OPENCODE_API_KEY,
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+        DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY
       }
     });
 
