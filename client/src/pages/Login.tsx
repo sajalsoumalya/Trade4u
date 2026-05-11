@@ -26,7 +26,7 @@ export default function Login() {
       console.log('Starting Google sign in...');
       const result = await signInWithPopup(auth, provider);
       console.log('Sign in successful, user:', result.user);
-      navigate('/dashboard');
+      // Navigation happens automatically via auth state change
     } catch (e: any) {
       console.error('Sign in error:', e);
       setError(e.message);
@@ -35,7 +35,9 @@ export default function Login() {
   };
 
   const handleDemo = () => {
-    navigate('/dashboard');
+    // Set demo mode flag and navigate
+    localStorage.setItem('demoMode', 'true');
+    window.location.href = '/dashboard';
   };
 
   const handleEmailAuth = async () => {
@@ -53,7 +55,7 @@ export default function Login() {
         await createUserWithEmailAndPassword(auth, email, password);
       }
       console.log('Email auth successful');
-      navigate('/dashboard');
+      // Navigation happens automatically via auth state change
     } catch (e: any) {
       console.error('Email auth error:', e);
       setError(e.message);

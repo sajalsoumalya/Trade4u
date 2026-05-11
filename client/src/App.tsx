@@ -81,26 +81,43 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Check for demo mode
+const isDemoMode = () => localStorage.getItem('demoMode') === 'true';
+
 function App() {
   const [user, setUser] = useState<any>(null);
+  const [initializing, setInitializing] = useState(true);
+  const [demoMode, setDemoMode] = useState(isDemoMode);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
       console.log('Auth state changed:', u ? u.email : 'null');
       setUser(u);
+      setInitializing(false);
     });
+    return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    setDemoMode(isDemoMode());
+  }, []);
+
+  if (initializing) {
+    return <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center text-white">Loading...</div>;
+  }
+
+  const isAuthenticated = user || demoMode;
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-        <Route path="/market" element={<Layout><Market /></Layout>} />
-        <Route path="/analysis" element={<Layout><Analysis /></Layout>} />
-        <Route path="/trading" element={<Layout><Trading /></Layout>} />
-        <Route path="/settings" element={<Layout><Settings /></Layout>} />
-        <Route path="*" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
+        <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />} />
+        <Route path="/dashboard" element={isAuthenticated ? <Layout><Dashboard /></Layout> : <Navigate to="/login" />} />
+        <Route path="/market" element={isAuthenticated ? <Layout><Market /></Layout> : <Navigate to="/login" />} />
+        <Route path="/analysis" element={isAuthenticated ? <Layout><Analysis /></Layout> : <Navigate to="/login" />} />
+        <Route path="/trading" element={isAuthenticated ? <Layout><Trading /></Layout> : <Navigate to="/login" />} />
+        <Route path="/settings" element={isAuthenticated ? <Layout><Settings /></Layout> : <Navigate to="/login" />} />
+        <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
       </Routes>
     </BrowserRouter>
   );
