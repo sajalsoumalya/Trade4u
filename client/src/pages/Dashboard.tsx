@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
-import { fetchCryptoPrice, fetchCryptoPrices } from '../lib/api';
+import { fetchCryptoPrices } from '../lib/api';
 import {
   Wallet,
   TrendingUp,
@@ -9,16 +9,13 @@ import {
   Zap,
   Shield,
   Play,
-  Pause,
   Settings,
-  ChevronRight,
   Coins,
   DollarSign,
-  Percent,
   RefreshCw,
   Brain,
-  ArrowUpRight,
-  ArrowDownRight
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 const cryptoList = [
@@ -29,9 +26,9 @@ const cryptoList = [
   { symbol: 'XRPUSDT', name: 'Ripple', icon: '✕' },
   { symbol: 'ADAUSDT', name: 'Cardano', icon: '₳' },
   { symbol: 'DOGEUSDT', name: 'Dogecoin', icon: 'Ð' },
-  { symbol: 'DOTUSDT', name: 'Polkadot', icon: '●' },
   { symbol: 'AVAXUSDT', name: 'Avalanche', icon: '▲' },
   { symbol: 'LINKUSDT', name: 'Chainlink', icon: '🔗' },
+  { symbol: 'DOTUSDT', name: 'Polkadot', icon: '●' },
 ];
 
 export default function Dashboard() {
@@ -53,29 +50,66 @@ export default function Dashboard() {
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, any>>({});
   const [selectedCrypto, setSelectedCrypto] = useState('BTCUSDT');
   const [loading, setLoading] = useState(false);
+  const [isLive, setIsLive] = useState(false);
 
   const currentPrice = cryptoPrices[selectedCrypto]?.price || 0;
   const priceChange = cryptoPrices[selectedCrypto]?.priceChangePercent || 0;
 
   useEffect(() => {
-    loadPrices();
-    const interval = setInterval(loadPrices, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, []);
+    // Connect to Binance WebSocket for live prices
+    const symbols = cryptoList.map(c => c.symbol.toLowerCase());
+    const streams = symbols.map(s => `${s}@ticker`).join('/');
+    const wsUrl = `wss://stream.binance.com:9443/ws/${streams}`;
 
-  const loadPrices = async () => {
-    try {
-      const symbols = cryptoList.map(c => c.symbol);
-      const data = await fetchCryptoPrices(symbols);
-      const priceMap: Record<string, any> = {};
-      data.forEach((d: any) => {
-        priceMap[d.symbol] = d;
-      });
-      setCryptoPrices(priceMap);
-    } catch (e) {
-      console.error('Failed to load prices:', e);
-    }
-  };
+    console.log('Connecting to Binance WebSocket...');
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('Dashboard WebSocket connected');
+      setIsLive(true);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.e === '24hrTicker') {
+          setCryptoPrices(prev => ({
+            ...prev,
+            [data.s]: {
+              symbol: data.s,
+              price: parseFloat(data.c),
+              priceChange: parseFloat(data.p),
+              priceChangePercent: parseFloat(data.P),
+              high24h: parseFloat(data.h),
+              low24h: parseFloat(data.l),
+              volume: parseFloat(data.v),
+              quoteVolume: parseFloat(data.q),
+            },
+          }));
+        }
+      } catch (e) {
+        console.error('WS message error:', e);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('Dashboard WebSocket disconnected');
+      setIsLive(false);
+      // Reconnect after 5 seconds
+      setTimeout(() => {
+        window.location.reload();
+      }, 5000);
+    };
+
+    ws.onerror = (error) => {
+      console.error('Dashboard WebSocket error:', error);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   const aiTradingAmount = (walletBalance * aiTradingPercent) / 100;
 

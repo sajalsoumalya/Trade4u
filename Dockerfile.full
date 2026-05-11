@@ -1,5 +1,5 @@
-# Trade4u - Simple Static Server + Python Agents
-# Node serves React static, Python runs trading agents
+# Trade4u - Complete Trading Platform Docker Image
+# Includes: React Frontend + Node.js Server + Python AI + WebSocket
 
 # ============ Stage 1: Build React Client ============
 FROM node:20-slim as react-build
@@ -17,6 +17,9 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install additional packages for WebSocket and bot
+RUN pip install --no-cache-dir websockets aiohttp
+
 # ============ Stage 3: Final Image ============
 FROM python:3.13-slim
 
@@ -28,16 +31,17 @@ RUN apt-get update && apt-get install -y curl && \
 
 WORKDIR /app
 
-# Copy Python deps and environment files
+# Copy Python dependencies
 COPY --from=python-deps /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=python-deps /usr/local/bin /usr/local/bin
 
 # Copy root level files
 COPY main.py ./
+COPY bot.py ./
 COPY pyproject.toml ./
 COPY tradingagents/ ./tradingagents/
 
-# Install tradingagents package in editable mode
+# Install tradingagents package
 RUN pip install --no-cache-dir -e .
 
 # Copy server directory and install deps
@@ -50,6 +54,9 @@ WORKDIR /app
 # Copy built React files to public
 COPY --from=react-build /client/dist ./public
 
+# Create data directory
+RUN mkdir -p /app/data
+
 ENV PYTHONPATH="/app:$PYTHONPATH"
 ENV PYTHONUNBUFFERED=1
 ENV NODE_ENV=production
@@ -57,5 +64,9 @@ ENV PORT=8501
 
 EXPOSE 8501
 
-# Start Node.js server (serves React static + proxies to Python)
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8501/api/health || exit 1
+
+# Start Node.js server (serves React static + API)
 CMD ["node", "server/src/index.js"]

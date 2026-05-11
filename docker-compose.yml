@@ -1,7 +1,8 @@
-# Trade4u - Full Stack (React + Node.js) for Coolify
-# Serves React frontend on port 8501
+# Trade4u - Complete Trading Platform
+# Node.js + Python AI + WebSocket Server
 
 services:
+  # Main Web Application (React + Node.js)
   web:
     build:
       context: .
@@ -22,4 +23,11 @@ services:
       - FIREBASE_APP_ID=${FIREBASE_APP_ID:-}
       - LLM_PROVIDER=opencode
       - OPENCODE_API_KEY=${OPENCODE_API_KEY}
-    
+    volumes:
+      - ./data:/app/data
+    networks:
+      - trade4u
+
+networks:
+  trade4u:
+    driver: bridge
