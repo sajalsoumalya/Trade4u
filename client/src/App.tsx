@@ -21,14 +21,7 @@ const auth = getAuth(app);
 
 // Layout
 function Layout({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  useEffect(() => {
-    return onAuthStateChanged(auth, (u) => setUser(u));
-  }, []);
-
-  if (!user) return <Navigate to="/login" />;
 
   return (
     <div className="flex h-screen bg-background">
