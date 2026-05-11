@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { getAuth } from 'firebase/auth';
+import { TrendingUp, Mail, Lock, ArrowRight, Sparkles, Shield, Zap } from 'lucide-react';
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
@@ -9,9 +10,8 @@ export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-
-  // Get auth from window (injected by App)
   const auth = (window as any).firebaseAuth;
 
   const handleGoogle = async () => {
@@ -23,10 +23,8 @@ export default function Login() {
     setError('');
     try {
       const provider = new GoogleAuthProvider();
-      console.log('Starting Google sign in...');
       const result = await signInWithPopup(auth, provider);
       console.log('Sign in successful, user:', result.user);
-      // Navigation happens automatically via auth state change
     } catch (e: any) {
       console.error('Sign in error:', e);
       setError(e.message);
@@ -35,9 +33,7 @@ export default function Login() {
   };
 
   const handleDemo = () => {
-    // Set demo mode flag and force reload
     localStorage.setItem('demoMode', 'true');
-    console.log('Demo mode activated, reloading...');
     window.location.replace('/dashboard');
   };
 
@@ -49,14 +45,11 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      console.log(`${isLogin ? 'Logging in' : 'Signing up'} with email...`);
       if (isLogin) {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
         await createUserWithEmailAndPassword(auth, email, password);
       }
-      console.log('Email auth successful');
-      // Navigation happens automatically via auth state change
     } catch (e: any) {
       console.error('Email auth error:', e);
       setError(e.message);
@@ -65,21 +58,85 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-10">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary to-emerald-400 flex items-center justify-center">
-            <span className="text-4xl">📈</span>
+    <div className="min-h-screen bg-background flex">
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary/20 via-background to-accent/20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-hero-pattern opacity-30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
+
+        <div className="relative z-10 flex flex-col justify-center px-16">
+          <div className="mb-12">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-2xl shadow-primary/30 mb-8 animate-float">
+              <TrendingUp className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-5xl font-bold mb-4">
+              <span className="bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+                Trade Smarter
+              </span>
+            </h1>
+            <p className="text-xl text-gray-400 max-w-md">
+              AI-powered trading platform that analyzes markets, manages risks, and executes trades with precision.
+            </p>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">Trade4u</h1>
-          <p className="text-gray-400">AI-Powered Trading Platform</p>
+
+          <div className="space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">AI-Powered Analysis</h3>
+                <p className="text-sm text-gray-400">Multi-agent AI analyzes stocks in real-time</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center">
+                <Shield className="w-6 h-6 text-accent" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">Risk Management</h3>
+                <p className="text-sm text-gray-400">Built-in risk controls and portfolio protection</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-info/20 flex items-center justify-center">
+                <Zap className="w-6 h-6 text-info" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">Paper Trading</h3>
+                <p className="text-sm text-gray-400">Practice with $100k virtual money</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="card p-6 space-y-4">
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+      </div>
+
+      <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-12">
+        <div className="w-full max-w-md">
+          <div className="lg:hidden mb-8 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/30">
+              <TrendingUp className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-white">Trade4u</h1>
+            <p className="text-gray-400 mt-1">AI-Powered Trading Platform</p>
+          </div>
+
+          <div className="text-center lg:text-left mb-8">
+            <h2 className="text-2xl font-bold text-white mb-2">
+              {isLogin ? 'Welcome back' : 'Create account'}
+            </h2>
+            <p className="text-gray-400">
+              {isLogin
+                ? 'Sign in to access your trading dashboard'
+                : 'Get started with your free trading account'}
+            </p>
+          </div>
+
           <button
             onClick={handleGoogle}
             disabled={loading}
-            className="w-full py-3 px-4 bg-white text-black font-semibold rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-3"
+            className="w-full py-4 px-6 bg-white text-gray-900 font-semibold rounded-xl hover:bg-gray-100 transition-all duration-200 flex items-center justify-center gap-3 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -90,64 +147,92 @@ export default function Login() {
             Continue with Google
           </button>
 
-          <div className="relative">
+          <div className="relative my-8">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-[#2A2A2A]"></div>
+              <div className="w-full border-t border-border" />
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-[#1A1A1A] text-gray-500">or</span>
+            <div className="relative flex justify-center">
+              <span className="px-4 bg-background text-sm text-gray-500">
+                or continue with email
+              </span>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input w-full"
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input w-full"
-              onKeyDown={(e) => e.key === 'Enter' && handleEmailAuth()}
-            />
+          <div className="space-y-4">
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="email"
+                placeholder="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input w-full pl-12"
+              />
+            </div>
+
+            <div className="relative">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input w-full pl-12 pr-12"
+                onKeyDown={(e) => e.key === 'Enter' && handleEmailAuth()}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+
             <button
               onClick={handleEmailAuth}
               disabled={loading}
-              className="w-full py-3 px-4 bg-primary text-white font-semibold rounded-lg hover:opacity-90 transition-opacity"
+              className="btn-primary w-full flex items-center justify-center gap-2"
             >
-              {isLogin ? 'Sign In' : 'Sign Up'}
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  {isLogin ? 'Sign In' : 'Create Account'}
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
+
             <p className="text-center text-sm text-gray-400">
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              {isLogin ? "Don't have an account? " : 'Already have an account? '}
               <button
                 onClick={() => setIsLogin(!isLogin)}
-                className="text-primary hover:underline"
+                className="text-primary hover:text-primary-light font-medium transition-colors"
               >
-                {isLogin ? 'Sign Up' : 'Sign In'}
+                {isLogin ? 'Sign up' : 'Sign in'}
               </button>
             </p>
           </div>
 
           <button
             onClick={handleDemo}
-            className="w-full py-3 px-4 bg-[#2A2A2A] text-white font-medium rounded-lg hover:bg-[#3A3A3A] transition-colors"
+            className="w-full mt-6 py-4 px-6 bg-gradient-to-r from-surface to-surface-hover border border-border rounded-xl text-white font-medium hover:bg-surface-hover transition-all duration-200 flex items-center justify-center gap-2 group"
           >
-            Try Demo Mode
+            <span>Try Demo Mode</span>
+            <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-white group-hover:translate-x-1 transition-all" />
           </button>
 
           {error && (
-            <p className="text-secondary text-sm text-center">{error}</p>
+            <div className="mt-6 p-4 rounded-xl bg-secondary/10 border border-secondary/20">
+              <p className="text-sm text-secondary text-center">{error}</p>
+            </div>
           )}
-        </div>
 
-        <p className="text-center text-gray-500 text-sm mt-6">
-          By continuing, you agree to our Terms of Service
-        </p>
+          <p className="text-center text-xs text-gray-500 mt-8">
+            By continuing, you agree to our Terms of Service and Privacy Policy
+          </p>
+        </div>
       </div>
     </div>
   );
