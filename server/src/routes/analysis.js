@@ -5,6 +5,34 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
+// Get available LLM providers based on configured API keys
+router.get('/providers', (req, res) => {
+  const providers = [];
+
+  if (process.env.OPENCODE_API_KEY) {
+    providers.push({ id: 'opencode', name: 'OpenCode', models: ['minimax-m2.5-free', 'big-pickle', 'minimax-m2.7', 'minimax-m2.5'] });
+  }
+  if (process.env.OPENAI_API_KEY) {
+    providers.push({ id: 'openai', name: 'OpenAI', models: ['gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.4', 'gpt-5.4-pro'] });
+  }
+  if (process.env.ANTHROPIC_API_KEY) {
+    providers.push({ id: 'anthropic', name: 'Anthropic', models: ['claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-opus-4-6', 'claude-opus-4-5'] });
+  }
+  if (process.env.GOOGLE_API_KEY) {
+    providers.push({ id: 'google', name: 'Google', models: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'] });
+  }
+  if (process.env.DEEPSEEK_API_KEY) {
+    providers.push({ id: 'deepseek', name: 'DeepSeek', models: ['deepseek-v4-flash', 'deepseek-chat', 'deepseek-v4-pro'] });
+  }
+
+  // Always include opencode as fallback if no providers configured
+  if (providers.length === 0) {
+    providers.push({ id: 'opencode', name: 'OpenCode (Free)', models: ['minimax-m2.5-free'], note: 'Configure OPENCODE_API_KEY in environment' });
+  }
+
+  res.json(providers);
+});
+
 // Run AI analysis using Python TradingAgents
 router.post('/run', requireAuth, async (req, res) => {
   try {

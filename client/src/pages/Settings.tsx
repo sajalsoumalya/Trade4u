@@ -1,12 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore, modelOptions } from '../store/appStore';
 import {
   Sparkles,
   Info,
   Save,
   Check,
-  Globe,
-  Key,
   AlertCircle,
   Zap,
   Scale,
@@ -14,28 +12,58 @@ import {
   Bell,
   Brain,
   Cpu,
-  ChevronDown
+  Loader2
 } from 'lucide-react';
 
-const llmProviders = [
-  { id: 'opencode', name: 'OpenCode', description: 'Free & fast AI', icon: '🤖' },
-  { id: 'openai', name: 'OpenAI', description: 'GPT-4 powered', icon: '✨' },
-  { id: 'anthropic', name: 'Anthropic', description: 'Claude models', icon: '🧠' },
-  { id: 'google', name: 'Google', description: 'Gemini AI', icon: '🌟' },
-  { id: 'deepseek', name: 'DeepSeek', description: 'DeepSeek V3', icon: '🔮' },
-];
+interface ProviderInfo {
+  id: string;
+  name: string;
+  models?: string[];
+  note?: string;
+}
 
 export default function Settings() {
   const {
-    llmProvider, apiKey, deepModel, quickModel,
-    setLlmProvider, setApiKey, setDeepModel, setQuickModel,
+    llmProvider, deepModel, quickModel,
+    setLlmProvider, setDeepModel, setQuickModel,
     tradingMode, setTradingMode
   } = useAppStore();
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [availableProviders, setAvailableProviders] = useState<ProviderInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAvailableProviders();
+  }, []);
+
+  const fetchAvailableProviders = async () => {
+    try {
+      const res = await fetch('/api/analysis/providers');
+      const data = await res.json();
+      setAvailableProviders(data);
+
+      // Set first available provider as default if current not available
+      if (data.length > 0 && !data.find(p => p.id === llmProvider)) {
+        setLlmProvider(data[0].id);
+      }
+    } catch (e) {
+      console.error('Failed to fetch providers:', e);
+      // Fallback to opencode
+      setAvailableProviders([{ id: 'opencode', name: 'OpenCode (Free)' }]);
+    }
+    setLoading(false);
+  };
 
   const models = modelOptions[llmProvider] || modelOptions.opencode;
+
+  const handleProviderChange = (providerId: string) => {
+    setLlmProvider(providerId);
+    const newModels = modelOptions[providerId];
+    if (newModels?.quick?.length > 0) setQuickModel(newModels.quick[0].id);
+    if (newModels?.deep?.length > 0) setDeepModel(newModels.deep[0].id);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -44,6 +72,14 @@ export default function Settings() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -143,7 +179,7 @@ export default function Settings() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white">AI Configuration</h2>
-                <p className="text-sm text-muted">Configure your AI analysis provider and models</p>
+                <p className="text-sm text-muted">Choose your AI provider and models</p>
               </div>
             </div>
 
@@ -151,20 +187,11 @@ export default function Settings() {
               {/* LLM Provider Selection */}
               <div>
                 <label className="block text-sm text-muted mb-3">LLM Provider</label>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                  {llmProviders.map((provider) => (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {availableProviders.map((provider) => (
                     <button
                       key={provider.id}
-                      onClick={() => {
-                        const newModels = modelOptions[provider.id];
-                        setLlmProvider(provider.id);
-                        if (newModels) {
-                          const quickModels = newModels.quick || [];
-                          const deepModels = newModels.deep || [];
-                          if (quickModels.length > 0) setQuickModel(quickModels[0].id);
-                          if (deepModels.length > 0) setDeepModel(deepModels[0].id);
-                        }
-                      }}
+                      onClick={() => handleProviderChange(provider.id)}
                       className={`relative p-3 rounded-xl border transition-all text-center ${
                         llmProvider === provider.id
                           ? 'border-accent bg-accent/10'
@@ -176,8 +203,10 @@ export default function Settings() {
                           <Check className="w-2 h-2 text-white" />
                         </div>
                       )}
-                      <span className="text-xl mb-1 block">{provider.icon}</span>
-                      <span className="text-xs font-medium text-white">{provider.name}</span>
+                      <span className="text-lg font-medium text-white">{provider.name}</span>
+                      {provider.note && (
+                        <span className="block text-xs text-muted mt-1">{provider.note}</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -185,12 +214,11 @@ export default function Settings() {
 
               {/* Model Selection */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Quick Model */}
                 <div className="p-4 rounded-xl bg-background/50 border border-border">
                   <div className="flex items-center gap-2 mb-3">
                     <Cpu className="w-4 h-4 text-primary" />
                     <label className="text-sm font-medium text-white">Quick Model</label>
-                    <span className="text-xs text-muted">(Fast responses)</span>
+                    <span className="text-xs text-muted">(Fast)</span>
                   </div>
                   <select
                     value={quickModel}
@@ -205,12 +233,11 @@ export default function Settings() {
                   </select>
                 </div>
 
-                {/* Deep Model */}
                 <div className="p-4 rounded-xl bg-background/50 border border-border">
                   <div className="flex items-center gap-2 mb-3">
                     <Brain className="w-4 h-4 text-accent" />
                     <label className="text-sm font-medium text-white">Deep Model</label>
-                    <span className="text-xs text-muted">(Complex analysis)</span>
+                    <span className="text-xs text-muted">(Complex)</span>
                   </div>
                   <select
                     value={deepModel}
@@ -226,30 +253,12 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* API Key */}
-              <div>
-                <label className="block text-sm text-muted mb-3">API Key</label>
-                <div className="relative">
-                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    className="input w-full pl-12 pr-4 py-3"
-                    placeholder="Enter your API key"
-                  />
-                </div>
-                <p className="text-xs text-muted mt-2 flex items-center gap-1">
-                  <Globe className="w-3 h-3" />
-                  Get your API key from{' '}
-                  <a
-                    href={llmProvider === 'opencode' ? 'https://opencode.ai/settings' : 'https://platform.openai.com'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:text-primary-light"
-                  >
-                    {llmProvider === 'opencode' ? 'opencode.ai' : 'their website'}
-                  </a>
+              <div className="p-4 rounded-xl bg-info/5 border border-info/20">
+                <p className="text-sm text-white">
+                  <Info className="w-4 h-4 inline mr-2" />
+                  {llmProvider === 'opencode'
+                    ? 'Using OpenCode free models. Configure OPENCODE_API_KEY in Coolify environment variables.'
+                    : `Using ${llmProvider}. API key is configured server-side in Coolify.`}
                 </p>
               </div>
             </div>
@@ -328,10 +337,6 @@ export default function Settings() {
               <div className="flex justify-between">
                 <span className="text-muted">Deep Model</span>
                 <span className="text-white text-xs">{deepModel}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">API Key</span>
-                <span className="text-white">{apiKey ? '••••••' : 'Not set'}</span>
               </div>
             </div>
           </div>
