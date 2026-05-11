@@ -48,7 +48,12 @@ router.post('/run', requireAuth, async (req, res) => {
     if (quickModel) args.push('--quick-model', quickModel);
 
     const python = spawn('python3', args, {
-      env: { ...process.env, PYTHONPATH: process.env.PYTHONPATH }
+      env: {
+        ...process.env,
+        PYTHONPATH: process.env.PYTHONPATH,
+        OPENCODE_API_KEY: process.env.OPENCODE_API_KEY,
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY
+      }
     });
 
     let output = '';

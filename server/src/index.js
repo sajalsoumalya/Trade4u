@@ -74,7 +74,13 @@ app.post('/api/analysis/run', async (req, res) => {
   const { symbol, date } = req.body;
 
   const python = spawn('python', [PYTHON_SCRIPT], {
-    env: { ...process.env, TA_SYMBOL: symbol, TA_DATE: date }
+    env: {
+      ...process.env,
+      TA_SYMBOL: symbol,
+      TA_DATE: date,
+      OPENCODE_API_KEY: process.env.OPENCODE_API_KEY,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY
+    }
   });
 
   let output = '';
