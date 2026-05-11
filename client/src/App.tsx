@@ -20,7 +20,7 @@ const auth = getAuth(app);
 (window as any).firebaseAuth = auth;
 
 // Layout
-function Layout({ children }: { children: React.ReactNode }) {
+function Layout({ children, user }: { children: React.ReactNode; user: any }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
@@ -64,8 +64,8 @@ function Layout({ children }: { children: React.ReactNode }) {
         <header className="h-14 bg-surface border-b border-[#2A2A2A] flex items-center justify-between px-4">
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-white text-xl">☰</button>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-400">{user.displayName || user.email}</span>
-            {user.photoURL && <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full" />}
+            <span className="text-sm text-gray-400">{user ? (user.displayName || user.email) : 'Demo User'}</span>
+            {user?.photoURL && <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full" />}
           </div>
         </header>
         <div className="p-6">{children}</div>
@@ -105,11 +105,11 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />} />
-        <Route path="/dashboard" element={isAuthenticated ? <Layout><Dashboard /></Layout> : <Navigate to="/login" />} />
-        <Route path="/market" element={isAuthenticated ? <Layout><Market /></Layout> : <Navigate to="/login" />} />
-        <Route path="/analysis" element={isAuthenticated ? <Layout><Analysis /></Layout> : <Navigate to="/login" />} />
-        <Route path="/trading" element={isAuthenticated ? <Layout><Trading /></Layout> : <Navigate to="/login" />} />
-        <Route path="/settings" element={isAuthenticated ? <Layout><Settings /></Layout> : <Navigate to="/login" />} />
+        <Route path="/dashboard" element={isAuthenticated ? <Layout user={user}><Dashboard /></Layout> : <Navigate to="/login" />} />
+        <Route path="/market" element={isAuthenticated ? <Layout user={user}><Market /></Layout> : <Navigate to="/login" />} />
+        <Route path="/analysis" element={isAuthenticated ? <Layout user={user}><Analysis /></Layout> : <Navigate to="/login" />} />
+        <Route path="/trading" element={isAuthenticated ? <Layout user={user}><Trading /></Layout> : <Navigate to="/login" />} />
+        <Route path="/settings" element={isAuthenticated ? <Layout user={user}><Settings /></Layout> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
       </Routes>
     </BrowserRouter>
