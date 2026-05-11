@@ -29,10 +29,17 @@ const firebaseConfig = {
 
 // Log config status (without secrets)
 console.log('Firebase config:', {
-  apiKey: firebaseConfig.apiKey ? 'SET' : 'MISSING',
+  apiKey: firebaseConfig.apiKey ? `SET (${firebaseConfig.apiKey.length} chars)` : 'MISSING',
   authDomain: firebaseConfig.authDomain,
   projectId: firebaseConfig.projectId,
   appId: firebaseConfig.appId
+});
+
+// Debug: show all Firebase env vars
+console.log('Env vars check:', {
+  FIREBASE_API_KEY: process.env.FIREBASE_API_KEY ? 'provided' : 'not set',
+  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID,
+  FIREBASE_APP_ID: process.env.FIREBASE_APP_ID
 });
 
 const staticPath = path.join(__dirname, '../../public');
