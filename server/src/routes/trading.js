@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requireAuth } from '../middleware/auth.js';
+import { optionalAuth } from '../middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../../data');
@@ -17,7 +17,7 @@ const writeData = (name, data) => fs.writeFileSync(getFile(name), JSON.stringify
 
 const router = Router();
 
-router.post('/order', requireAuth, async (req, res) => {
+router.post('/order', optionalAuth, async (req, res) => {
   try {
     const { symbol, type, quantity, price } = req.body;
     const uid = req.uid;
@@ -56,7 +56,7 @@ router.post('/order', requireAuth, async (req, res) => {
   }
 });
 
-router.delete('/order/:id', requireAuth, async (req, res) => {
+router.delete('/order/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { price } = req.body;
@@ -83,7 +83,7 @@ router.delete('/order/:id', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/positions', requireAuth, async (req, res) => {
+router.get('/positions', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
     const positions = readData('trades').filter(t => t.uid === uid && t.status === 'open');
@@ -93,7 +93,7 @@ router.get('/positions', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/history', requireAuth, async (req, res) => {
+router.get('/history', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
     const { limit = 50 } = req.query;
@@ -105,7 +105,7 @@ router.get('/history', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/balance', requireAuth, async (req, res) => {
+router.get('/balance', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
     const balances = readData('balances');

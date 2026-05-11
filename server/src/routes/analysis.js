@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requireAuth } from '../middleware/auth.js';
+import { optionalAuth } from '../middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../../data');
@@ -22,7 +22,7 @@ const newId = () => Date.now().toString(36) + Math.random().toString(36).substr(
 
 const router = Router();
 
-router.post('/run', requireAuth, async (req, res) => {
+router.post('/run', optionalAuth, async (req, res) => {
   try {
     const { symbol, date, provider, deepModel, quickModel, apiKey } = req.body;
 
@@ -100,7 +100,7 @@ router.post('/run', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/:id', requireAuth, async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const analyses = readAnalyses();
@@ -119,7 +119,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const { limit = 20 } = req.query;
     const analyses = readAnalyses().filter(a => a.uid === req.uid).slice(0, parseInt(limit));

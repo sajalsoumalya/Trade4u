@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requireAuth } from '../middleware/auth.js';
+import { optionalAuth } from '../middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../../data');
@@ -28,11 +28,11 @@ let autoTradeSettings = {
   riskPerTrade: 1,
 };
 
-router.get('/settings', requireAuth, (req, res) => {
+router.get('/settings', optionalAuth, (req, res) => {
   res.json(autoTradeSettings);
 });
 
-router.post('/settings', requireAuth, (req, res) => {
+router.post('/settings', optionalAuth, (req, res) => {
   const { enabled, symbols, tradeAmount, maxPositions, stopLoss, takeProfit, analysisInterval, riskPerTrade } = req.body;
   autoTradeSettings = {
     enabled: enabled ?? autoTradeSettings.enabled,
@@ -47,7 +47,7 @@ router.post('/settings', requireAuth, (req, res) => {
   res.json({ success: true, settings: autoTradeSettings });
 });
 
-router.post('/toggle', requireAuth, (req, res) => {
+router.post('/toggle', optionalAuth, (req, res) => {
   const { enabled } = req.body;
   autoTradeSettings.enabled = enabled;
   const io = req.app.get('io');
@@ -55,7 +55,7 @@ router.post('/toggle', requireAuth, (req, res) => {
   res.json({ success: true, enabled: autoTradeSettings.enabled });
 });
 
-router.get('/history', requireAuth, async (req, res) => {
+router.get('/history', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
     const { limit = 50 } = req.query;
@@ -66,7 +66,7 @@ router.get('/history', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/positions', requireAuth, async (req, res) => {
+router.get('/positions', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
     const positions = readData('trades').filter(t => t.uid === uid && t.status === 'open');
@@ -76,7 +76,7 @@ router.get('/positions', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/trade', requireAuth, async (req, res) => {
+router.post('/trade', optionalAuth, async (req, res) => {
   try {
     const { symbol, type, amount, price } = req.body;
     const uid = req.uid;
@@ -108,7 +108,7 @@ router.post('/trade', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/close-position', requireAuth, async (req, res) => {
+router.post('/close-position', optionalAuth, async (req, res) => {
   try {
     const { positionId, currentPrice } = req.body;
     const uid = req.uid;
@@ -132,7 +132,7 @@ router.post('/close-position', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/portfolio', requireAuth, async (req, res) => {
+router.get('/portfolio', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
     const positions = readData('positions').filter(p => p.uid === uid && p.status === 'open');
