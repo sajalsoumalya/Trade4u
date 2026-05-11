@@ -8,7 +8,7 @@ interface User {
   photoURL?: string;
 }
 
-// Free models only (no API key needed for OpenCode)
+// OpenCode free models only
 const opencodeModels = {
   quick: [
     { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free' },
@@ -17,6 +17,9 @@ const opencodeModels = {
   deep: [
     { id: 'minimax-m2.7', name: 'MiniMax M2.7', cost: 'Free' },
     { id: 'minimax-m2.5', name: 'MiniMax M2.5', cost: 'Free' },
+    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', cost: 'Free' },
+    { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free' },
+    { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free' },
   ]
 };
 

@@ -114,32 +114,18 @@ MODEL_OPTIONS: ProviderModeOptions = {
             ("Qwen3:latest (8B, local)", "qwen3:latest"),
         ],
     },
-    # OpenCode: Uses different endpoints per model type
+    # OpenCode: Uses different endpoints per model type (Free models)
     "opencode": {
         "quick": [
-            # Free models first
-            ("MiniMax M2.5 Free - Free", "minimax-m2.5-free"),
+            ("MiniMax M2.5 Free - Fast, free", "minimax-m2.5-free"),
             ("Big Pickle - Free", "big-pickle"),
-            ("Ring 2.6 1T Free - Free", "ring-2.6-1t-free"),
-            ("Nemotron 3 Super Free - Free", "nemotron-3-super-free"),
-            # Paid models
-            ("GPT 5.4 Mini - Fast, strong coding", "gpt-5.4-mini"),
-            ("GPT 5.4 Nano - Cheapest", "gpt-5.4-nano"),
-            ("Claude Haiku 4.5 - Fast responses", "claude-haiku-4-5"),
-            ("Qwen3.5 Plus - Fast", "qwen3.5-plus"),
         ],
         "deep": [
-            # Free models first
             ("MiniMax M2.7 - Free", "minimax-m2.7"),
             ("MiniMax M2.5 - Free", "minimax-m2.5"),
-            ("Qwen3.5 Plus - Low cost", "qwen3.5-plus"),
-            # Paid models
-            ("GPT 5.4 - Latest frontier", "gpt-5.4"),
-            ("GPT 5.4 Pro - Most capable", "gpt-5.4-pro"),
-            ("Claude Opus 4.7 - Most intelligent", "claude-opus-4-7"),
-            ("Claude Sonnet 4.6 - Balance", "claude-sonnet-4-6"),
-            ("Qwen3.6 Plus - Reasoning", "qwen3.6-plus"),
-            ("GLM 5 - Low cost", "glm-5"),
+            ("DeepSeek V4 Flash - Free", "deepseek-v4-flash"),
+            ("Nemotron 3 Super Free - Free", "nemotron-3-super-free"),
+            ("Ring 2.6 1T Free - Free", "ring-2.6-1t-free"),
         ],
     },
 }

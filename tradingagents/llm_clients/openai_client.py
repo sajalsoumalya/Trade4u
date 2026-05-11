@@ -117,8 +117,8 @@ _PROVIDER_CONFIG = {
     "glm": ("https://api.z.ai/api/paas/v4/", "ZHIPU_API_KEY"),
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
     "ollama": ("http://localhost:11434/v1", None),
-    # OpenCode uses /zen/v1/ base and route by model type
-    "opencode": ("https://opencode.ai/zen/v1/", "OPENCODE_API_KEY"),
+    # OpenCode uses /zen/v1/ base
+    "opencode": ("https://opencode.ai/zen/v1", "OPENCODE_API_KEY"),
     "nvidia_nim": ("https://integrate.api.nvidia.com/v1", "NVIDIA_NIM_API_KEY"),
 }
 

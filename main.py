@@ -17,27 +17,16 @@ args = parser.parse_args()
 from dotenv import load_dotenv
 load_dotenv()
 
-# Get API key from environment based on provider
-def get_api_key(provider: str) -> str:
-    key_map = {
-        'opencode': 'OPENCODE_API_KEY',
-        'openai': 'OPENAI_API_KEY',
-        'anthropic': 'ANTHROPIC_API_KEY',
-        'google': 'GOOGLE_API_KEY',
-        'deepseek': 'DEEPSEEK_API_KEY',
-    }
-    env_var = key_map.get(provider.lower())
-    if env_var:
-        return os.environ.get(env_var, '')
-    return ''
-
 # Create a custom config
 config = DEFAULT_CONFIG.copy()
 config["llm_provider"] = args.provider
+
+# For opencode provider, use model ID directly (without prefix)
+# Backend URL handles the routing
 config["deep_think_llm"] = args.deep_model
 config["quick_think_llm"] = args.quick_model
 config["max_debate_rounds"] = 1
-config["backend_url"] = "https://opencode.ai/zen/"
+config["backend_url"] = "https://opencode.ai/zen/v1"
 
 # Configure data vendors (default uses yfinance, no extra API keys needed)
 config["data_vendors"] = {
