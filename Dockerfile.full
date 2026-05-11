@@ -28,13 +28,17 @@ RUN apt-get update && apt-get install -y curl && \
 
 WORKDIR /app
 
-# Copy Python deps
-COPY --from=python-deps /app /app
+# Copy Python deps and environment files
+COPY --from=python-deps /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+COPY --from=python-deps /usr/local/bin /usr/local/bin
 
 # Copy root level files
 COPY main.py ./
 COPY pyproject.toml ./
 COPY tradingagents/ ./tradingagents/
+
+# Install tradingagents package in editable mode
+RUN pip install --no-cache-dir -e .
 
 # Copy server directory and install deps
 COPY server/ ./server/
