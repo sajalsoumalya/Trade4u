@@ -1,28 +1,48 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, IChartApi, ISeriesApi, LineData, ColorType } from 'lightweight-charts';
-import { fetchPrice, fetchHistory } from '../lib/api';
-import { LineChart, TrendingUp, TrendingDown, RefreshCw, Search, Info, DollarSign, Activity, BarChart3 } from 'lucide-react';
+import { createChart, IChartApi, ISeriesApi, ColorType } from 'lightweight-charts';
+import { fetchCryptoPrice, fetchCryptoKlines } from '../lib/api';
+import {
+  LineChart,
+  TrendingUp,
+  TrendingDown,
+  RefreshCw,
+  Search,
+  Info,
+  DollarSign,
+  Activity,
+  BarChart3,
+  Clock
+} from 'lucide-react';
 
-const periods = [
+const cryptoList = [
+  { symbol: 'BTCUSDT', name: 'Bitcoin', icon: '₿' },
+  { symbol: 'ETHUSDT', name: 'Ethereum', icon: 'Ξ' },
+  { symbol: 'SOLUSDT', name: 'Solana', icon: '◎' },
+  { symbol: 'BNBUSDT', name: 'BNB', icon: '🔶' },
+  { symbol: 'XRPUSDT', name: 'Ripple', icon: '✕' },
+  { symbol: 'ADAUSDT', name: 'Cardano', icon: '₳' },
+  { symbol: 'DOGEUSDT', name: 'Dogecoin', icon: 'Ð' },
+  { symbol: 'AVAXUSDT', name: 'Avalanche', icon: '▲' },
+];
+
+const intervals = [
+  { value: '1m', label: '1m' },
+  { value: '5m', label: '5m' },
+  { value: '15m', label: '15m' },
+  { value: '1h', label: '1H' },
+  { value: '4h', label: '4H' },
   { value: '1d', label: '1D' },
-  { value: '1w', label: '1W' },
-  { value: '1mo', label: '1M' },
-  { value: '3mo', label: '3M' },
-  { value: '1y', label: '1Y' },
-  { value: '5y', label: '5Y' },
 ];
 
 export default function Market() {
   const chartContainer = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
-  const [symbol, setSymbol] = useState('AAPL');
-  const [inputSymbol, setInputSymbol] = useState('AAPL');
+  const [symbol, setSymbol] = useState('BTCUSDT');
   const [price, setPrice] = useState<any>(null);
-  const [period, setPeriod] = useState('1mo');
+  const [interval, setInterval] = useState('1h');
   const [loading, setLoading] = useState(false);
-  const [chartType, setChartType] = useState<'line' | 'area'>('area');
 
   useEffect(() => {
     if (!chartContainer.current) return;
@@ -31,7 +51,6 @@ export default function Market() {
       layout: {
         background: { type: ColorType.Solid, color: '#111827' },
         textColor: '#6b7280',
-        fontFamily: 'Inter, sans-serif',
       },
       grid: {
         vertLines: { color: '#1f2937' },
@@ -54,7 +73,6 @@ export default function Market() {
       },
       rightPriceScale: {
         borderColor: '#1f2937',
-        scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       timeScale: {
         borderColor: '#1f2937',
@@ -65,13 +83,13 @@ export default function Market() {
       height: 450,
     });
 
-    seriesRef.current = chartRef.current.addLineSeries({
-      color: '#10b981',
-      lineWidth: 2,
-      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
-      crosshairMarkerRadius: 4,
-      crosshairMarkerBorderColor: '#10b981',
-      crosshairMarkerBackgroundColor: '#111827',
+    seriesRef.current = chartRef.current.addCandlestickSeries({
+      upColor: '#10b981',
+      downColor: '#ef4444',
+      borderUpColor: '#10b981',
+      borderDownColor: '#ef4444',
+      wickUpColor: '#10b981',
+      wickDownColor: '#ef4444',
     });
 
     const handleResize = () => {
@@ -91,22 +109,25 @@ export default function Market() {
 
   useEffect(() => {
     loadData();
-  }, [symbol, period]);
+  }, [symbol, interval]);
 
   const loadData = async () => {
     if (!symbol) return;
     setLoading(true);
     try {
-      const [priceData, historyData] = await Promise.all([
-        fetchPrice(symbol),
-        fetchHistory(symbol, period),
+      const [priceData, klinesData] = await Promise.all([
+        fetchCryptoPrice(symbol),
+        fetchCryptoKlines(symbol, interval, 200),
       ]);
       setPrice(priceData);
 
-      if (historyData.data && seriesRef.current) {
-        const chartData: LineData[] = historyData.data.map((d: any) => ({
-          time: d.time,
-          value: d.close,
+      if (klinesData && seriesRef.current) {
+        const chartData = klinesData.map((k: any) => ({
+          time: Math.floor(k.time / 1000) as any,
+          open: k.open,
+          high: k.high,
+          low: k.low,
+          close: k.close,
         }));
         seriesRef.current.setData(chartData);
         chartRef.current?.timeScale().fitContent();
@@ -117,225 +138,192 @@ export default function Market() {
     setLoading(false);
   };
 
-  const handleSearch = () => {
-    if (inputSymbol) {
-      setSymbol(inputSymbol.toUpperCase());
-    }
-  };
-
-  const isPositive = price?.change >= 0;
+  const isPositive = price?.priceChangePercent >= 0;
+  const crypto = cryptoList.find(c => c.symbol === symbol);
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Market</h1>
-          <p className="text-muted">Real-time market data and charts</p>
+          <h1 className="text-3xl font-bold text-white mb-1">Live Market</h1>
+          <p className="text-muted">Real-time crypto prices and charts</p>
         </div>
-        <button
-          onClick={loadData}
-          disabled={loading}
-          className="btn-ghost flex items-center gap-2"
-        >
+        <button onClick={loadData} disabled={loading} className="btn-ghost flex items-center gap-2">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh Data
+          Refresh
         </button>
       </div>
 
-      {/* Search & Controls */}
+      {/* Crypto Selector */}
       <div className="card p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 flex items-center gap-3">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-              <input
-                type="text"
-                value={inputSymbol}
-                onChange={(e) => setInputSymbol(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="input w-full pl-12 pr-4"
-                placeholder="Enter symbol (e.g., AAPL, TSLA)"
-              />
-            </div>
-            <button onClick={handleSearch} className="btn-primary">
-              Search
+        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+          {cryptoList.map((c) => (
+            <button
+              key={c.symbol}
+              onClick={() => setSymbol(c.symbol)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
+                symbol === c.symbol
+                  ? 'bg-primary text-white'
+                  : 'bg-background text-gray-400 hover:text-white'
+              }`}
+            >
+              <span>{c.icon}</span>
+              <span className="font-medium">{c.name}</span>
             </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {periods.map((p) => (
-              <button
-                key={p.value}
-                onClick={() => setPeriod(p.value)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  period === p.value
-                    ? 'bg-primary text-white shadow-lg shadow-primary/30'
-                    : 'bg-background text-muted hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          ))}
         </div>
+      </div>
+
+      {/* Interval Selector */}
+      <div className="flex items-center gap-2">
+        {intervals.map((int) => (
+          <button
+            key={int.value}
+            onClick={() => setInterval(int.value)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              interval === int.value
+                ? 'bg-primary text-white'
+                : 'bg-surface text-muted hover:text-white'
+            }`}
+          >
+            {int.label}
+          </button>
+        ))}
       </div>
 
       {/* Price Info */}
       {price && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="card p-6 relative overflow-hidden group hover:border-primary/30 transition-all">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-primary/20 to-transparent rounded-bl-full" />
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-primary" />
-                </div>
-                <span className="text-sm text-muted">Current Price</span>
-              </div>
-              <p className="text-2xl font-bold text-white">${price.price?.toFixed(2)}</p>
-              <p className={`text-sm font-medium mt-1 flex items-center gap-1 ${isPositive ? 'text-primary' : 'text-secondary'}`}>
-                {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                {isPositive ? '+' : ''}{price.change?.toFixed(2)} ({price.changePercent?.toFixed(2)}%)
-              </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="card p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <DollarSign className="w-4 h-4 text-primary" />
+              <span className="text-sm text-muted">Current Price</span>
             </div>
-
-            <div className="card p-6 relative overflow-hidden hover:border-info/30 transition-all">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-info/20 to-transparent rounded-bl-full" />
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-info/20 flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-info" />
-                </div>
-                <span className="text-sm text-muted">Day High</span>
-              </div>
-              <p className="text-2xl font-bold text-white">${price.high?.toFixed(2)}</p>
-            </div>
-
-            <div className="card p-6 relative overflow-hidden hover:border-warning/30 transition-all">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-warning/20 to-transparent rounded-bl-full" />
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-warning/20 flex items-center justify-center">
-                  <TrendingDown className="w-5 h-5 text-warning" />
-                </div>
-                <span className="text-sm text-muted">Day Low</span>
-              </div>
-              <p className="text-2xl font-bold text-white">${price.low?.toFixed(2)}</p>
-            </div>
-
-            <div className="card p-6 relative overflow-hidden hover:border-accent/30 transition-all">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-accent/20 to-transparent rounded-bl-full" />
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-                  <BarChart3 className="w-5 h-5 text-accent" />
-                </div>
-                <span className="text-sm text-muted">Volume</span>
-              </div>
-              <p className="text-2xl font-bold text-white">{(price.volume / 1000000).toFixed(2)}M</p>
-            </div>
+            <p className="text-2xl font-bold text-white">
+              ${price.price > 1 ? price.price.toFixed(2) : price.price.toFixed(6)}
+            </p>
+            <p className={`text-sm font-medium ${isPositive ? 'text-primary' : 'text-secondary'}`}>
+              {isPositive ? '+' : ''}{price.priceChangePercent?.toFixed(2)}%
+            </p>
           </div>
 
-          {/* Chart */}
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${
-                  isPositive ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'
-                }`}>
-                  {symbol.slice(0, 2)}
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-white">{symbol}</h2>
-                  <p className="text-sm text-muted">{price.price?.toFixed(2)} USD</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="btn-ghost text-xs">
-                  <Info className="w-4 h-4 mr-1" />
-                  Indicators
-                </button>
-              </div>
+          <div className="card p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              <span className="text-sm text-muted">24h High</span>
             </div>
-
-            {loading ? (
-              <div className="h-[450px] flex items-center justify-center">
-                <div className="text-center">
-                  <RefreshCw className="w-8 h-8 text-primary animate-spin mx-auto mb-2" />
-                  <p className="text-muted">Loading chart data...</p>
-                </div>
-              </div>
-            ) : (
-              <div ref={chartContainer} className="w-full" />
-            )}
+            <p className="text-2xl font-bold text-white">
+              ${price.high24h > 1 ? price.high24h.toFixed(2) : price.high24h.toFixed(6)}
+            </p>
           </div>
 
-          {/* Stock Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="card p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" />
-                Market Summary
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center py-2 border-b border-border/50">
-                  <span className="text-muted">Open</span>
-                  <span className="font-medium text-white">${price.open?.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-border/50">
-                  <span className="text-muted">Previous Close</span>
-                  <span className="font-medium text-white">${(price.price - price.change)?.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-border/50">
-                  <span className="text-muted">52 Week High</span>
-                  <span className="font-medium text-primary">${(price.price * 1.2)?.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-muted">52 Week Low</span>
-                  <span className="font-medium text-secondary">${(price.price * 0.8)?.toFixed(2)}</span>
-                </div>
-              </div>
+          <div className="card p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingDown className="w-4 h-4 text-secondary" />
+              <span className="text-sm text-muted">24h Low</span>
             </div>
+            <p className="text-2xl font-bold text-white">
+              ${price.low24h > 1 ? price.low24h.toFixed(2) : price.low24h.toFixed(6)}
+            </p>
+          </div>
 
-            <div className="card p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <LineChart className="w-5 h-5 text-accent" />
-                Price Analysis
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center py-2 border-b border-border/50">
-                  <span className="text-muted">Change Today</span>
-                  <span className={`font-medium ${isPositive ? 'text-primary' : 'text-secondary'}`}>
-                    {isPositive ? '+' : ''}{price.change?.toFixed(2)} ({price.changePercent?.toFixed(2)}%)
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-border/50">
-                  <span className="text-muted">Market Cap</span>
-                  <span className="font-medium text-white">{(price.price * 1000000000 / 1000000).toFixed(0)}B</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-border/50">
-                  <span className="text-muted">Day Range</span>
-                  <span className="font-medium text-white">${price.low?.toFixed(2)} - ${price.high?.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-muted">Avg Volume</span>
-                  <span className="font-medium text-white">{(price.volume / 1000000).toFixed(0)}M</span>
-                </div>
-              </div>
+          <div className="card p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Activity className="w-4 h-4 text-accent" />
+              <span className="text-sm text-muted">24h Volume</span>
             </div>
+            <p className="text-2xl font-bold text-white">
+              ${(price.quoteVolume / 1000000).toFixed(1)}M
+            </p>
           </div>
-        </>
-      )}
-
-      {!price && !loading && (
-        <div className="card p-12 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-4">
-            <LineChart className="w-8 h-8 text-primary" />
-          </div>
-          <h3 className="text-xl font-semibold text-white mb-2">Search for a Symbol</h3>
-          <p className="text-muted mb-4">Enter a stock symbol to view real-time market data and charts</p>
-          <button onClick={loadData} className="btn-primary">
-            Load Demo Data
-          </button>
         </div>
       )}
+
+      {/* Chart */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-2xl">
+              {crypto?.icon || '₿'}
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">{crypto?.name || symbol}</h2>
+              <p className="text-sm text-muted">{symbol}</p>
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="h-[450px] flex items-center justify-center">
+            <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+          </div>
+        ) : (
+          <div ref={chartContainer} className="w-full" />
+        )}
+      </div>
+
+      {/* Market Overview */}
+      <div className="card p-6">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-primary" />
+          Market Overview
+        </h3>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-sm text-muted border-b border-border">
+                <th className="pb-3 font-medium">Pair</th>
+                <th className="pb-3 font-medium">Price</th>
+                <th className="pb-3 font-medium">24h Change</th>
+                <th className="pb-3 font-medium">24h High</th>
+                <th className="pb-3 font-medium">24h Low</th>
+                <th className="pb-3 font-medium">Volume</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cryptoList.map((c) => (
+                <CryptoRow key={c.symbol} crypto={c} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function CryptoRow({ crypto }: { crypto: any }) {
+  const [data, setData] = useState<any>(null);
+
+  useEffect(() => {
+    fetchCryptoPrice(crypto.symbol).then(setData).catch(console.error);
+  }, [crypto.symbol]);
+
+  if (!data) return null;
+
+  const isPositive = data.priceChangePercent >= 0;
+
+  return (
+    <tr className="border-b border-border/50 hover:bg-white/5 transition-colors cursor-pointer" onClick={() => window.location.href = '/market'}>
+      <td className="py-3">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{crypto.icon}</span>
+          <div>
+            <p className="font-medium text-white">{crypto.symbol.replace('USDT', '')}</p>
+            <p className="text-xs text-muted">{crypto.name}</p>
+          </div>
+        </div>
+      </td>
+      <td className="py-3 font-medium text-white">
+        ${data.price > 1 ? data.price.toFixed(2) : data.price.toFixed(6)}
+      </td>
+      <td className={`py-3 font-medium ${isPositive ? 'text-primary' : 'text-secondary'}`}>
+        {isPositive ? '+' : ''}{data.priceChangePercent?.toFixed(2)}%
+      </td>
+      <td className="py-3 text-white">${data.high24h?.toFixed(2)}</td>
+      <td className="py-3 text-white">${data.low24h?.toFixed(2)}</td>
+      <td className="py-3 text-muted">${(data.quoteVolume / 1000000).toFixed(1)}M</td>
+    </tr>
   );
 }

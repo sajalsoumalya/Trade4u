@@ -80,11 +80,27 @@ interface AppState {
   user: User | null;
   setUser: (user: User | null) => void;
 
+  // Trading
   balance: number;
   tradingMode: 'paper' | 'live';
   setBalance: (balance: number) => void;
   setTradingMode: (mode: 'paper' | 'live') => void;
 
+  // Wallet & AI Trading
+  walletBalance: number;
+  aiTradingEnabled: boolean;
+  aiTradingPercent: number;
+  aiSymbols: string[];
+  aiStopLoss: number;
+  aiTakeProfit: number;
+  setWalletBalance: (balance: number) => void;
+  setAiTradingEnabled: (enabled: boolean) => void;
+  setAiTradingPercent: (percent: number) => void;
+  setAiSymbols: (symbols: string[]) => void;
+  setAiStopLoss: (percent: number) => void;
+  setAiTakeProfit: (percent: number) => void;
+
+  // AI Settings
   llmProvider: string;
   apiKey: string;
   deepModel: string;
@@ -103,11 +119,27 @@ export const useAppStore = create<AppState>()(
       user: null,
       setUser: (user) => set({ user }),
 
+      // Trading
       balance: 100000,
       tradingMode: 'paper',
       setBalance: (balance) => set({ balance }),
       setTradingMode: (tradingMode) => set({ tradingMode }),
 
+      // Wallet & AI Trading
+      walletBalance: 10000,
+      aiTradingEnabled: false,
+      aiTradingPercent: 10, // 10% of wallet for AI trading
+      aiSymbols: ['BTCUSDT', 'ETHUSDT'],
+      aiStopLoss: 2,
+      aiTakeProfit: 5,
+      setWalletBalance: (walletBalance) => set({ walletBalance }),
+      setAiTradingEnabled: (aiTradingEnabled) => set({ aiTradingEnabled }),
+      setAiTradingPercent: (aiTradingPercent) => set({ aiTradingPercent }),
+      setAiSymbols: (aiSymbols) => set({ aiSymbols }),
+      setAiStopLoss: (aiStopLoss) => set({ aiStopLoss }),
+      setAiTakeProfit: (aiTakeProfit) => set({ aiTakeProfit }),
+
+      // AI Settings
       llmProvider: 'opencode',
       apiKey: '',
       deepModel: 'minimax-m2.5-free',
@@ -135,6 +167,12 @@ export const useAppStore = create<AppState>()(
         apiKey: state.apiKey,
         deepModel: state.deepModel,
         quickModel: state.quickModel,
+        walletBalance: state.walletBalance,
+        aiTradingEnabled: state.aiTradingEnabled,
+        aiTradingPercent: state.aiTradingPercent,
+        aiSymbols: state.aiSymbols,
+        aiStopLoss: state.aiStopLoss,
+        aiTakeProfit: state.aiTakeProfit,
       }),
     }
   )

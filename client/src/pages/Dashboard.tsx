@@ -1,327 +1,455 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAppStore } from '../store/appStore';
+import { fetchCryptoPrice, fetchCryptoPrices } from '../lib/api';
 import {
   Wallet,
   TrendingUp,
   TrendingDown,
-  ArrowUpRight,
-  ArrowDownRight,
-  ChevronRight,
   Activity,
-  DollarSign,
-  BarChart3,
-  Clock,
+  Zap,
+  Shield,
   Play,
-  RefreshCw
+  Pause,
+  Settings,
+  ChevronRight,
+  Coins,
+  DollarSign,
+  Percent,
+  RefreshCw,
+  Brain,
+  ArrowUpRight,
+  ArrowDownRight
 } from 'lucide-react';
 
-const balance = 100000;
-const positions = [
-  { id: '1', symbol: 'AAPL', type: 'buy', quantity: 100, price: 178.50, currentPrice: 182.50, pnl: 400 },
-  { id: '2', symbol: 'NVDA', type: 'buy', quantity: 50, price: 875.00, currentPrice: 860.00, pnl: -750 },
-  { id: '3', symbol: 'TSLA', type: 'buy', quantity: 75, price: 245.00, currentPrice: 258.75, pnl: 1031.25 },
-];
-const recentTrades = [
-  { id: '1', symbol: 'TSLA', type: 'buy', quantity: 200, price: 245.00, pnl: 2750, date: '2024-01-15' },
-  { id: '2', symbol: 'SPY', type: 'sell', quantity: 50, price: 478.50, pnl: 375, date: '2024-01-14' },
-  { id: '3', symbol: 'AAPL', type: 'buy', quantity: 100, price: 178.50, pnl: 400, date: '2024-01-13' },
-  { id: '4', symbol: 'NVDA', type: 'buy', quantity: 25, price: 890.00, pnl: -750, date: '2024-01-12' },
-];
-const marketIndices = [
-  { symbol: 'SPY', name: 'S&P 500', price: 478.52, change: 2.35, changePercent: 0.49 },
-  { symbol: 'QQQ', name: 'NASDAQ', price: 412.18, change: 5.82, changePercent: 1.43 },
-  { symbol: 'DIA', name: 'DOW', price: 385.20, change: -1.45, changePercent: -0.38 },
-  { symbol: 'IWM', name: 'Russell', price: 198.45, change: 1.23, changePercent: 0.62 },
+const cryptoList = [
+  { symbol: 'BTCUSDT', name: 'Bitcoin', icon: '₿' },
+  { symbol: 'ETHUSDT', name: 'Ethereum', icon: 'Ξ' },
+  { symbol: 'SOLUSDT', name: 'Solana', icon: '◎' },
+  { symbol: 'BNBUSDT', name: 'BNB', icon: '🔶' },
+  { symbol: 'XRPUSDT', name: 'Ripple', icon: '✕' },
+  { symbol: 'ADAUSDT', name: 'Cardano', icon: '₳' },
+  { symbol: 'DOGEUSDT', name: 'Dogecoin', icon: 'Ð' },
+  { symbol: 'DOTUSDT', name: 'Polkadot', icon: '●' },
+  { symbol: 'AVAXUSDT', name: 'Avalanche', icon: '▲' },
+  { symbol: 'LINKUSDT', name: 'Chainlink', icon: '🔗' },
 ];
 
 export default function Dashboard() {
-  const [quickTradeSymbol, setQuickTradeSymbol] = useState('');
-  const [quickTradeQty, setQuickTradeQty] = useState('');
-  const [quickTradeType, setQuickTradeType] = useState<'buy' | 'sell'>('buy');
+  const {
+    balance,
+    walletBalance,
+    aiTradingEnabled,
+    aiTradingPercent,
+    aiSymbols,
+    aiStopLoss,
+    aiTakeProfit,
+    setAiTradingEnabled,
+    setAiTradingPercent,
+    setAiSymbols,
+    setAiStopLoss,
+    setAiTakeProfit,
+  } = useAppStore();
 
-  const totalPnL = positions.reduce((sum, p) => sum + p.pnl, 0);
-  const totalValue = positions.reduce((sum, p) => sum + (p.currentPrice * p.quantity), 0);
+  const [cryptoPrices, setCryptoPrices] = useState<Record<string, any>>({});
+  const [selectedCrypto, setSelectedCrypto] = useState('BTCUSDT');
+  const [loading, setLoading] = useState(false);
+
+  const currentPrice = cryptoPrices[selectedCrypto]?.price || 0;
+  const priceChange = cryptoPrices[selectedCrypto]?.priceChangePercent || 0;
+
+  useEffect(() => {
+    loadPrices();
+    const interval = setInterval(loadPrices, 30000); // Refresh every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadPrices = async () => {
+    try {
+      const symbols = cryptoList.map(c => c.symbol);
+      const data = await fetchCryptoPrices(symbols);
+      const priceMap: Record<string, any> = {};
+      data.forEach((d: any) => {
+        priceMap[d.symbol] = d;
+      });
+      setCryptoPrices(priceMap);
+    } catch (e) {
+      console.error('Failed to load prices:', e);
+    }
+  };
+
+  const aiTradingAmount = (walletBalance * aiTradingPercent) / 100;
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Dashboard</h1>
-          <p className="text-muted">Welcome back! Here's your portfolio overview.</p>
+          <h1 className="text-3xl font-bold text-white mb-1">Trading Dashboard</h1>
+          <p className="text-muted">AI-Powered Crypto Trading Platform</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="badge-success flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             Live Market
           </span>
-          <button className="btn-ghost flex items-center gap-2">
-            <RefreshCw className="w-4 h-4" />
-            Refresh
+          <button onClick={loadPrices} disabled={loading} className="btn-ghost">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Market Indices */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {marketIndices.map((index) => (
-          <div key={index.symbol} className="card p-4 hover:border-primary/30 transition-colors">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-semibold text-white">{index.symbol}</span>
-              {index.change >= 0 ? (
-                <TrendingUp className="w-4 h-4 text-primary" />
-              ) : (
-                <TrendingDown className="w-4 h-4 text-secondary" />
-              )}
-            </div>
-            <p className="text-lg font-bold text-white">${index.price.toFixed(2)}</p>
-            <p className={`text-sm font-medium ${index.change >= 0 ? 'text-primary' : 'text-secondary'}`}>
-              {index.change >= 0 ? '+' : ''}{index.change.toFixed(2)} ({index.changePercent.toFixed(2)}%)
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="stat-card green p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
+      {/* Account Balance & AI Trading Setup */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Wallet Balance Card */}
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
               <Wallet className="w-6 h-6 text-primary" />
             </div>
-            <span className="badge-success text-xs">Paper Mode</span>
-          </div>
-          <p className="text-sm text-muted mb-1">Account Balance</p>
-          <p className="text-2xl font-bold text-white">${balance.toLocaleString()}</p>
-        </div>
-
-        <div className="stat-card blue p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 rounded-xl bg-info/20 flex items-center justify-center">
-              <BarChart3 className="w-6 h-6 text-info" />
+            <div>
+              <h3 className="text-sm text-muted">Account Balance</h3>
+              <p className="text-2xl font-bold text-white">${walletBalance.toLocaleString()}</p>
             </div>
           </div>
-          <p className="text-sm text-muted mb-1">Portfolio Value</p>
-          <p className="text-2xl font-bold text-white">${(balance + totalValue + totalPnL).toLocaleString()}</p>
-        </div>
-
-        <div className="stat-card purple p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center">
-              <Activity className="w-6 h-6 text-accent" />
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted">Trading Balance</span>
+              <span className="text-sm font-medium text-white">${walletBalance.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted">Paper Balance</span>
+              <span className="text-sm font-medium text-white">${balance.toLocaleString()}</span>
             </div>
           </div>
-          <p className="text-sm text-muted mb-1">Open Positions</p>
-          <p className="text-2xl font-bold text-white">{positions.length}</p>
-          <p className="text-xs text-muted mt-1">{positions.length} active trades</p>
         </div>
 
-        <div className={`stat-card ${totalPnL >= 0 ? 'green' : 'red'} p-6`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className={`w-12 h-12 rounded-xl ${totalPnL >= 0 ? 'bg-primary/20' : 'bg-secondary/20'} flex items-center justify-center`}>
-              {totalPnL >= 0 ? (
-                <TrendingUp className="w-6 h-6 text-primary" />
-              ) : (
-                <TrendingDown className="w-6 h-6 text-secondary" />
-              )}
+        {/* AI Trading Setup Card */}
+        <div className="card p-6 bg-gradient-to-br from-accent/5 to-transparent border-accent/20">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center">
+              <Brain className="w-6 h-6 text-accent" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-white">AI Trading Agent</h3>
+              <p className="text-sm text-muted">Auto-trade with AI</p>
             </div>
           </div>
-          <p className="text-sm text-muted mb-1">Total P&L</p>
-          <p className={`text-2xl font-bold ${totalPnL >= 0 ? 'text-primary' : 'text-secondary'}`}>
-            {totalPnL >= 0 ? '+' : ''}${totalPnL.toLocaleString()}
-          </p>
-          <p className="text-xs text-muted mt-1">All time</p>
+
+          {/* Percentage Slider */}
+          <div className="mb-4">
+            <div className="flex justify-between mb-2">
+              <span className="text-sm text-muted">Investment Amount</span>
+              <span className="text-sm font-medium text-accent">{aiTradingPercent}% (${aiTradingAmount.toFixed(0)})</span>
+            </div>
+            <input
+              type="range"
+              min="5"
+              max="100"
+              value={aiTradingPercent}
+              onChange={(e) => setAiTradingPercent(parseInt(e.target.value))}
+              className="w-full h-2 bg-surface rounded-lg appearance-none cursor-pointer accent-accent"
+            />
+          </div>
+
+          {/* Toggle */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-background/50">
+            <div className="flex items-center gap-2">
+              <Zap className={`w-5 h-5 ${aiTradingEnabled ? 'text-accent' : 'text-muted'}`} />
+              <span className="font-medium text-white">Enable AI Trading</span>
+            </div>
+            <button
+              onClick={() => setAiTradingEnabled(!aiTradingEnabled)}
+              className={`w-12 h-6 rounded-full transition-colors ${
+                aiTradingEnabled ? 'bg-accent' : 'bg-surface'
+              }`}
+            >
+              <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                aiTradingEnabled ? 'translate-x-6' : 'translate-x-0.5'
+              }`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Risk Settings Card */}
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-warning/20 to-warning/5 flex items-center justify-center">
+              <Shield className="w-6 h-6 text-warning" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-white">Risk Management</h3>
+              <p className="text-sm text-muted">Stop Loss & Take Profit</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm text-muted">Stop Loss</span>
+                <span className="text-sm font-medium text-secondary">{aiStopLoss}%</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="10"
+                value={aiStopLoss}
+                onChange={(e) => setAiStopLoss(parseInt(e.target.value))}
+                className="w-full h-2 bg-surface rounded-lg appearance-none cursor-pointer accent-secondary"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm text-muted">Take Profit</span>
+                <span className="text-sm font-medium text-primary">{aiTakeProfit}%</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="20"
+                value={aiTakeProfit}
+                onChange={(e) => setAiTakeProfit(parseInt(e.target.value))}
+                className="w-full h-2 bg-surface rounded-lg appearance-none cursor-pointer accent-primary"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Open Positions */}
-        <div className="lg:col-span-2">
-          <div className="card">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-primary" />
-                Open Positions
-              </h2>
-              <a href="/trading" className="text-sm text-primary hover:text-primary-light flex items-center gap-1">
-                View All <ChevronRight className="w-4 h-4" />
-              </a>
-            </div>
+      {/* Crypto Selection */}
+      <div className="card p-6">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <Coins className="w-5 h-5 text-primary" />
+          Select Crypto Pairs for AI Trading
+        </h3>
 
-            <div className="space-y-3">
-              {positions.map((pos, index) => (
-                <div
-                  key={pos.id}
-                  className="group p-4 rounded-xl bg-background/50 hover:bg-background border border-transparent hover:border-border transition-all cursor-pointer animate-slide-up"
-                  style={{ animationDelay: `${index * 0.1}s` }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${
-                        pos.type === 'buy' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'
-                      }`}>
-                        {pos.symbol.slice(0, 2)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-white">{pos.symbol}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            pos.type === 'buy' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'
-                          }`}>
-                            {pos.type.toUpperCase()}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted">
-                          {pos.quantity} shares @ ${pos.price.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {cryptoList.map((crypto) => {
+            const price = cryptoPrices[crypto.symbol]?.price || 0;
+            const change = cryptoPrices[crypto.symbol]?.priceChangePercent || 0;
+            const isSelected = aiSymbols.includes(crypto.symbol);
 
-                    <div className="text-right">
-                      <p className="font-semibold text-white">
-                        ${(pos.currentPrice * pos.quantity).toLocaleString()}
-                      </p>
-                      <p className={`text-sm font-medium ${pos.pnl >= 0 ? 'text-primary' : 'text-secondary'}`}>
-                        {pos.pnl >= 0 ? '+' : ''}${pos.pnl.toLocaleString()}
-                      </p>
-                    </div>
-
-                    <div className="hidden group-hover:flex items-center gap-2">
-                      <button className="btn-ghost text-xs py-1 px-2">Edit</button>
-                      <button className="btn-secondary text-xs py-1 px-2">Close</button>
-                    </div>
+            return (
+              <button
+                key={crypto.symbol}
+                onClick={() => {
+                  if (isSelected) {
+                    setAiSymbols(aiSymbols.filter(s => s !== crypto.symbol));
+                  } else {
+                    setAiSymbols([...aiSymbols, crypto.symbol]);
+                  }
+                }}
+                className={`relative p-4 rounded-xl border-2 transition-all text-left ${
+                  isSelected
+                    ? 'border-accent bg-accent/10'
+                    : 'border-border hover:border-gray-600'
+                }`}
+              >
+                {isSelected && (
+                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-accent flex items-center justify-center">
+                    <Zap className="w-3 h-3 text-white" />
                   </div>
+                )}
+
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">{crypto.icon}</span>
+                  <span className="font-semibold text-white">{crypto.name}</span>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
 
-        {/* Quick Trade */}
-        <div>
-          <div className="card">
-            <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-6">
-              <Play className="w-5 h-5 text-accent" />
-              Quick Trade
-            </h2>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-muted mb-2">Symbol</label>
-                <input
-                  type="text"
-                  placeholder="AAPL"
-                  value={quickTradeSymbol}
-                  onChange={(e) => setQuickTradeSymbol(e.target.value.toUpperCase())}
-                  className="input w-full"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-muted mb-2">Quantity</label>
-                <input
-                  type="number"
-                  placeholder="100"
-                  value={quickTradeQty}
-                  onChange={(e) => setQuickTradeQty(e.target.value)}
-                  className="input w-full"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-muted mb-2">Order Type</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setQuickTradeType('buy')}
-                    className={`py-3 rounded-xl font-semibold transition-all ${
-                      quickTradeType === 'buy'
-                        ? 'bg-gradient-to-r from-primary to-primary-light text-white shadow-lg shadow-primary/30'
-                        : 'bg-background text-muted hover:text-white'
-                    }`}
-                  >
-                    Buy
-                  </button>
-                  <button
-                    onClick={() => setQuickTradeType('sell')}
-                    className={`py-3 rounded-xl font-semibold transition-all ${
-                      quickTradeType === 'sell'
-                        ? 'bg-gradient-to-r from-secondary to-secondary-light text-white shadow-lg shadow-secondary/30'
-                        : 'bg-background text-muted hover:text-white'
-                    }`}
-                  >
-                    Sell
-                  </button>
-                </div>
-              </div>
-
-              <button className={`w-full ${quickTradeType === 'buy' ? 'btn-primary' : 'btn-secondary'} flex items-center justify-center gap-2`}>
-                {quickTradeType === 'buy' ? 'Buy' : 'Sell'} {quickTradeSymbol || 'Stock'}
-                <ArrowUpRight className="w-4 h-4" />
+                <p className="text-xs text-muted">{crypto.symbol}</p>
+                <p className="text-sm font-medium text-white">
+                  ${price > 0 ? (price > 1 ? price.toFixed(2) : price.toFixed(6)) : '...'}
+                </p>
+                <p className={`text-xs font-medium ${change >= 0 ? 'text-primary' : 'text-secondary'}`}>
+                  {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+                </p>
               </button>
+            );
+          })}
+        </div>
+
+        {aiSymbols.length > 0 && (
+          <div className="mt-4 p-3 rounded-xl bg-accent/5 border border-accent/20">
+            <p className="text-sm text-white">
+              <span className="text-accent font-medium">{aiSymbols.length}</span> pairs selected for AI trading:
+              <span className="text-muted ml-2">{aiSymbols.join(', ')}</span>
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Live Prices Grid */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Activity className="w-5 h-5 text-primary" />
+            Live Market Prices
+          </h3>
+          <button onClick={loadPrices} disabled={loading} className="btn-ghost text-sm">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {cryptoList.slice(0, 10).map((crypto) => {
+            const price = cryptoPrices[crypto.symbol]?.price || 0;
+            const change = cryptoPrices[crypto.symbol]?.priceChangePercent || 0;
+            const volume = cryptoPrices[crypto.symbol]?.quoteVolume || 0;
+            const isSelected = selectedCrypto === crypto.symbol;
+
+            return (
+              <button
+                key={crypto.symbol}
+                onClick={() => setSelectedCrypto(crypto.symbol)}
+                className={`p-4 rounded-xl border-2 transition-all text-left ${
+                  isSelected
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border hover:border-gray-600'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-lg">{crypto.icon}</span>
+                  <span className={`text-xs font-medium ${change >= 0 ? 'text-primary' : 'text-secondary'}`}>
+                    {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+                  </span>
+                </div>
+                <p className="font-semibold text-white text-sm">{crypto.symbol.replace('USDT', '')}</p>
+                <p className="text-lg font-bold text-white">
+                  ${price > 0 ? (price > 1 ? price.toFixed(2) : price.toFixed(6)) : '...'}
+                </p>
+                <p className="text-xs text-muted mt-1">
+                  Vol: ${volume > 1000000 ? (volume / 1000000).toFixed(1) + 'M' : volume.toFixed(0)}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Selected Crypto Detail */}
+      {selectedCrypto && cryptoPrices[selectedCrypto] && (
+        <div className="card p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-3xl">
+                {cryptoList.find(c => c.symbol === selectedCrypto)?.icon || '₿'}
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-white">
+                  {cryptoList.find(c => c.symbol === selectedCrypto)?.name || selectedCrypto}
+                </h3>
+                <p className="text-muted">{selectedCrypto}</p>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <p className="text-3xl font-bold text-white">
+                ${cryptoPrices[selectedCrypto]?.price > 1
+                  ? cryptoPrices[selectedCrypto]?.price.toFixed(2)
+                  : cryptoPrices[selectedCrypto]?.price.toFixed(6)}
+              </p>
+              <p className={`text-lg font-medium ${priceChange >= 0 ? 'text-primary' : 'text-secondary'}`}>
+                {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 rounded-xl bg-background/50">
+              <p className="text-sm text-muted mb-1">24h High</p>
+              <p className="text-lg font-semibold text-primary">
+                ${cryptoPrices[selectedCrypto]?.high24h?.toFixed(2) || '...'}
+              </p>
+            </div>
+            <div className="p-4 rounded-xl bg-background/50">
+              <p className="text-sm text-muted mb-1">24h Low</p>
+              <p className="text-lg font-semibold text-secondary">
+                ${cryptoPrices[selectedCrypto]?.low24h?.toFixed(2) || '...'}
+              </p>
+            </div>
+            <div className="p-4 rounded-xl bg-background/50">
+              <p className="text-sm text-muted mb-1">24h Volume</p>
+              <p className="text-lg font-semibold text-white">
+                ${(cryptoPrices[selectedCrypto]?.quoteVolume / 1000000).toFixed(2)}M
+              </p>
+            </div>
+            <div className="p-4 rounded-xl bg-background/50">
+              <p className="text-sm text-muted mb-1">Price Change</p>
+              <p className={`text-lg font-semibold ${cryptoPrices[selectedCrypto]?.priceChange >= 0 ? 'text-primary' : 'text-secondary'}`}>
+                {cryptoPrices[selectedCrypto]?.priceChange >= 0 ? '+' : ''}
+                ${cryptoPrices[selectedCrypto]?.priceChange?.toFixed(2) || '...'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex gap-3">
+            {aiSymbols.includes(selectedCrypto) ? (
+              <button className="btn-ghost flex items-center gap-2">
+                <Zap className="w-4 h-4 text-accent" />
+                AI Trading Enabled
+              </button>
+            ) : (
+              <button
+                onClick={() => setAiSymbols([...aiSymbols, selectedCrypto])}
+                className="btn-accent flex items-center gap-2"
+              >
+                <Brain className="w-4 h-4" />
+                Add to AI Trading
+              </button>
+            )}
+            <a href="/analysis" className="btn-primary flex items-center gap-2">
+              <Activity className="w-4 h-4" />
+              Run AI Analysis
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* AI Trading Status */}
+      {aiTradingEnabled && aiSymbols.length > 0 && (
+        <div className="card p-6 border-accent/30 bg-gradient-to-br from-accent/5 to-transparent">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center animate-pulse">
+                <Brain className="w-5 h-5 text-accent" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">AI Trading Agent Active</h3>
+                <p className="text-sm text-muted">
+                  Analyzing {aiSymbols.length} pairs with ${aiTradingAmount.toFixed(0)} from your wallet
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setAiTradingEnabled(false)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Pause className="w-4 h-4" />
+              Stop AI Trading
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-3 rounded-xl bg-background/50 text-center">
+              <p className="text-xs text-muted">Trading Amount</p>
+              <p className="text-lg font-bold text-accent">${aiTradingAmount.toFixed(0)}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-background/50 text-center">
+              <p className="text-xs text-muted">Pairs</p>
+              <p className="text-lg font-bold text-white">{aiSymbols.length}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-background/50 text-center">
+              <p className="text-xs text-muted">Stop Loss</p>
+              <p className="text-lg font-bold text-secondary">{aiStopLoss}%</p>
+            </div>
+            <div className="p-3 rounded-xl bg-background/50 text-center">
+              <p className="text-xs text-muted">Take Profit</p>
+              <p className="text-lg font-bold text-primary">{aiTakeProfit}%</p>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Recent Trades */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
-            Recent Trades
-          </h2>
-          <a href="/trading" className="text-sm text-primary hover:text-primary-light flex items-center gap-1">
-            View All <ChevronRight className="w-4 h-4" />
-          </a>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-sm text-muted border-b border-border">
-                <th className="pb-3 font-medium">Symbol</th>
-                <th className="pb-3 font-medium">Type</th>
-                <th className="pb-3 font-medium">Quantity</th>
-                <th className="pb-3 font-medium">Price</th>
-                <th className="pb-3 font-medium">P&L</th>
-                <th className="pb-3 font-medium">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {recentTrades.map((trade) => (
-                <tr key={trade.id} className="hover:bg-white/5 transition-colors">
-                  <td className="py-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-semibold text-xs ${
-                        trade.type === 'buy' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'
-                      }`}>
-                        {trade.symbol.slice(0, 2)}
-                      </div>
-                      <span className="font-semibold text-white">{trade.symbol}</span>
-                    </div>
-                  </td>
-                  <td className="py-4">
-                    <span className={`inline-flex items-center gap-1 text-sm font-medium ${
-                      trade.type === 'buy' ? 'text-primary' : 'text-secondary'
-                    }`}>
-                      {trade.type === 'buy' ? (
-                        <ArrowUpRight className="w-4 h-4" />
-                      ) : (
-                        <ArrowDownRight className="w-4 h-4" />
-                      )}
-                      {trade.type.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="py-4 text-white">{trade.quantity}</td>
-                  <td className="py-4 text-white">${trade.price.toFixed(2)}</td>
-                  <td className={`py-4 font-semibold ${trade.pnl >= 0 ? 'text-primary' : 'text-secondary'}`}>
-                    {trade.pnl >= 0 ? '+' : ''}${trade.pnl.toLocaleString()}
-                  </td>
-                  <td className="py-4 text-muted text-sm">{trade.date}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

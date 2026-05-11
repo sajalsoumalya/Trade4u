@@ -1,5 +1,55 @@
 import { API_BASE, getAuthHeaders } from './firebase';
 
+const CRYPTO_API = 'https://api.binance.com';
+
+// Crypto API (no auth required)
+export const fetchCryptoPrice = async (symbol: string) => {
+  const res = await fetch(`${CRYPTO_API}/api/v3/ticker/24hr?symbol=${symbol.toUpperCase()}`);
+  const data = await res.json();
+  return {
+    symbol: data.symbol,
+    price: parseFloat(data.lastPrice),
+    priceChange: parseFloat(data.priceChange),
+    priceChangePercent: parseFloat(data.priceChangePercent),
+    high24h: parseFloat(data.highPrice),
+    low24h: parseFloat(data.lowPrice),
+    volume: parseFloat(data.volume),
+    quoteVolume: parseFloat(data.quoteVolume),
+  };
+};
+
+export const fetchCryptoPrices = async (symbols: string[]) => {
+  const res = await fetch(`${CRYPTO_API}/api/v3/ticker/24hr`);
+  const allData = await res.json();
+  return allData
+    .filter((t: any) => symbols.includes(t.symbol))
+    .map((t: any) => ({
+      symbol: t.symbol,
+      price: parseFloat(t.lastPrice),
+      priceChange: parseFloat(t.priceChange),
+      priceChangePercent: parseFloat(t.priceChangePercent),
+      high24h: parseFloat(t.highPrice),
+      low24h: parseFloat(t.lowPrice),
+      volume: parseFloat(t.volume),
+      quoteVolume: parseFloat(t.quoteVolume),
+    }));
+};
+
+export const fetchCryptoKlines = async (symbol: string, interval = '1h', limit = 100) => {
+  const res = await fetch(
+    `${CRYPTO_API}/api/v3/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&limit=${limit}`
+  );
+  const data = await res.json();
+  return data.map((k: any) => ({
+    time: k[0],
+    open: parseFloat(k[1]),
+    high: parseFloat(k[2]),
+    low: parseFloat(k[3]),
+    close: parseFloat(k[4]),
+    volume: parseFloat(k[5]),
+  }));
+};
+
 // Market API
 export const fetchPrice = async (symbol: string) => {
   const res = await fetch(`${API_BASE}/market/price/${symbol}`);

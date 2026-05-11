@@ -35,17 +35,22 @@ console.log('Firebase config:', {
   appId: firebaseConfig.appId
 });
 
-// Debug: show all Firebase env vars
-console.log('Env vars check:', {
-  FIREBASE_API_KEY: process.env.FIREBASE_API_KEY ? 'provided' : 'not set',
-  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID,
-  FIREBASE_APP_ID: process.env.FIREBASE_APP_ID
-});
-
 const staticPath = path.join(__dirname, '../../public');
 
 app.use(cors());
 app.use(express.json());
+
+// Import routes
+import analysisRoutes from './routes/analysis.js';
+import cryptoRoutes from './routes/crypto.js';
+import tradingRoutes from './routes/trading.js';
+import marketRoutes from './routes/market.js';
+
+// Use routes
+app.use('/api/analysis', analysisRoutes);
+app.use('/api/crypto', cryptoRoutes);
+app.use('/api/trading', tradingRoutes);
+app.use('/api/market', marketRoutes);
 
 // Inject Firebase config into HTML (before static middleware)
 app.get('*', (req, res, next) => {
@@ -67,38 +72,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Proxy to Python trading agents
-const PYTHON_SCRIPT = process.env.PYTHON_SCRIPT || path.join(__dirname, '../../main.py');
-
-app.post('/api/analysis/run', async (req, res) => {
-  const { symbol, date } = req.body;
-
-  const python = spawn('python', [PYTHON_SCRIPT], {
-    env: {
-      ...process.env,
-      TA_SYMBOL: symbol,
-      TA_DATE: date,
-      OPENCODE_API_KEY: process.env.OPENCODE_API_KEY,
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY
-    }
-  });
-
-  let output = '';
-  python.stdout.on('data', (data) => { output += data; });
-  python.stderr.on('data', (data) => { console.error(data.toString()); });
-
-  python.on('close', (code) => {
-    if (code !== 0) {
-      return res.status(500).json({ error: 'Analysis failed' });
-    }
-    try {
-      res.json({ result: JSON.parse(output) });
-    } catch {
-      res.json({ result: output });
-    }
-  });
-});
-
 // Catch-all for React SPA (inject config)
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
@@ -114,10 +87,42 @@ app.get('*', (req, res) => {
 // WebSocket for real-time updates
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
+
+  // Join symbol-specific room for crypto price updates
+  socket.on('subscribe', (symbol) => {
+    socket.join(`crypto:${symbol}`);
+    console.log(`Client ${socket.id} subscribed to ${symbol}`);
+  });
+
+  socket.on('unsubscribe', (symbol) => {
+    socket.leave(`crypto:${symbol}`);
+  });
+
   socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
 });
+
+// Start Binance WebSocket proxy (in production, use separate service)
+let binanceWs = null;
+if (process.env.NODE_ENV === 'production') {
+  // In production, set up WebSocket to Binance
+  // This is a simplified version - in production use a proper WebSocket client
+}
+
+// Broadcast to specific crypto room
+export function broadcastCryptoPrice(symbol, priceData) {
+  io.to(`crypto:${symbol}`).emit('crypto-price', {
+    symbol,
+    ...priceData,
+    timestamp: Date.now()
+  });
+}
+
+// Make io accessible to routes
+app.set('io', io);
 
 const PORT = process.env.PORT || 8501;
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+export { io };
