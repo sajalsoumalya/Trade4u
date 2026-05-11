@@ -35,9 +35,10 @@ export default function Login() {
   };
 
   const handleDemo = () => {
-    // Set demo mode flag and navigate
+    // Set demo mode flag and force reload
     localStorage.setItem('demoMode', 'true');
-    window.location.href = '/dashboard';
+    console.log('Demo mode activated, reloading...');
+    window.location.replace('/dashboard');
   };
 
   const handleEmailAuth = async () => {

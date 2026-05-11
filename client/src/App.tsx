@@ -74,13 +74,20 @@ function Layout({ children, user }: { children: React.ReactNode; user: any }) {
   );
 }
 
-// Check for demo mode
-const isDemoMode = () => localStorage.getItem('demoMode') === 'true';
+// Check for demo mode (sync check at module level)
+const isDemoMode = () => {
+  try {
+    return localStorage.getItem('demoMode') === 'true';
+  } catch {
+    return false;
+  }
+};
 
 function App() {
   const [user, setUser] = useState<any>(null);
   const [initializing, setInitializing] = useState(true);
-  const [demoMode, setDemoMode] = useState(isDemoMode);
+  // Initialize demoMode synchronously from localStorage
+  const [demoMode] = useState(isDemoMode);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -91,9 +98,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    setDemoMode(isDemoMode());
-  }, []);
+  console.log('App state:', { initializing, user: user?.email, demoMode });
 
   if (initializing) {
     return <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center text-white">Loading...</div>;
