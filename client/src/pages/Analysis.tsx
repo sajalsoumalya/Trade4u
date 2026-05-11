@@ -9,7 +9,7 @@ export default function Analysis() {
   const [analyses, setAnalyses] = useState<any[]>([]);
   const [selectedAnalysis, setSelectedAnalysis] = useState<any>(null);
 
-  const { llmProvider, deepModel, quickModel } = useAppStore();
+  const { llmProvider, apiKey, deepModel, quickModel } = useAppStore();
 
   useEffect(() => {
     loadHistory();
@@ -31,7 +31,8 @@ export default function Analysis() {
       await runAnalysis(symbol, undefined, {
         provider: llmProvider,
         deepModel,
-        quickModel
+        quickModel,
+        apiKey
       });
       await loadHistory();
     } catch (e) {

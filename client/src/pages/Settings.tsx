@@ -12,49 +12,28 @@ import {
   Bell,
   Brain,
   Cpu,
-  Loader2
+  Loader2,
+  Key,
+  Globe
 } from 'lucide-react';
 
-interface ProviderInfo {
-  id: string;
-  name: string;
-  models?: string[];
-  note?: string;
-}
+const llmProviders = [
+  { id: 'opencode', name: 'OpenCode', icon: '🤖' },
+  { id: 'openai', name: 'OpenAI', icon: '✨' },
+  { id: 'anthropic', name: 'Anthropic', icon: '🧠' },
+  { id: 'google', name: 'Google', icon: '🌟' },
+  { id: 'deepseek', name: 'DeepSeek', icon: '🔮' },
+];
 
 export default function Settings() {
   const {
-    llmProvider, deepModel, quickModel,
-    setLlmProvider, setDeepModel, setQuickModel,
+    llmProvider, apiKey, deepModel, quickModel,
+    setLlmProvider, setApiKey, setDeepModel, setQuickModel,
     tradingMode, setTradingMode
   } = useAppStore();
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [availableProviders, setAvailableProviders] = useState<ProviderInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchAvailableProviders();
-  }, []);
-
-  const fetchAvailableProviders = async () => {
-    try {
-      const res = await fetch('/api/analysis/providers');
-      const data = await res.json();
-      setAvailableProviders(data);
-
-      // Set first available provider as default if current not available
-      if (data.length > 0 && !data.find(p => p.id === llmProvider)) {
-        setLlmProvider(data[0].id);
-      }
-    } catch (e) {
-      console.error('Failed to fetch providers:', e);
-      // Fallback to opencode
-      setAvailableProviders([{ id: 'opencode', name: 'OpenCode (Free)' }]);
-    }
-    setLoading(false);
-  };
 
   const models = modelOptions[llmProvider] || modelOptions.opencode;
 
@@ -72,14 +51,6 @@ export default function Settings() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -179,7 +150,7 @@ export default function Settings() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white">AI Configuration</h2>
-                <p className="text-sm text-muted">Choose your AI provider and models</p>
+                <p className="text-sm text-muted">Configure your AI provider and API key</p>
               </div>
             </div>
 
@@ -187,8 +158,8 @@ export default function Settings() {
               {/* LLM Provider Selection */}
               <div>
                 <label className="block text-sm text-muted mb-3">LLM Provider</label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {availableProviders.map((provider) => (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  {llmProviders.map((provider) => (
                     <button
                       key={provider.id}
                       onClick={() => handleProviderChange(provider.id)}
@@ -203,13 +174,38 @@ export default function Settings() {
                           <Check className="w-2 h-2 text-white" />
                         </div>
                       )}
-                      <span className="text-lg font-medium text-white">{provider.name}</span>
-                      {provider.note && (
-                        <span className="block text-xs text-muted mt-1">{provider.note}</span>
-                      )}
+                      <span className="text-lg mb-1 block">{provider.icon}</span>
+                      <span className="text-xs font-medium text-white">{provider.name}</span>
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* API Key */}
+              <div>
+                <label className="block text-sm text-muted mb-3">API Key</label>
+                <div className="relative">
+                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="input w-full pl-12 pr-4 py-3"
+                    placeholder="Enter your API key"
+                  />
+                </div>
+                <p className="text-xs text-muted mt-2 flex items-center gap-1">
+                  <Globe className="w-3 h-3" />
+                  Get your API key from{' '}
+                  <a
+                    href={llmProvider === 'opencode' ? 'https://opencode.ai/settings' : 'https://platform.openai.com'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:text-primary-light"
+                  >
+                    {llmProvider === 'opencode' ? 'opencode.ai' : 'their website'}
+                  </a>
+                </p>
               </div>
 
               {/* Model Selection */}
@@ -253,14 +249,19 @@ export default function Settings() {
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-info/5 border border-info/20">
-                <p className="text-sm text-white">
-                  <Info className="w-4 h-4 inline mr-2" />
-                  {llmProvider === 'opencode'
-                    ? 'Using OpenCode free models. Configure OPENCODE_API_KEY in Coolify environment variables.'
-                    : `Using ${llmProvider}. API key is configured server-side in Coolify.`}
-                </p>
-              </div>
+              {!apiKey && llmProvider !== 'opencode' && (
+                <div className="p-4 rounded-xl bg-warning/5 border border-warning/20">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-white">API Key Required</p>
+                      <p className="text-xs text-muted mt-1">
+                        Please enter your API key to use {llmProvider}.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -337,6 +338,10 @@ export default function Settings() {
               <div className="flex justify-between">
                 <span className="text-muted">Deep Model</span>
                 <span className="text-white text-xs">{deepModel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">API Key</span>
+                <span className="text-white">{apiKey ? '••••••' : 'Not set'}</span>
               </div>
             </div>
           </div>

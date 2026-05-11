@@ -28,36 +28,43 @@ const opencodeModels = {
 const openaiModels = {
   quick: [
     { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', cost: 'Paid' },
+    { id: 'gpt-4.1', name: 'GPT-4.1', cost: 'Paid' },
   ],
   deep: [
     { id: 'gpt-5.4', name: 'GPT-5.4', cost: 'Paid' },
+    { id: 'gpt-5.4-pro', name: 'GPT-5.4 Pro', cost: 'Paid' },
   ]
 };
 
 const anthropicModels = {
   quick: [
     { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: 'Paid' },
+    { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: 'Paid' },
   ],
   deep: [
     { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', cost: 'Paid' },
+    { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', cost: 'Paid' },
   ]
 };
 
 const googleModels = {
   quick: [
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: 'Paid' },
+    { id: 'gemini-3-flash', name: 'Gemini 3 Flash', cost: 'Paid' },
   ],
   deep: [
     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', cost: 'Paid' },
+    { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', cost: 'Paid' },
   ]
 };
 
 const deepseekModels = {
   quick: [
-    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', cost: 'Paid' },
+    { id: 'deepseek-chat', name: 'DeepSeek V3', cost: 'Paid' },
   ],
   deep: [
     { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', cost: 'Paid' },
+    { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', cost: 'Paid' },
   ]
 };
 
@@ -78,12 +85,12 @@ interface AppState {
   setBalance: (balance: number) => void;
   setTradingMode: (mode: 'paper' | 'live') => void;
 
-  // Only OpenCode uses free models (configured in Coolify env vars)
-  // Paid providers use server-side API keys from Coolify
   llmProvider: string;
+  apiKey: string;
   deepModel: string;
   quickModel: string;
   setLlmProvider: (provider: string) => void;
+  setApiKey: (key: string) => void;
   setDeepModel: (model: string) => void;
   setQuickModel: (model: string) => void;
 
@@ -102,9 +109,11 @@ export const useAppStore = create<AppState>()(
       setTradingMode: (tradingMode) => set({ tradingMode }),
 
       llmProvider: 'opencode',
-      deepModel: 'minimax-m2.7',
+      apiKey: '',
+      deepModel: 'minimax-m2.5-free',
       quickModel: 'minimax-m2.5-free',
       setLlmProvider: (llmProvider) => set({ llmProvider }),
+      setApiKey: (apiKey) => set({ apiKey }),
       setDeepModel: (deepModel) => set({ deepModel }),
       setQuickModel: (quickModel) => set({ quickModel }),
 
@@ -123,6 +132,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         tradingMode: state.tradingMode,
         llmProvider: state.llmProvider,
+        apiKey: state.apiKey,
         deepModel: state.deepModel,
         quickModel: state.quickModel,
       }),
