@@ -9,8 +9,8 @@ load_dotenv()
 # Create a custom config
 config = DEFAULT_CONFIG.copy()
 config["llm_provider"] = "opencode"  # Use OpenCode as LLM provider
-config["deep_think_llm"] = "o4-mini"  # Use OpenCode model
-config["quick_think_llm"] = "o4-mini"  # Use OpenCode model
+config["deep_think_llm"] = "minimax-m2.5"  # Free OpenCode model
+config["quick_think_llm"] = "minimax-m2.5-free"  # Free OpenCode model
 config["max_debate_rounds"] = 1  # Increase debate rounds
 config["backend_url"] = "https://opencode.ai/zen/"  # OpenCode API endpoint
 
