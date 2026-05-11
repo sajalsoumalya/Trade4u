@@ -1,30 +1,39 @@
 import { Router } from 'express';
-import { db } from '../index.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { requireAuth } from '../middleware/auth.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = path.join(__dirname, '../../data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const getFile = (name) => path.join(DATA_DIR, `${name}.json`);
+const readData = (name) => {
+  const f = getFile(name);
+  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : [];
+};
+const writeData = (name, data) => fs.writeFileSync(getFile(name), JSON.stringify(data, null, 2));
 
 const router = Router();
 
-// Auto-trading settings storage (in production, use database)
 let autoTradeSettings = {
   enabled: false,
   symbols: ['BTCUSDT'],
   tradeAmount: 100,
   maxPositions: 3,
-  stopLoss: 2, // percentage
-  takeProfit: 5, // percentage
-  analysisInterval: 15, // minutes
-  riskPerTrade: 1, // percentage of balance
+  stopLoss: 2,
+  takeProfit: 5,
+  analysisInterval: 15,
+  riskPerTrade: 1,
 };
 
-// Get auto-trade settings
 router.get('/settings', requireAuth, (req, res) => {
   res.json(autoTradeSettings);
 });
 
-// Update auto-trade settings
 router.post('/settings', requireAuth, (req, res) => {
   const { enabled, symbols, tradeAmount, maxPositions, stopLoss, takeProfit, analysisInterval, riskPerTrade } = req.body;
-
   autoTradeSettings = {
     enabled: enabled ?? autoTradeSettings.enabled,
     symbols: symbols ?? autoTradeSettings.symbols,
@@ -35,210 +44,112 @@ router.post('/settings', requireAuth, (req, res) => {
     analysisInterval: analysisInterval ?? autoTradeSettings.analysisInterval,
     riskPerTrade: riskPerTrade ?? autoTradeSettings.riskPerTrade,
   };
-
   res.json({ success: true, settings: autoTradeSettings });
 });
 
-// Enable/disable auto-trading
 router.post('/toggle', requireAuth, (req, res) => {
   const { enabled } = req.body;
   autoTradeSettings.enabled = enabled;
-
-  // Emit event via Socket.IO
   const io = req.app.get('io');
   io.emit('auto-trade-status', { enabled: autoTradeSettings.enabled });
-
   res.json({ success: true, enabled: autoTradeSettings.enabled });
 });
 
-// Get trading history
 router.get('/history', requireAuth, async (req, res) => {
   try {
-    const { limit = 50 } = req.query;
     const uid = req.uid;
-
-    const snapshot = await db.collection('trades')
-      .where('uid', '==', uid)
-      .orderBy('createdAt', 'desc')
-      .limit(parseInt(limit))
-      .get();
-
-    const trades = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
+    const { limit = 50 } = req.query;
+    const trades = readData('trades').filter(t => t.uid === uid).slice(0, parseInt(limit));
     res.json(trades);
   } catch (error) {
-    console.error('History fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch history' });
   }
 });
 
-// Get open positions
 router.get('/positions', requireAuth, async (req, res) => {
   try {
     const uid = req.uid;
-
-    const snapshot = await db.collection('positions')
-      .where('uid', '==', uid)
-      .where('status', '==', 'open')
-      .get();
-
-    const positions = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
+    const positions = readData('trades').filter(t => t.uid === uid && t.status === 'open');
     res.json(positions);
   } catch (error) {
-    console.error('Positions fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch positions' });
   }
 });
 
-// Manual trade execution
 router.post('/trade', requireAuth, async (req, res) => {
   try {
     const { symbol, type, amount, price } = req.body;
     const uid = req.uid;
 
-    // Create trade record
-    const tradeRef = db.collection('trades').doc();
-    await tradeRef.set({
-      uid,
-      symbol,
-      type, // 'buy' or 'sell'
-      amount,
-      price,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    });
+    const trades = readData('trades');
+    const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    const trade = { id, uid, symbol, type, amount, price, status: 'executed', createdAt: new Date().toISOString() };
+    trades.unshift(trade);
+    writeData('trades', trades);
 
-    // Emit event
-    const io = req.app.get('io');
-    io.to(uid).emit('trade-executed', {
-      id: tradeRef.id,
-      symbol,
-      type,
-      amount,
-      price,
-    });
-
-    // Simulate trade execution (in production, connect to exchange API)
-    setTimeout(async () => {
-      await tradeRef.update({
-        status: 'executed',
-        executedAt: new Date().toISOString()
+    if (type === 'buy') {
+      const positions = readData('positions');
+      const posId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+      positions.unshift({
+        id: posId, uid, symbol, type: 'buy', entryPrice: price, amount,
+        quantity: amount / price, status: 'open',
+        stopLoss: price * 0.98, takeProfit: price * 1.05,
+        createdAt: new Date().toISOString()
       });
+      writeData('positions', positions);
+    }
 
-      // If it's a buy, create a position
-      if (type === 'buy') {
-        const positionRef = db.collection('positions').doc();
-        await positionRef.set({
-          uid,
-          symbol,
-          type: 'buy',
-          entryPrice: price,
-          amount,
-          quantity: amount / price,
-          status: 'open',
-          stopLoss: price * (1 - 0.02), // 2% stop loss
-          takeProfit: price * (1 + 0.05), // 5% take profit
-          createdAt: new Date().toISOString(),
-        });
-      }
+    const io = req.app.get('io');
+    io.to(uid).emit('trade-executed', { id, symbol, type, amount, price });
 
-      io.to(uid).emit('trade-updated', { id: tradeRef.id, status: 'executed' });
-    }, 1000);
-
-    res.json({ success: true, id: tradeRef.id });
+    res.json({ success: true, id });
   } catch (error) {
-    console.error('Trade error:', error);
     res.status(500).json({ error: 'Failed to execute trade' });
   }
 });
 
-// Close position
 router.post('/close-position', requireAuth, async (req, res) => {
   try {
     const { positionId, currentPrice } = req.body;
     const uid = req.uid;
 
-    const positionRef = db.collection('positions').doc(positionId);
-    const positionDoc = await positionRef.get();
+    const positions = readData('positions');
+    const idx = positions.findIndex(p => p.id === positionId && p.uid === uid);
 
-    if (!positionDoc.exists || positionDoc.data().uid !== uid) {
-      return res.status(404).json({ error: 'Position not found' });
-    }
+    if (idx === -1) return res.status(404).json({ error: 'Position not found' });
 
-    const position = positionDoc.data();
+    const position = positions[idx];
     const pnl = (currentPrice - position.entryPrice) * position.quantity * (position.type === 'buy' ? 1 : -1);
+    positions[idx] = { ...position, status: 'closed', exitPrice: currentPrice, pnl, closedAt: new Date().toISOString() };
+    writeData('positions', positions);
 
-    await positionRef.update({
-      status: 'closed',
-      exitPrice: currentPrice,
-      pnl,
-      closedAt: new Date().toISOString(),
-    });
-
-    // Emit event
     const io = req.app.get('io');
-    io.to(uid).emit('position-closed', {
-      id: positionId,
-      pnl,
-      exitPrice: currentPrice,
-    });
+    io.to(uid).emit('position-closed', { id: positionId, pnl, exitPrice: currentPrice });
 
     res.json({ success: true, pnl });
   } catch (error) {
-    console.error('Close position error:', error);
-    res.status(500).json({ error: 'Failed to close position' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Get portfolio summary
 router.get('/portfolio', requireAuth, async (req, res) => {
   try {
     const uid = req.uid;
+    const positions = readData('positions').filter(p => p.uid === uid && p.status === 'open');
+    const trades = readData('trades').filter(t => t.uid === uid && t.status === 'executed');
 
-    // Get open positions
-    const positionsSnapshot = await db.collection('positions')
-      .where('uid', '==', uid)
-      .where('status', '==', 'open')
-      .get();
-
-    const positions = positionsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    // Get trade history for P&L calculation
-    const tradesSnapshot = await db.collection('trades')
-      .where('uid', '==', uid)
-      .where('status', '==', 'executed')
-      .get();
-
-    const trades = tradesSnapshot.docs.map(doc => doc.data());
-
-    // Calculate totals
     const totalPnL = trades.reduce((sum, t) => sum + (t.pnl || 0), 0);
     const totalTrades = trades.length;
     const winningTrades = trades.filter(t => t.pnl > 0).length;
     const losingTrades = trades.filter(t => t.pnl < 0).length;
 
     res.json({
-      positions,
-      totalPositions: positions.length,
-      totalPnL,
-      totalTrades,
-      winningTrades,
-      losingTrades,
-      winRate: totalTrades > 0 ? (winningTrades / totalTrades * 100).toFixed(2) : 0,
+      positions, totalPositions: positions.length, totalPnL, totalTrades,
+      winningTrades, losingTrades,
+      winRate: totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(2) : 0,
     });
   } catch (error) {
-    console.error('Portfolio fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch portfolio' });
+    res.status(500).json({ error: error.message });
   }
 });
 
