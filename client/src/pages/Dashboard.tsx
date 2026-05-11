@@ -9,6 +9,7 @@ import {
   Zap,
   Shield,
   Play,
+  Pause,
   Settings,
   Coins,
   DollarSign,
@@ -51,6 +52,19 @@ export default function Dashboard() {
   const [selectedCrypto, setSelectedCrypto] = useState('BTCUSDT');
   const [loading, setLoading] = useState(false);
   const [isLive, setIsLive] = useState(false);
+
+  const loadPrices = async () => {
+    setLoading(true);
+    try {
+      const prices = await fetchCryptoPrices(cryptoList.map(c => c.symbol));
+      const priceObj: Record<string, any> = {};
+      prices.forEach((p: any) => { priceObj[p.symbol] = p; });
+      setCryptoPrices(priceObj);
+    } catch (e) {
+      console.error('Failed to load prices:', e);
+    }
+    setLoading(false);
+  };
 
   const currentPrice = cryptoPrices[selectedCrypto]?.price || 0;
   const priceChange = cryptoPrices[selectedCrypto]?.priceChangePercent || 0;
