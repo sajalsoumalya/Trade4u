@@ -114,18 +114,25 @@ MODEL_OPTIONS: ProviderModeOptions = {
             ("Qwen3:latest (8B, local)", "qwen3:latest"),
         ],
     },
-    # OpenCode: Uses different endpoints per model type (Free models)
+    # OpenCode: Free models only
     "opencode": {
         "quick": [
-            ("MiniMax M2.5 Free - Fast, free", "minimax-m2.5-free"),
-            ("Big Pickle - Free", "big-pickle"),
+            ("MiniMax M2.5 Free", "minimax-m2.5-free"),
+            ("Big Pickle", "big-pickle"),
+            ("DeepSeek V4 Flash Free", "deepseek-v4-flash-free"),
+            ("Nemotron 3 Super Free", "nemotron-3-super-free"),
+            ("Ring 2.6 1T Free", "ring-2.6-1t-free"),
+            ("Trinity Large Preview Free", "trinity-large-preview-free"),
         ],
         "deep": [
-            ("MiniMax M2.7 - Free", "minimax-m2.7"),
-            ("MiniMax M2.5 - Free", "minimax-m2.5"),
-            ("DeepSeek V4 Flash - Free", "deepseek-v4-flash"),
-            ("Nemotron 3 Super Free - Free", "nemotron-3-super-free"),
-            ("Ring 2.6 1T Free - Free", "ring-2.6-1t-free"),
+            ("MiniMax M2.7", "minimax-m2.7"),
+            ("MiniMax M2.5", "minimax-m2.5"),
+            ("MiniMax M2.5 Free", "minimax-m2.5-free"),
+            ("Big Pickle", "big-pickle"),
+            ("DeepSeek V4 Flash Free", "deepseek-v4-flash-free"),
+            ("Nemotron 3 Super Free", "nemotron-3-super-free"),
+            ("Ring 2.6 1T Free", "ring-2.6-1t-free"),
+            ("Trinity Large Preview Free", "trinity-large-preview-free"),
         ],
     },
 }
