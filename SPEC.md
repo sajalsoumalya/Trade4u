@@ -18,9 +18,8 @@
 
 ### Backend
 - **Runtime**: Node.js + Express
-- **Authentication**: Firebase Auth (free tier)
-- **Database**: Firebase Firestore
-- **WebSocket**: Socket.IO for real-time updates
+- **Database**: JSON File Storage (local)
+- **WebSocket**: Binance Direct + Socket.IO for real-time updates
 
 ### Analysis Engine
 - **Language**: Python (existing TradingAgents)
@@ -42,10 +41,10 @@
 - [ ] Recent Signals
 
 ### Live Market
-- [ ] Real-time Price Feed (yfinance)
-- [ ] Interactive Price Charts (TradingView)
-- [ ] Symbol Search
-- [ ] Watchlist
+- [x] Real-time Price Feed (Binance WebSocket)
+- [x] Interactive Price Charts (TradingView)
+- [x] Symbol Search
+- [x] Watchlist
 
 ### Analysis
 - [ ] Run AI Analysis (Python TradingAgents)
