@@ -46,9 +46,8 @@ const staticPath = path.join(__dirname, '../../public');
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(staticPath));
 
-// Inject Firebase config into HTML
+// Inject Firebase config into HTML (before static middleware)
 app.get('*', (req, res, next) => {
   if (req.path === '/index.html' || req.path === '/') {
     const indexPath = path.join(staticPath, 'index.html');
@@ -60,6 +59,8 @@ app.get('*', (req, res, next) => {
   }
   next();
 });
+
+app.use(express.static(staticPath));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -92,10 +93,15 @@ app.post('/api/analysis/run', async (req, res) => {
   });
 });
 
-// Catch-all for React SPA
+// Catch-all for React SPA (inject config)
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(staticPath, 'index.html'));
+    const indexPath = path.join(staticPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      let html = fs.readFileSync(indexPath, 'utf8');
+      html = html.replace('</head>', `<script id="firebase-config" type="application/json">${JSON.stringify(firebaseConfig)}</script></head>`);
+      return res.send(html);
+    }
   }
 });
 
