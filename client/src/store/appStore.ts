@@ -12,21 +12,15 @@ interface User {
 const opencodeModels = {
   quick: [
     { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free' },
-    { id: 'big-pickle', name: 'Big Pickle', cost: 'Free' },
-    { id: 'deepseek-v4-flash-free', name: 'DeepSeek V4 Flash Free', cost: 'Free' },
-    { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free' },
     { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free' },
     { id: 'trinity-large-preview-free', name: 'Trinity Large Preview Free', cost: 'Free' },
+    { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free' },
   ],
   deep: [
-    { id: 'minimax-m2.7', name: 'MiniMax M2.7', cost: 'Free' },
-    { id: 'minimax-m2.5', name: 'MiniMax M2.5', cost: 'Free' },
     { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free' },
-    { id: 'big-pickle', name: 'Big Pickle', cost: 'Free' },
-    { id: 'deepseek-v4-flash-free', name: 'DeepSeek V4 Flash Free', cost: 'Free' },
-    { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free' },
     { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free' },
     { id: 'trinity-large-preview-free', name: 'Trinity Large Preview Free', cost: 'Free' },
+    { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free' },
   ]
 };
 

@@ -118,21 +118,15 @@ MODEL_OPTIONS: ProviderModeOptions = {
     "opencode": {
         "quick": [
             ("MiniMax M2.5 Free", "minimax-m2.5-free"),
-            ("Big Pickle", "big-pickle"),
-            ("DeepSeek V4 Flash Free", "deepseek-v4-flash-free"),
-            ("Nemotron 3 Super Free", "nemotron-3-super-free"),
             ("Ring 2.6 1T Free", "ring-2.6-1t-free"),
             ("Trinity Large Preview Free", "trinity-large-preview-free"),
+            ("Nemotron 3 Super Free", "nemotron-3-super-free"),
         ],
         "deep": [
-            ("MiniMax M2.7", "minimax-m2.7"),
-            ("MiniMax M2.5", "minimax-m2.5"),
             ("MiniMax M2.5 Free", "minimax-m2.5-free"),
-            ("Big Pickle", "big-pickle"),
-            ("DeepSeek V4 Flash Free", "deepseek-v4-flash-free"),
-            ("Nemotron 3 Super Free", "nemotron-3-super-free"),
             ("Ring 2.6 1T Free", "ring-2.6-1t-free"),
             ("Trinity Large Preview Free", "trinity-large-preview-free"),
+            ("Nemotron 3 Super Free", "nemotron-3-super-free"),
         ],
     },
 }
