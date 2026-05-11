@@ -18,9 +18,14 @@ export default function Analysis() {
   const loadHistory = async () => {
     try {
       const data = await getAnalysisHistory(10);
-      setAnalyses(data);
+      if (Array.isArray(data)) {
+        setAnalyses(data);
+      } else {
+        setAnalyses([]);
+      }
     } catch (e) {
       console.error(e);
+      setAnalyses([]);
     }
   };
 

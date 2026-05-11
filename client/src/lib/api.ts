@@ -91,6 +91,7 @@ export const getAnalysisHistory = async (limit = 20) => {
   const res = await fetch(`${API_BASE}/analysis?limit=${limit}`, {
     headers: getAuthHeaders()
   });
+  if (!res.ok) return [];
   return res.json();
 };
 
