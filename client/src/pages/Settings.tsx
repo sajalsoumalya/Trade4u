@@ -34,6 +34,13 @@ export default function Settings() {
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (saved) {
+      setRefreshKey(prev => prev + 1);
+    }
+  }, [saved]);
 
   const models = modelOptions[llmProvider] || modelOptions.opencode;
 
@@ -318,7 +325,7 @@ export default function Settings() {
             </div>
           </div>
 
-          <div className="card p-6 bg-gradient-to-br from-primary/5 to-accent/5">
+          <div className="card p-6 bg-gradient-to-br from-primary/5 to-accent/5" key={`config-${refreshKey}`}>
             <h3 className="font-semibold text-white mb-4">Current Configuration</h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
