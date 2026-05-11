@@ -85,7 +85,10 @@ function App() {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => setUser(u));
+    return onAuthStateChanged(auth, (u) => {
+      console.log('Auth state changed:', u ? u.email : 'null');
+      setUser(u);
+    });
   }, []);
 
   return (

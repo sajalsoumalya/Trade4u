@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { getAuth } from 'firebase/auth';
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
   // Get auth from window (injected by App)
@@ -20,9 +23,12 @@ export default function Login() {
     setError('');
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      console.log('Starting Google sign in...');
+      const result = await signInWithPopup(auth, provider);
+      console.log('Sign in successful, user:', result.user);
       navigate('/dashboard');
     } catch (e: any) {
+      console.error('Sign in error:', e);
       setError(e.message);
     }
     setLoading(false);
@@ -30,6 +36,29 @@ export default function Login() {
 
   const handleDemo = () => {
     navigate('/dashboard');
+  };
+
+  const handleEmailAuth = async () => {
+    if (!auth || !email || !password) {
+      setError('Please enter email and password');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      console.log(`${isLogin ? 'Logging in' : 'Signing up'} with email...`);
+      if (isLogin) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        await createUserWithEmailAndPassword(auth, email, password);
+      }
+      console.log('Email auth successful');
+      navigate('/dashboard');
+    } catch (e: any) {
+      console.error('Email auth error:', e);
+      setError(e.message);
+    }
+    setLoading(false);
   };
 
   return (
@@ -65,6 +94,40 @@ export default function Login() {
             <div className="relative flex justify-center text-sm">
               <span className="px-2 bg-[#1A1A1A] text-gray-500">or</span>
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input w-full"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="input w-full"
+              onKeyDown={(e) => e.key === 'Enter' && handleEmailAuth()}
+            />
+            <button
+              onClick={handleEmailAuth}
+              disabled={loading}
+              className="w-full py-3 px-4 bg-primary text-white font-semibold rounded-lg hover:opacity-90 transition-opacity"
+            >
+              {isLogin ? 'Sign In' : 'Sign Up'}
+            </button>
+            <p className="text-center text-sm text-gray-400">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <button
+                onClick={() => setIsLogin(!isLogin)}
+                className="text-primary hover:underline"
+              >
+                {isLogin ? 'Sign Up' : 'Sign In'}
+              </button>
+            </p>
           </div>
 
           <button
