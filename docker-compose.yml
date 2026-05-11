@@ -22,5 +22,4 @@ services:
       - FIREBASE_APP_ID=${FIREBASE_APP_ID:-}
       - LLM_PROVIDER=opencode
       - OPENCODE_API_KEY=${OPENCODE_API_KEY}
-    env_file:
-      - .env.full
+    
