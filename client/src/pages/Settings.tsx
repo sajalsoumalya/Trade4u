@@ -249,14 +249,14 @@ export default function Settings() {
                 </div>
               </div>
 
-              {!apiKey && llmProvider !== 'opencode' && (
+              {!apiKey && (
                 <div className="p-4 rounded-xl bg-warning/5 border border-warning/20">
                   <div className="flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-medium text-white">API Key Required</p>
                       <p className="text-xs text-muted mt-1">
-                        Please enter your API key to use {llmProvider}.
+                        Please enter your {llmProvider} API key to run AI analysis.
                       </p>
                     </div>
                   </div>
