@@ -1,6 +1,6 @@
-*.env
+.env
 .env.local
-.env.full
+!.env.full
 data/
 __pycache__/
 *.pyc

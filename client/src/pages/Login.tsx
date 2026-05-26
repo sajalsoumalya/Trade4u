@@ -155,7 +155,7 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="space-y-4">
+          <form onSubmit={(e) => { e.preventDefault(); handleEmailAuth(); }} className="space-y-4">
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
               <input
@@ -175,7 +175,6 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input w-full pl-12 pr-12"
-                onKeyDown={(e) => e.key === 'Enter' && handleEmailAuth()}
               />
               <button
                 type="button"
@@ -187,7 +186,7 @@ export default function Login() {
             </div>
 
             <button
-              onClick={handleEmailAuth}
+              type="submit"
               disabled={loading}
               className="btn-primary w-full flex items-center justify-center gap-2"
             >
@@ -200,6 +199,7 @@ export default function Login() {
                 </>
               )}
             </button>
+          </form>
 
             <p className="text-center text-sm text-gray-400">
               {isLogin ? "Don't have an account? " : 'Already have an account? '}
