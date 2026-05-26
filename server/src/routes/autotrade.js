@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -27,6 +28,50 @@ let autoTradeSettings = {
   analysisInterval: 15,
   riskPerTrade: 1,
 };
+let botProcess = null;
+
+function startBot(settings) {
+  if (botProcess) return;
+  const scriptPath = path.join(process.cwd(), 'bot.py');
+  const args = [
+    scriptPath,
+    '--symbols', ...settings.symbols,
+    '--interval', String(settings.analysisInterval),
+    '--trade-amount', String(settings.tradeAmount),
+    '--stop-loss', String(settings.stopLoss),
+    '--take-profit', String(settings.takeProfit),
+    '--max-positions', String(settings.maxPositions),
+    '--provider', 'opencode',
+  ];
+  if (process.env.OPENCODE_API_KEY) {
+    args.push('--api-key', process.env.OPENCODE_API_KEY);
+  }
+  const python = process.env.PYTHON || 'python3';
+  botProcess = spawn(python, args, {
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  botProcess.stdout.on('data', (data) => {
+    console.log(`[AutoTradeBot] ${data.toString().trim()}`);
+  });
+  botProcess.stderr.on('data', (data) => {
+    console.error(`[AutoTradeBot Error] ${data.toString().trim()}`);
+  });
+  botProcess.on('close', (code) => {
+    console.log(`[AutoTradeBot] Process exited with code ${code}`);
+    botProcess = null;
+  });
+  botProcess.on('error', (err) => {
+    console.error(`[AutoTradeBot] Failed to start: ${err.message}`);
+    botProcess = null;
+  });
+}
+
+function stopBot() {
+  if (!botProcess) return;
+  botProcess.kill('SIGTERM');
+  botProcess = null;
+}
 
 router.get('/settings', optionalAuth, (req, res) => {
   res.json(autoTradeSettings);
@@ -44,12 +89,21 @@ router.post('/settings', optionalAuth, (req, res) => {
     analysisInterval: analysisInterval ?? autoTradeSettings.analysisInterval,
     riskPerTrade: riskPerTrade ?? autoTradeSettings.riskPerTrade,
   };
+  if (autoTradeSettings.enabled) {
+    stopBot();
+    startBot(autoTradeSettings);
+  }
   res.json({ success: true, settings: autoTradeSettings });
 });
 
 router.post('/toggle', optionalAuth, (req, res) => {
   const { enabled } = req.body;
   autoTradeSettings.enabled = enabled;
+  if (enabled) {
+    startBot(autoTradeSettings);
+  } else {
+    stopBot();
+  }
   const io = req.app.get('io');
   io.emit('auto-trade-status', { enabled: autoTradeSettings.enabled });
   res.json({ success: true, enabled: autoTradeSettings.enabled });
