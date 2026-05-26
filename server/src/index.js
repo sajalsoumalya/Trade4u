@@ -41,43 +41,64 @@ const staticPath = path.join(__dirname, '../../public');
 app.use(cors());
 app.use(express.json());
 
+// Request logger
+app.use((req, _res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  next();
+});
+
+// API routes
 app.use('/api/analysis', analysisRoutes);
 app.use('/api/crypto', cryptoRoutes);
 app.use('/api/trading', tradingRoutes);
 app.use('/api/autotrade', autotradeRoutes);
 
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+function injectFirebaseConfig(html) {
+  return html.replace('</head>', `<script id="firebase-config" type="application/json">${JSON.stringify(firebaseConfig)}</script></head>`);
+}
+
+function serveIndexHtml(res) {
+  const indexPath = path.join(staticPath, 'index.html');
+  if (!fs.existsSync(indexPath)) {
+    return res.status(404).send('index.html not found');
+  }
+  const html = fs.readFileSync(indexPath, 'utf8');
+  res.type('html').send(injectFirebaseConfig(html));
+}
+
+// Serve root with Firebase config injection
+app.get('/', (req, res) => serveIndexHtml(res));
+
+// Favicon — short-circuit to avoid hitting catch-all
+app.get('/favicon.ico', (_req, res) => {
+  const faviconPath = path.join(staticPath, 'favicon.ico');
+  if (fs.existsSync(faviconPath)) {
+    return res.sendFile(faviconPath);
+  }
+  res.status(204).end();
+});
+
+// Serve static files (images, JS, CSS) without Firebase config
 app.use(express.static(staticPath, {
-  index: 'index.html',
+  index: false,
   maxAge: '1d',
   etag: true
 }));
 
-app.get('/', (req, res) => {
-  const indexPath = path.join(staticPath, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    let html = fs.readFileSync(indexPath, 'utf8');
-    html = html.replace('</head>', `<script id="firebase-config" type="application/json">${JSON.stringify(firebaseConfig)}</script></head>`);
-    res.type('html').send(html);
-  } else {
-    res.status(404).send('index.html not found');
-  }
+// SPA catch-all: serve index.html with Firebase config for all non-API, non-static routes
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) return;
+  serveIndexHtml(res);
 });
 
-app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api')) {
-    const indexPath = path.join(staticPath, 'index.html');
-    if (fs.existsSync(indexPath)) {
-      let html = fs.readFileSync(indexPath, 'utf8');
-      html = html.replace('</head>', `<script id="firebase-config" type="application/json">${JSON.stringify(firebaseConfig)}</script></head>`);
-      res.type('html').send(html);
-    } else {
-      res.status(404).send('index.html not found');
-    }
-  }
+// Error handler — prevents 504 hangs on uncaught errors
+app.use((err, _req, res, _next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 io.on('connection', (socket) => {
