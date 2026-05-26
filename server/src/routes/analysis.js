@@ -54,7 +54,7 @@ router.post('/run', optionalAuth, async (req, res) => {
     io.emit(`analysis:${id}`, { status: 'starting' });
 
     const scriptPath = process.env.PYTHON_ANALYSIS_SCRIPT ||
-      '/Users/soumalya/Documents/GitHub/Trade4u/main.py';
+      path.join(process.cwd(), 'main.py');
 
     const args = [scriptPath, '--ticker', symbol, '--date', analysisDate];
     if (provider) args.push('--provider', provider);
@@ -62,7 +62,7 @@ router.post('/run', optionalAuth, async (req, res) => {
     if (quickModel) args.push('--quick-model', quickModel);
     if (apiKey) args.push('--api-key', apiKey);
 
-    const python = spawn('python3', args, { env: { ...process.env } });
+    const python = spawn(process.env.PYTHON || 'python3', args, { env: { ...process.env } });
 
     let output = '';
     let errorOutput = '';
@@ -72,9 +72,12 @@ router.post('/run', optionalAuth, async (req, res) => {
 
     python.on('close', async (code) => {
       let decision = null;
-      if (output.includes('BUY') || output.includes('Buy')) decision = 'BUY';
-      else if (output.includes('SELL') || output.includes('Sell')) decision = 'SELL';
-      else if (output.includes('HOLD') || output.includes('Hold')) decision = 'HOLD';
+      const buyMatch = output.match(/\bBUY\b/);
+      const sellMatch = output.match(/\bSELL\b/);
+      const holdMatch = output.match(/\bHOLD\b/);
+      if (buyMatch) decision = 'BUY';
+      else if (sellMatch) decision = 'SELL';
+      else if (holdMatch) decision = 'HOLD';
 
       const updated = readAnalyses().map(a => a.id === id ? {
         ...a,

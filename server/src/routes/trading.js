@@ -71,8 +71,8 @@ router.delete('/order/:id', optionalAuth, async (req, res) => {
     const trade = trades[idx];
     const closePrice = price || trade.price || 0;
     const pnl = trade.type === 'sell'
-      ? (closePrice - trade.price) * trade.quantity
-      : (trade.price - closePrice) * trade.quantity;
+      ? (trade.price - closePrice) * trade.quantity
+      : (closePrice - trade.price) * trade.quantity;
 
     trades[idx] = { ...trade, status: 'closed', closePrice, pnl, closedAt: new Date().toISOString() };
     writeData('trades', trades);

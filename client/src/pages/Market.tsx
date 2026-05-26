@@ -1,17 +1,13 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, ISeriesApi, ColorType, CandlestickData, Time } from 'lightweight-charts';
-import { fetchCryptoPrice, fetchCryptoKlines } from '../lib/api';
+import { fetchCryptoKlines } from '../lib/api';
 import {
-  LineChart,
   TrendingUp,
   TrendingDown,
   RefreshCw,
-  Search,
   Wifi,
   WifiOff,
-  Activity,
-  BarChart3,
-  Clock
+  BarChart3
 } from 'lucide-react';
 
 const cryptoList = [

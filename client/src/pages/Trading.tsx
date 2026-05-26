@@ -1,27 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
-import { fetchCryptoPrice, fetchCryptoPrices } from '../lib/api';
+import { fetchCryptoPrices } from '../lib/api';
 import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
   Plus,
   Minus,
-  X,
   TrendingUp,
   TrendingDown,
   Clock,
   BarChart3,
   RefreshCw,
   DollarSign,
-  AlertCircle,
-  Target,
-  Trophy
+  Target
 } from 'lucide-react';
 
 export default function Trading() {
   const {
-    balance,
     walletBalance,
     aiTradingPercent,
     aiTradingEnabled,
@@ -43,11 +39,7 @@ export default function Trading() {
     loadPrices();
   }, []);
 
-  useEffect(() => {
-    if (currentPrice && quantity) {
-      // Update amount based on quantity and price
-    }
-  }, [currentPrice, quantity]);
+
 
   const loadPrices = async () => {
     try {

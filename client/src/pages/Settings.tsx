@@ -12,7 +12,6 @@ import {
   Bell,
   Brain,
   Cpu,
-  Loader2,
   Key,
   Globe
 } from 'lucide-react';
@@ -310,16 +309,24 @@ export default function Settings() {
           <div className="card p-6">
             <h3 className="font-semibold text-white mb-4">Quick Actions</h3>
             <div className="space-y-2">
-              <button className="w-full flex items-center justify-between p-3 rounded-xl bg-background/50 hover:bg-background transition-colors text-left">
+              <button
+                onClick={() => {}}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-background/50 hover:bg-background transition-colors text-left opacity-50 cursor-not-allowed"
+                disabled
+              >
                 <div className="flex items-center gap-3">
                   <User className="w-5 h-5 text-primary" />
-                  <span className="text-sm text-white">Edit Profile</span>
+                  <span className="text-sm text-white">Edit Profile (Coming Soon)</span>
                 </div>
               </button>
-              <button className="w-full flex items-center justify-between p-3 rounded-xl bg-background/50 hover:bg-background transition-colors text-left">
+              <button
+                onClick={() => {}}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-background/50 hover:bg-background transition-colors text-left opacity-50 cursor-not-allowed"
+                disabled
+              >
                 <div className="flex items-center gap-3">
                   <Bell className="w-5 h-5 text-accent" />
-                  <span className="text-sm text-white">Notifications</span>
+                  <span className="text-sm text-white">Notifications (Coming Soon)</span>
                 </div>
               </button>
             </div>

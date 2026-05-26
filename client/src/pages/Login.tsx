@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { getAuth } from 'firebase/auth';
 import { TrendingUp, Mail, Lock, ArrowRight, Sparkles, Shield, Zap } from 'lucide-react';
 
 export default function Login() {
@@ -11,7 +9,6 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate();
   const auth = (window as any).firebaseAuth;
 
   const handleGoogle = async () => {

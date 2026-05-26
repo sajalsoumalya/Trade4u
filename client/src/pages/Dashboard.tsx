@@ -1,22 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
 import { fetchCryptoPrices } from '../lib/api';
 import {
   Wallet,
-  TrendingUp,
-  TrendingDown,
   Activity,
   Zap,
   Shield,
-  Play,
   Pause,
-  Settings,
   Coins,
-  DollarSign,
   RefreshCw,
-  Brain,
-  Wifi,
-  WifiOff
+  Brain
 } from 'lucide-react';
 
 const cryptoList = [
@@ -51,7 +44,8 @@ export default function Dashboard() {
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, any>>({});
   const [selectedCrypto, setSelectedCrypto] = useState('BTCUSDT');
   const [loading, setLoading] = useState(false);
-  const [isLive, setIsLive] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadPrices = async () => {
     setLoading(true);
@@ -66,21 +60,19 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  const currentPrice = cryptoPrices[selectedCrypto]?.price || 0;
   const priceChange = cryptoPrices[selectedCrypto]?.priceChangePercent || 0;
 
-  useEffect(() => {
-    // Connect to Binance WebSocket for live prices
+  const connectWebSocket = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
     const symbols = cryptoList.map(c => c.symbol.toLowerCase());
     const streams = symbols.map(s => `${s}@ticker`).join('/');
     const wsUrl = `wss://stream.binance.com:9443/ws/${streams}`;
 
-    console.log('Connecting to Binance WebSocket...');
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       console.log('Dashboard WebSocket connected');
-      setIsLive(true);
     };
 
     ws.onmessage = (event) => {
@@ -108,20 +100,24 @@ export default function Dashboard() {
     };
 
     ws.onclose = () => {
-      console.log('Dashboard WebSocket disconnected');
-      setIsLive(false);
-      // Reconnect after 5 seconds
-      setTimeout(() => {
-        window.location.reload();
-      }, 5000);
+      console.log('Dashboard WebSocket disconnected, reconnecting in 5s...');
+      wsRef.current = null;
+      reconnectTimerRef.current = setTimeout(connectWebSocket, 5000);
     };
 
     ws.onerror = (error) => {
       console.error('Dashboard WebSocket error:', error);
     };
 
+    wsRef.current = ws;
+  };
+
+  useEffect(() => {
+    connectWebSocket();
     return () => {
-      ws.close();
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      wsRef.current?.close();
+      wsRef.current = null;
     };
   }, []);
 

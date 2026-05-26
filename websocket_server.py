@@ -16,6 +16,7 @@ class BinanceWebSocketServer:
         self.port = port
         self.clients = set()
         self.subscriptions = {}  # symbol -> list of websocket clients
+        self.current_prices = {}  # symbol -> latest price data cache
         self.binance_base = "https://api.binance.com"
         self.ws_url = "wss://stream.binance.com:9443/ws"
 
@@ -79,6 +80,8 @@ class BinanceWebSocketServer:
 
     async def broadcast_to_symbol(self, symbol, data):
         """Send price update to all clients subscribed to this symbol"""
+        self.current_prices[symbol] = data
+
         if symbol not in self.subscriptions:
             return
 
@@ -126,7 +129,6 @@ class BinanceWebSocketServer:
                     data = json.loads(message)
 
                     if data.get('type') == 'subscribe':
-                        # Subscribe to symbols
                         symbols = data.get('symbols', [])
                         for symbol in symbols:
                             if symbol not in self.subscriptions:
@@ -152,13 +154,11 @@ class BinanceWebSocketServer:
                         }))
 
                     elif data.get('type') == 'get_prices':
-                        # Return current prices for requested symbols
                         symbols = data.get('symbols', [])
                         prices = {}
                         for symbol in symbols:
-                            if symbol in self.subscriptions:
-                                # Client is subscribed, can get updates
-                                pass
+                            if symbol in self.current_prices:
+                                prices[symbol] = self.current_prices[symbol]
                         await websocket.send(json.dumps({
                             'type': 'prices',
                             'data': prices

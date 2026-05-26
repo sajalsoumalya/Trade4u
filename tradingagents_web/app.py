@@ -222,18 +222,16 @@ def page_monitor():
 # =============================================================================
 # Operations Page - with quick settings
 # =============================================================================
+
+def run_analysis(task_id, ticker, analysis_date, settings):
     """Run TradingAgents analysis in background thread."""
     update_task_status(task_id, "running")
 
     try:
-        # Create TradingAgents graph
         config = {**DEFAULT_CONFIG, **settings}
         ta = TradingAgentsGraph(config=config, debug=False)
-
-        # Run analysis
         result, decision = ta.propagate(ticker, analysis_date)
 
-        # Store result
         result_json = json.dumps({
             "ticker": ticker,
             "date": analysis_date,

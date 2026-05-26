@@ -87,6 +87,33 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
 });
 
+async function fetchAndBroadcastPrices() {
+  try {
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
+    const response = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+    if (!response.ok) return;
+    const allData = await response.json();
+    for (const t of allData) {
+      if (symbols.includes(t.symbol)) {
+        broadcastCryptoPrice(t.symbol, {
+          price: parseFloat(t.lastPrice),
+          priceChange: parseFloat(t.priceChange),
+          priceChangePercent: parseFloat(t.priceChangePercent),
+          high24h: parseFloat(t.highPrice),
+          low24h: parseFloat(t.lowPrice),
+          volume: parseFloat(t.volume),
+          quoteVolume: parseFloat(t.quoteVolume),
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Price broadcast error:', e);
+  }
+}
+
+setInterval(fetchAndBroadcastPrices, 10000);
+fetchAndBroadcastPrices();
+
 export function broadcastCryptoPrice(symbol, priceData) {
   io.to(`crypto:${symbol}`).emit('crypto-price', { symbol, ...priceData, timestamp: Date.now() });
 }

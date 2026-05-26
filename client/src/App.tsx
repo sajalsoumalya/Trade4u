@@ -10,12 +10,10 @@ import {
   ArrowLeftRight,
   Settings,
   ChevronLeft,
-  ChevronRight,
   LogOut,
   TrendingUp,
   User,
-  Menu,
-  X
+  Menu
 } from 'lucide-react';
 
 import Login from './pages/Login';
@@ -39,12 +37,10 @@ const navItems = [
 
 function Sidebar({
   isOpen,
-  setIsOpen,
-  user
+  setIsOpen
 }: {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  user: any;
 }) {
   const location = useLocation();
 
@@ -211,7 +207,7 @@ function Layout({ children, user }: { children: React.ReactNode; user: any }) {
   return (
     <div className="min-h-screen bg-background">
       {sidebarOpen ? (
-        <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} user={user} />
+        <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
       ) : (
         <CollapsedSidebar setIsOpen={setSidebarOpen} />
       )}
