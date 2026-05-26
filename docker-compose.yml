@@ -10,19 +10,12 @@ services:
     restart: unless-stopped
     ports:
       - "8501:8501"
+    env_file:
+      - .env.full
     environment:
       - NODE_ENV=production
       - PORT=8501
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
-      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
-      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
-      - FIREBASE_API_KEY=${FIREBASE_API_KEY:-}
-      - FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN:-}
-      - FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET:-}
-      - FIREBASE_MESSAGING_SENDER_ID=${FIREBASE_MESSAGING_SENDER_ID:-}
-      - FIREBASE_APP_ID=${FIREBASE_APP_ID:-}
       - LLM_PROVIDER=opencode
-      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
     volumes:
       - ./data:/app/data
     networks:
