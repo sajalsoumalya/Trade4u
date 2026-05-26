@@ -13,7 +13,7 @@ export default function Login() {
 
   const handleGoogle = async () => {
     if (!auth) {
-      setError('Firebase not loaded. Refresh the page.');
+      setError('Firebase API key not configured. Use Demo Mode below or set VITE_FIREBASE_API_KEY in .env');
       return;
     }
     setLoading(true);

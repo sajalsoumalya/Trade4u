@@ -23,8 +23,13 @@ import Analysis from './pages/Analysis';
 import Trading from './pages/Trading';
 import SettingsPage from './pages/Settings';
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+let auth: any = null;
+try {
+  const app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+} catch (e) {
+  console.warn('Firebase init skipped (no valid API key). Demo mode will use local state.');
+}
 (window as any).firebaseAuth = auth;
 
 const navItems = [
