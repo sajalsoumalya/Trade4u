@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
-import { fetchCryptoPrices } from '../lib/api';
+import { fetchCryptoPrices, placeOrder, closePosition, getPositions, getTradeHistory } from '../lib/api';
 import {
   Wallet,
   ArrowUpRight,
@@ -34,12 +34,13 @@ export default function Trading() {
   const [positions, setPositions] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [prices, setPrices] = useState<Record<string, any>>({});
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadPrices();
+    loadPositions();
+    loadHistory();
   }, []);
-
-
 
   const loadPrices = async () => {
     try {
@@ -56,34 +57,56 @@ export default function Trading() {
     }
   };
 
+  const loadPositions = async () => {
+    try {
+      const data = await getPositions();
+      setPositions(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to load positions:', e);
+    }
+  };
+
+  const loadHistory = async () => {
+    try {
+      const data = await getTradeHistory(50);
+      setHistory(data.trades || []);
+    } catch (e) {
+      console.error('Failed to load history:', e);
+    }
+  };
+
   const amount = currentPrice * (parseFloat(quantity) || 0);
   const aiTradingAmount = (walletBalance * aiTradingPercent) / 100;
 
-  const handleBuy = () => {
+  const handleBuy = async () => {
     if (!symbol || !quantity) return;
     setLoading(true);
-    // Execute buy order
-    setTimeout(() => {
-      setPositions([...positions, {
-        id: Date.now().toString(),
-        symbol,
-        type: 'buy',
-        quantity: parseFloat(quantity),
-        entryPrice: currentPrice,
-        pnl: 0,
-      }]);
+    setError('');
+    try {
+      await placeOrder(symbol, 'buy', parseFloat(quantity), currentPrice);
       setQuantity('');
+      await loadPositions();
+      await loadHistory();
+    } catch (e: any) {
+      setError(e.message || 'Failed to place order');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  const handleSell = (positionId: string) => {
-    const position = positions.find(p => p.id === positionId);
-    if (!position) return;
-
-    const pnl = (currentPrice - position.entryPrice) * position.quantity;
-    setHistory([...history, { ...position, pnl, exitPrice: currentPrice }]);
-    setPositions(positions.filter(p => p.id !== positionId));
+  const handleSell = async (positionId: string) => {
+    if (!positionId) return;
+    setLoading(true);
+    setError('');
+    try {
+      await closePosition(positionId, currentPrice);
+      await loadPositions();
+      await loadHistory();
+    } catch (e: any) {
+      setError(e.message || 'Failed to close position');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const totalPnL = positions.reduce((sum, p) => {
@@ -258,6 +281,12 @@ export default function Trading() {
                 </>
               )}
             </button>
+
+            {error && (
+              <div className="mt-4 p-3 rounded-xl bg-secondary/10 border border-secondary/20">
+                <p className="text-sm text-secondary text-center">{error}</p>
+              </div>
+            )}
           </div>
 
           {/* AI Trading Info */}

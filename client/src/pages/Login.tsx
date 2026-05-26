@@ -31,6 +31,9 @@ export default function Login() {
 
   const handleDemo = () => {
     localStorage.setItem('demoMode', 'true');
+    if (!localStorage.getItem('userUid')) {
+      localStorage.setItem('userUid', 'demo_' + Date.now().toString(36));
+    }
     window.location.replace('/dashboard');
   };
 
