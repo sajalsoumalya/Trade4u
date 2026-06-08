@@ -268,8 +268,22 @@ export const useAppStore = create<AppState>()(
       },
 
       updateBot: (id, changes) => {
-        set({
-          bots: get().bots.map(b => b.id === id ? { ...b, ...changes } : b),
+        set(state => {
+          const bot = state.bots.find(b => b.id === id);
+          if (!bot) return state;
+          let updatedBot = { ...bot, ...changes };
+          if (changes.allocationValue !== undefined || changes.allocationType !== undefined) {
+            const newType = changes.allocationType ?? bot.allocationType;
+            const newValue = changes.allocationValue ?? bot.allocationValue;
+            const prevFrozen = bot.frozenAmount;
+            const newFrozen = calcFrozen(state.walletBalance + prevFrozen, newType, newValue);
+            updatedBot.frozenAmount = newFrozen;
+            return {
+              walletBalance: state.walletBalance + prevFrozen - newFrozen,
+              bots: state.bots.map(b => b.id === id ? updatedBot : b),
+            };
+          }
+          return { bots: state.bots.map(b => b.id === id ? updatedBot : b) };
         });
       },
 
