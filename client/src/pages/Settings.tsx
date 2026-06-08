@@ -11,6 +11,7 @@ const llmProviders = [
   { id: 'anthropic', name: 'Anthropic' },
   { id: 'google', name: 'Google' },
   { id: 'deepseek', name: 'DeepSeek' },
+  { id: 'nvidia', name: 'NVIDIA NIM' },
 ];
 
 function ModelDetails({ model }: { model: ModelEntry | undefined }) {

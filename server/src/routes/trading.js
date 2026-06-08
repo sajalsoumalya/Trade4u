@@ -230,6 +230,17 @@ router.post('/test-connection', optionalAuth, async (req, res) => {
           error = 'API key required';
         }
         break;
+      case 'nvidia':
+        if (apiKey) {
+          const r = await fetch('https://integrate.api.nvidia.com/v1/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+          ok = r.ok;
+          if (!ok) error = `HTTP ${r.status}`;
+        } else {
+          error = 'API key required';
+        }
+        break;
       default:
         error = 'Unknown provider';
     }
@@ -378,6 +389,30 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
             { id: 'deepseek-chat', name: 'DeepSeek V3', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
             { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
             { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'code'] },
+          ];
+        }
+      case 'nvidia':
+        if (apiKey) {
+          const resp = await fetch('https://integrate.api.nvidia.com/v1/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            models = (data.data || []).map(m => ({
+              id: m.id,
+              name: m.id,
+              cost: 'Paid',
+              context: 131072,
+              maxOutput: 8192,
+              capabilities: ['reasoning', 'tools', 'code'],
+            }));
+          }
+        }
+        if (models.length === 0) {
+          models = [
+            { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'code'] },
+            { id: 'nvidia/deepseek-ai/deepseek-v3-671b', name: 'DeepSeek V3 671B', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'code'] },
+            { id: 'nvidia/meta/llama-3.2-90b-vision', name: 'Llama 3.2 90B Vision', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'vision', 'code'] },
           ];
         }
         break;
