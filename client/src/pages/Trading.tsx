@@ -20,12 +20,6 @@ export default function Trading() {
   const [editingBotTP, setEditingBotTP] = useState(false);
   const [botSLEdit, setBotSLEdit] = useState(0);
   const [botTPEdit, setBotTPEdit] = useState(0);
-  const [showAddPos, setShowAddPos] = useState(false);
-  const [addPosSymbol, setAddPosSymbol] = useState('');
-  const [addPosType, setAddPosType] = useState<'buy' | 'sell'>('buy');
-  const [addPosQty, setAddPosQty] = useState(0.01);
-  const [addPosPrice, setAddPosPrice] = useState(0);
-
   // Create form state
   const [formName, setFormName] = useState('');
   const [formSymbols, setFormSymbols] = useState<string[]>(['BTCUSDT']);
@@ -518,64 +512,7 @@ export default function Trading() {
         <button onClick={() => handleDeleteBot(bot.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2B3139] text-[#848E9C] text-sm font-medium hover:text-[#F6465D] transition-all">
           <Trash2 className="w-4 h-4" /> Delete
         </button>
-        {bot.status === 'running' && (
-          <button onClick={() => { setShowAddPos(!showAddPos); if (!showAddPos) { setAddPosSymbol(bot.symbols[0] || ''); const p = prices[bot.symbols[0]]; setAddPosPrice(p?.price || 0); } }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#F0B90B]/10 text-[#F0B90B] text-sm font-medium hover:bg-[#F0B90B]/20 transition-all">
-            <Plus className="w-4 h-4" /> {showAddPos ? 'Cancel' : 'Add Position'}
-          </button>
-        )}
       </div>
-
-      {showAddPos && (
-        <div className="bg-[#1E2329] border border-[#2B3139] rounded-lg p-4 animate-fade-in">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-white">Manual Position</h3>
-            <button onClick={() => setShowAddPos(false)} className="text-[#848E9C] hover:text-white"><X className="w-4 h-4" /></button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div>
-              <label className="block text-xs text-[#848E9C] mb-1">Pair</label>
-              <select value={addPosSymbol} onChange={e => { const s = e.target.value; setAddPosSymbol(s); const p = prices[s]; setAddPosPrice(p?.price || 0); }}
-                className="w-full bg-[#0B0E11] border border-[#2B3139] rounded-lg px-2.5 py-2 text-white text-xs focus:outline-none focus:border-[#F0B90B]">
-                {bot.symbols.map(s => <option key={s} value={s}>{PAIR_NAMES[s] || s.replace('USDT', '')}/USDT</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-[#848E9C] mb-1">Type</label>
-              <div className="flex gap-1">
-                <button onClick={() => setAddPosType('buy')}
-                  className={`flex-1 py-2 rounded text-xs font-medium border transition-all ${addPosType === 'buy' ? 'border-[#0ECB81] bg-[#0ECB81]/10 text-[#0ECB81]' : 'border-[#2B3139] text-[#848E9C]'}`}>BUY</button>
-                <button onClick={() => setAddPosType('sell')}
-                  className={`flex-1 py-2 rounded text-xs font-medium border transition-all ${addPosType === 'sell' ? 'border-[#F6465D] bg-[#F6465D]/10 text-[#F6465D]' : 'border-[#2B3139] text-[#848E9C]'}`}>SELL</button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-[#848E9C] mb-1">Quantity</label>
-              <input type="number" min="0.001" step="0.001" value={addPosQty} onChange={e => setAddPosQty(parseFloat(e.target.value) || 0)}
-                className="w-full bg-[#0B0E11] border border-[#2B3139] rounded-lg px-2.5 py-2 text-white text-xs focus:outline-none focus:border-[#F0B90B]" />
-            </div>
-            <div>
-              <label className="block text-xs text-[#848E9C] mb-1">Price</label>
-              <div className="flex items-center gap-1">
-                <input type="number" min="0.01" step="0.01" value={addPosPrice} onChange={e => setAddPosPrice(parseFloat(e.target.value) || 0)}
-                  className="flex-1 bg-[#0B0E11] border border-[#2B3139] rounded-lg px-2.5 py-2 text-white text-xs focus:outline-none focus:border-[#F0B90B]" />
-                <button onClick={() => { const p = prices[addPosSymbol]; if (p) setAddPosPrice(p.price); }}
-                  className="px-2 py-2 rounded bg-[#2B3139] text-[#848E9C] text-xs hover:text-white">Mkt</button>
-              </div>
-            </div>
-            <div className="flex items-end">
-              <button onClick={() => {
-                if (!addPosSymbol || addPosQty <= 0 || addPosPrice <= 0) return;
-                addPosition(bot.id, { symbol: addPosSymbol, type: addPosType, quantity: addPosQty, entryPrice: addPosPrice });
-                setShowAddPos(false);
-              }}
-                className="w-full py-2 rounded-lg bg-[#0ECB81] text-black text-xs font-semibold hover:bg-[#0ECB81]/90 transition-all">
-                Open Position
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Editable Bot Config */}
       <div className="bg-[#1E2329] border border-[#2B3139] rounded-lg p-4">
