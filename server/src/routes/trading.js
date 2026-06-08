@@ -14,6 +14,10 @@ const readData = (name) => {
   const f = getFile(name);
   return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : [];
 };
+const readJsonData = (name) => {
+  const f = getFile(name);
+  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
+};
 const writeData = (name, data) => fs.writeFileSync(getFile(name), JSON.stringify(data, null, 2));
 
 const router = Router();
@@ -150,63 +154,151 @@ router.get('/bots/:id/status', optionalAuth, async (req, res) => {
   }
 });
 
-// Model options per provider
-const MODELS = {
-  opencode: {
-    quick: [
-      { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-      { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-      { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-    ],
-    deep: [
-      { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-      { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-      { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-    ],
-  },
-  openai: {
-    quick: [
-      { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', cost: 'Paid', context: 128000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision'] },
-      { id: 'gpt-4.1', name: 'GPT-4.1', cost: 'Paid', context: 1048576, maxOutput: 32768, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
-    ],
-    deep: [
-      { id: 'gpt-5.4', name: 'GPT-5.4', cost: 'Paid', context: 256000, maxOutput: 65536, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents'] },
-      { id: 'gpt-5.4-pro', name: 'GPT-5.4 Pro', cost: 'Paid', context: 256000, maxOutput: 65536, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents', 'research'] },
-    ],
-  },
-  anthropic: {
-    quick: [
-      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
-      { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['tools', 'vision', 'fast'] },
-    ],
-    deep: [
-      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', cost: 'Paid', context: 200000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
-      { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', cost: 'Paid', context: 200000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
-    ],
-  },
-  google: {
-    quick: [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: 'Paid', context: 1048576, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'vision', 'fast'] },
-      { id: 'gemini-3-flash', name: 'Gemini 3 Flash', cost: 'Paid', context: 1048576, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'fast'] },
-    ],
-    deep: [
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', cost: 'Paid', context: 1048576, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
-      { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', cost: 'Paid', context: 2097152, maxOutput: 32768, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents', 'research'] },
-    ],
-  },
-  deepseek: {
-    quick: [
-      { id: 'deepseek-chat', name: 'DeepSeek V3', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
-    ],
-    deep: [
-      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
-      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'code'] },
-    ],
-  },
-};
-
-router.get('/models', (_req, res) => {
-  res.json(MODELS);
+// --- LLM Config persistence ---
+router.get('/config', optionalAuth, async (req, res) => {
+  const config = readJsonData('llm-config');
+  res.json(config);
 });
+
+router.post('/config', optionalAuth, async (req, res) => {
+  const { provider, apiKey, quickModel, deepModel } = req.body;
+  const config = { provider, apiKey, quickModel, deepModel, updatedAt: new Date().toISOString() };
+  writeData('llm-config', config);
+  res.json({ success: true });
+});
+
+// --- Dynamic model fetch from provider ---
+router.post('/models/fetch', optionalAuth, async (req, res) => {
+  try {
+    const { provider, apiKey } = req.body;
+    if (!provider) return res.status(400).json({ error: 'provider required' });
+
+    let models = [];
+
+    switch (provider) {
+      case 'opencode':
+        models = [
+          { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
+          { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
+          { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
+        ];
+        break;
+
+      case 'openai':
+        if (apiKey) {
+          const resp = await fetch('https://api.openai.com/v1/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            models = (data.data || [])
+              .filter(m => m.id.startsWith('gpt-') || m.id.startsWith('o'))
+              .map(m => ({
+                id: m.id,
+                name: m.id,
+                cost: 'Paid',
+                context: 128000,
+                maxOutput: 16384,
+                capabilities: ['reasoning', 'tools', 'vision'],
+              }));
+          }
+        }
+        // fallback
+        if (models.length === 0) {
+          models = [
+            { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', cost: 'Paid', context: 128000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision'] },
+            { id: 'gpt-4.1', name: 'GPT-4.1', cost: 'Paid', context: 1048576, maxOutput: 32768, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
+            { id: 'gpt-5.4', name: 'GPT-5.4', cost: 'Paid', context: 256000, maxOutput: 65536, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents'] },
+            { id: 'gpt-5.4-pro', name: 'GPT-5.4 Pro', cost: 'Paid', context: 256000, maxOutput: 65536, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents', 'research'] },
+          ];
+        }
+        break;
+
+      case 'anthropic':
+        if (apiKey) {
+          const resp = await fetch('https://api.anthropic.com/v1/models', {
+            headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            models = (data.data || []).map(m => ({
+              id: m.id,
+              name: m.display_name || m.id,
+              cost: 'Paid',
+              context: 200000,
+              maxOutput: 8192,
+              capabilities: ['reasoning', 'tools', 'vision'],
+            }));
+          }
+        }
+        if (models.length === 0) {
+          models = [
+            { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
+            { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['tools', 'vision', 'fast'] },
+            { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', cost: 'Paid', context: 200000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
+          ];
+        }
+        break;
+
+      case 'google':
+        if (apiKey) {
+          const resp = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+          if (resp.ok) {
+            const data = await resp.json();
+            models = (data.models || []).map(m => ({
+              id: m.name.replace('models/', ''),
+              name: m.display_name || m.name.replace('models/', ''),
+              cost: 'Paid',
+              context: 1048576,
+              maxOutput: 8192,
+              capabilities: ['reasoning', 'tools', 'vision'],
+            }));
+          }
+        }
+        if (models.length === 0) {
+          models = [
+            { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: 'Paid', context: 1048576, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'vision', 'fast'] },
+            { id: 'gemini-3-flash', name: 'Gemini 3 Flash', cost: 'Paid', context: 1048576, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'fast'] },
+            { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', cost: 'Paid', context: 1048576, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
+            { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', cost: 'Paid', context: 2097152, maxOutput: 32768, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents', 'research'] },
+          ];
+        }
+        break;
+
+      case 'deepseek':
+        if (apiKey) {
+          const resp = await fetch('https://api.deepseek.com/v1/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            models = (data.data || []).map(m => ({
+              id: m.id,
+              name: m.id,
+              cost: 'Paid',
+              context: 262144,
+              maxOutput: 16384,
+              capabilities: ['reasoning', 'tools', 'code'],
+            }));
+          }
+        }
+        if (models.length === 0) {
+          models = [
+            { id: 'deepseek-chat', name: 'DeepSeek V3', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
+            { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
+            { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'code'] },
+          ];
+        }
+        break;
+    }
+
+    res.json({ models });
+  } catch (error) {
+    console.error('Model fetch error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 
 export default router;

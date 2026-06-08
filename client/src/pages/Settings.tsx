@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
-import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles } from 'lucide-react';
+import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw } from 'lucide-react';
+import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider } from '../lib/api';
+
+interface ModelEntry { id: string; name: string; cost: string; context: number; maxOutput: number; capabilities: string[] }
 
 const llmProviders = [
   { id: 'opencode', name: 'OpenCode' },
@@ -9,12 +12,6 @@ const llmProviders = [
   { id: 'google', name: 'Google' },
   { id: 'deepseek', name: 'DeepSeek' },
 ];
-
-interface ModelEntry { id: string; name: string; cost: string; context: number; maxOutput: number; capabilities: string[] }
-interface Models { quick: ModelEntry[]; deep: ModelEntry[] }
-const MODELS_URL = '/api/trading/models';
-
-const defaultModels: Models = { quick: [], deep: [] };
 
 export default function Settings() {
   const {
@@ -25,33 +22,54 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [balanceInput, setBalanceInput] = useState(String(walletBalance));
-  const [models, setModels] = useState<Record<string, Models>>({});
+  const [models, setModels] = useState<ModelEntry[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [providerChanged, setProviderChanged] = useState(false);
 
   useEffect(() => {
-    fetch(MODELS_URL)
-      .then(r => r.json())
-      .then(data => setModels(data))
-      .catch(() => {});
+    loadLlmConfig().then(config => {
+      if (config.provider) setLlmProvider(config.provider);
+      if (config.apiKey) setApiKey(config.apiKey);
+      if (config.quickModel) setQuickModel(config.quickModel);
+      if (config.deepModel) setDeepModel(config.deepModel);
+    });
   }, []);
 
-  const currentModels: Models = models[llmProvider] || defaultModels;
+  const fetchModels = (provider: string, key: string) => {
+    setLoadingModels(true);
+    setProviderChanged(false);
+    fetchModelsFromProvider(provider, key || undefined)
+      .then(data => {
+        setModels(data.models || []);
+        const m = data.models || [];
+        if (m.length > 0) {
+          setQuickModel(m[0].id);
+          setDeepModel(m.length > 1 ? m[1].id : m[0].id);
+        }
+      })
+      .catch(() => setModels([]))
+      .finally(() => setLoadingModels(false));
+  };
 
   const handleProviderChange = (providerId: string) => {
     setLlmProvider(providerId);
-    const m = models[providerId];
-    if (m?.quick?.length > 0) setQuickModel(m.quick[0].id);
-    if (m?.deep?.length > 0) setDeepModel(m.deep[0].id);
+    setProviderChanged(true);
+    setModels([]);
+    setQuickModel('');
+    setDeepModel('');
   };
 
   const handleSave = async () => {
     setSaving(true);
     const nb = parseInt(balanceInput);
     if (!isNaN(nb) && nb > 0) setWalletBalance(nb);
-    await new Promise(r => setTimeout(r, 300));
+    await saveLlmConfig({ provider: llmProvider, apiKey, quickModel, deepModel });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
+
+  const selectedModel = models.find(m => m.id === quickModel);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -91,42 +109,51 @@ export default function Settings() {
               </div>
             </div>
 
+            <div className="flex items-center gap-2 mb-4">
+              <button onClick={() => fetchModels(llmProvider, apiKey)} disabled={loadingModels}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 text-accent text-xs font-medium border border-accent/30 hover:bg-accent/20 disabled:opacity-50 transition-all">
+                <RefreshCw className={`w-3 h-3 ${loadingModels ? 'animate-spin' : ''}`} /> {loadingModels ? 'Loading...' : 'Fetch Models'}
+              </button>
+              {providerChanged && (
+                <span className="text-[10px] text-[#F0B90B]">Provider changed — click Fetch Models</span>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="p-3 rounded-lg bg-background/50 border border-border">
                 <label className="text-xs text-muted flex items-center gap-1 mb-2"><Cpu className="w-3 h-3 text-primary" /> Quick Model</label>
                 <select value={quickModel} onChange={(e) => setQuickModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
-                  {currentModels.quick.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {models.length === 0 && <option value="">— fetch models first —</option>}
+                  {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
-                {(() => {
-                  const m = currentModels.quick.find(x => x.id === quickModel);
-                  if (!m) return null;
-                  return (
-                    <div className="mt-2 space-y-1 text-[10px] text-[#848E9C]">
-                      <p>Context: {(m.context / 1000).toLocaleString()}K tokens</p>
-                      <p>Max output: {(m.maxOutput / 1000).toLocaleString()}K tokens</p>
-                      <p className="flex flex-wrap gap-1 mt-1">{m.capabilities.map(c => <span key={c} className="px-1.5 py-0.5 rounded bg-[#2B3139] text-[10px]">{c}</span>)}</p>
-                    </div>
-                  );
-                })()}
               </div>
               <div className="p-3 rounded-lg bg-background/50 border border-border">
                 <label className="text-xs text-muted flex items-center gap-1 mb-2"><Brain className="w-3 h-3 text-accent" /> Deep Model</label>
                 <select value={deepModel} onChange={(e) => setDeepModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
-                  {currentModels.deep.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {models.length === 0 && <option value="">— fetch models first —</option>}
+                  {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
-                {(() => {
-                  const m = currentModels.deep.find(x => x.id === deepModel);
-                  if (!m) return null;
-                  return (
-                    <div className="mt-2 space-y-1 text-[10px] text-[#848E9C]">
-                      <p>Context: {(m.context / 1000).toLocaleString()}K tokens</p>
-                      <p>Max output: {(m.maxOutput / 1000).toLocaleString()}K tokens</p>
-                      <p className="flex flex-wrap gap-1 mt-1">{m.capabilities.map(c => <span key={c} className="px-1.5 py-0.5 rounded bg-[#2B3139] text-[10px]">{c}</span>)}</p>
-                    </div>
-                  );
-                })()}
               </div>
             </div>
+
+            {selectedModel && (
+              <div className="mt-3 p-3 rounded-lg bg-background/50 border border-border">
+                <p className="text-xs font-medium text-white mb-2">{selectedModel.name}</p>
+                <div className="grid grid-cols-3 gap-2 text-[10px] text-[#848E9C]">
+                  <div><span className="text-muted">Context: </span>{(selectedModel.context / 1000).toLocaleString()}K</div>
+                  <div><span className="text-muted">Max output: </span>{(selectedModel.maxOutput / 1000).toLocaleString()}K</div>
+                  <div><span className="text-muted">Cost: </span>{selectedModel.cost}</div>
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {selectedModel.capabilities.map(c => <span key={c} className="px-1.5 py-0.5 rounded bg-[#2B3139] text-[10px] text-[#848E9C]">{c}</span>)}
+                </div>
+              </div>
+            )}
+
+            <button onClick={handleSave} disabled={saving || !quickModel || !deepModel}
+              className="mt-4 w-full py-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+              {saving ? 'Saving...' : saved ? <><Check className="w-4 h-4" />Saved!</> : <><Save className="w-4 h-4" />Save Config</>}
+            </button>
           </div>
         </div>
 

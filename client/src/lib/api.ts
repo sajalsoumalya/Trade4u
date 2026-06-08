@@ -161,3 +161,30 @@ export const stopBotEngine = async (botId: string) => {
   });
   return res.json();
 };
+
+// LLM Config API
+export const saveLlmConfig = async (config: { provider: string; apiKey: string; quickModel: string; deepModel: string }) => {
+  const res = await fetch(`${API_BASE}/trading/config`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(config)
+  });
+  return res.json();
+};
+
+export const loadLlmConfig = async () => {
+  const res = await fetch(`${API_BASE}/trading/config`, {
+    headers: getAuthHeaders()
+  });
+  if (!res.ok) return {};
+  return res.json();
+};
+
+export const fetchModelsFromProvider = async (provider: string, apiKey?: string) => {
+  const res = await fetch(`${API_BASE}/trading/models/fetch`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ provider, apiKey })
+  });
+  return res.json();
+};
