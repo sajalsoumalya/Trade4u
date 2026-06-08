@@ -28,6 +28,7 @@ export default function Trading() {
   const [formSymbols, setFormSymbols] = useState<string[]>(['BTCUSDT']);
   const [formAllocType, setFormAllocType] = useState<'percentage' | 'fixed'>('percentage');
   const [formAllocValue, setFormAllocValue] = useState(10);
+  const [formInterval, setFormInterval] = useState(5);
   const [formSL, setFormSL] = useState(2);
   const [formTP, setFormTP] = useState(5);
   const [formSLEnabled, setFormSLEnabled] = useState(false);
@@ -49,7 +50,7 @@ export default function Trading() {
     bots.forEach(bot => {
       if (bot.status === 'running') {
         // Re-spawn AI engine for existing running bots after page refresh
-        startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit);
+        startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval);
         socket.on(`bot:${bot.id}:trade`, (signal: any) => {
           if (signal.action === 'buy' && signal.price) {
             addPosition(bot.id, {
@@ -102,6 +103,7 @@ export default function Trading() {
     if (!formName || formSymbols.length === 0) return;
     createBot({
       name: formName, symbols: formSymbols, allocationType: formAllocType, allocationValue: formAllocValue,
+      interval: formInterval,
       ...(formSLEnabled ? { stopLoss: formSL } : {}),
       ...(formTPEnabled ? { takeProfit: formTP } : {}),
     });
@@ -209,7 +211,7 @@ export default function Trading() {
                               {bot.status === 'running' ? (
                                 <button onClick={() => { stopBot(bot.id); stopBotEngine(bot.id); }} className="p-1.5 rounded hover:bg-[#2B3139] text-[#F6465D]"><Square className="w-3.5 h-3.5" /></button>
                               ) : (
-                                <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit); }} className="p-1.5 rounded hover:bg-[#2B3139] text-[#0ECB81]"><Play className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval); }} className="p-1.5 rounded hover:bg-[#2B3139] text-[#0ECB81]"><Play className="w-3.5 h-3.5" /></button>
                               )}
                               <button onClick={() => handleDeleteBot(bot.id)} className="p-1.5 rounded hover:bg-[#2B3139] text-[#848E9C]"><Trash2 className="w-3.5 h-3.5" /></button>
                               <ChevronRight className="w-4 h-4 text-[#848E9C]" />
@@ -246,7 +248,7 @@ export default function Trading() {
                         {bot.status === 'running' ? (
                           <button onClick={() => { stopBot(bot.id); stopBotEngine(bot.id); }} className="flex-1 py-2 rounded bg-[#F6465D]/10 text-[#F6465D] text-xs font-medium">Stop</button>
                         ) : (
-                          <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit); }} className="flex-1 py-2 rounded bg-[#0ECB81]/10 text-[#0ECB81] text-xs font-medium">Start</button>
+                          <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval); }} className="flex-1 py-2 rounded bg-[#0ECB81]/10 text-[#0ECB81] text-xs font-medium">Start</button>
                         )}
                         <button onClick={() => handleDeleteBot(bot.id)} className="px-3 py-2 rounded bg-[#2B3139] text-[#848E9C] text-xs"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
@@ -387,6 +389,15 @@ export default function Trading() {
               </div>
             </div>
 
+            <div className="mb-5">
+              <label className="block text-xs text-[#848E9C] mb-1.5">Analysis Interval</label>
+              <div className="flex items-center gap-2">
+                <input type="range" min="1" max="30" step="1" value={formInterval} onChange={e => setFormInterval(parseInt(e.target.value))}
+                  className="flex-1 h-1.5 bg-[#2B3139] rounded-lg appearance-none cursor-pointer accent-[#F0B90B]" />
+                <span className="text-xs text-white font-mono w-12 text-right">{formInterval} min</span>
+              </div>
+            </div>
+
             <button onClick={handleCreate} disabled={!formName || formSymbols.length === 0 || frozen <= 0}
               className="w-full py-3 rounded-lg bg-[#F0B90B] text-black text-sm font-semibold hover:bg-[#F0B90B]/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
               <Zap className="w-4 h-4" /> Create Bot
@@ -416,6 +427,10 @@ export default function Trading() {
             <div className="bg-[#1E2329] border border-[#2B3139] rounded-lg p-5">
               <h3 className="text-sm font-semibold text-white mb-4">Risk Settings</h3>
               <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-[#848E9C]">Interval</span>
+                  <span className="text-white font-mono">{formInterval} min</span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-[#848E9C]">Stop Loss</span>
                   <span className="text-[#F6465D] font-mono">{formSLEnabled ? `${formSL}%` : '--'}</span>
@@ -546,7 +561,7 @@ export default function Trading() {
             )}
           </>
         ) : (
-          <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit); }} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0ECB81]/10 text-[#0ECB81] text-sm font-medium hover:bg-[#0ECB81]/20 transition-all">
+          <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval); }} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0ECB81]/10 text-[#0ECB81] text-sm font-medium hover:bg-[#0ECB81]/20 transition-all">
             <Play className="w-4 h-4" /> Start Bot
           </button>
         )}

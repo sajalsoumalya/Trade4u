@@ -44,6 +44,7 @@ export interface Bot {
   totalPnl: number;
   stopLoss?: number;
   takeProfit?: number;
+  interval: number;
   closedTrades: number;
   winningTrades: number;
 }
@@ -62,7 +63,7 @@ interface AppState {
   setWalletBalance: (b: number) => void;
 
   bots: Bot[];
-  createBot: (config: { name: string; symbols: string[]; allocationType: 'percentage' | 'fixed'; allocationValue: number; stopLoss?: number; takeProfit?: number }) => void;
+  createBot: (config: { name: string; symbols: string[]; allocationType: 'percentage' | 'fixed'; allocationValue: number; stopLoss?: number; takeProfit?: number; interval: number }) => void;
   deleteBot: (id: string) => void;
   startBot: (id: string) => void;
   stopBot: (id: string) => void;
@@ -116,6 +117,7 @@ export const useAppStore = create<AppState>()(
           totalPnl: 0,
           stopLoss: config.stopLoss,
           takeProfit: config.takeProfit,
+          interval: config.interval || 5,
           closedTrades: 0,
           winningTrades: 0,
         };

@@ -27,7 +27,7 @@ export function startAIEngine(bot, io) {
   const args = [
     scriptPath,
     '--symbols', ...bot.symbols,
-    '--interval', '15',
+    '--interval', String(bot.interval || 5),
     '--provider', config.provider || 'opencode',
     '--deep-model', config.deepModel || 'minimax-m2.5-free',
     '--quick-model', config.quickModel || 'minimax-m2.5-free',
