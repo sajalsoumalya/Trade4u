@@ -154,53 +154,53 @@ router.get('/bots/:id/status', optionalAuth, async (req, res) => {
 const MODELS = {
   opencode: {
     quick: [
-      { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free' },
-      { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free' },
-      { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free' },
+      { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
+      { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
+      { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
     ],
     deep: [
-      { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free' },
-      { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free' },
-      { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free' },
+      { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
+      { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
+      { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
     ],
   },
   openai: {
     quick: [
-      { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', cost: 'Paid' },
-      { id: 'gpt-4.1', name: 'GPT-4.1', cost: 'Paid' },
+      { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', cost: 'Paid', context: 128000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision'] },
+      { id: 'gpt-4.1', name: 'GPT-4.1', cost: 'Paid', context: 1048576, maxOutput: 32768, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
     ],
     deep: [
-      { id: 'gpt-5.4', name: 'GPT-5.4', cost: 'Paid' },
-      { id: 'gpt-5.4-pro', name: 'GPT-5.4 Pro', cost: 'Paid' },
+      { id: 'gpt-5.4', name: 'GPT-5.4', cost: 'Paid', context: 256000, maxOutput: 65536, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents'] },
+      { id: 'gpt-5.4-pro', name: 'GPT-5.4 Pro', cost: 'Paid', context: 256000, maxOutput: 65536, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents', 'research'] },
     ],
   },
   anthropic: {
     quick: [
-      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: 'Paid' },
-      { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: 'Paid' },
+      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
+      { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['tools', 'vision', 'fast'] },
     ],
     deep: [
-      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', cost: 'Paid' },
-      { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', cost: 'Paid' },
+      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', cost: 'Paid', context: 200000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
+      { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', cost: 'Paid', context: 200000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
     ],
   },
   google: {
     quick: [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: 'Paid' },
-      { id: 'gemini-3-flash', name: 'Gemini 3 Flash', cost: 'Paid' },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: 'Paid', context: 1048576, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'vision', 'fast'] },
+      { id: 'gemini-3-flash', name: 'Gemini 3 Flash', cost: 'Paid', context: 1048576, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'fast'] },
     ],
     deep: [
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', cost: 'Paid' },
-      { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', cost: 'Paid' },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', cost: 'Paid', context: 1048576, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
+      { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', cost: 'Paid', context: 2097152, maxOutput: 32768, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents', 'research'] },
     ],
   },
   deepseek: {
     quick: [
-      { id: 'deepseek-chat', name: 'DeepSeek V3', cost: 'Paid' },
+      { id: 'deepseek-chat', name: 'DeepSeek V3', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
     ],
     deep: [
-      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', cost: 'Paid' },
-      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', cost: 'Paid' },
+      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
+      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'code'] },
     ],
   },
 };

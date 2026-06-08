@@ -10,7 +10,7 @@ const llmProviders = [
   { id: 'deepseek', name: 'DeepSeek' },
 ];
 
-interface ModelEntry { id: string; name: string; cost: string }
+interface ModelEntry { id: string; name: string; cost: string; context: number; maxOutput: number; capabilities: string[] }
 interface Models { quick: ModelEntry[]; deep: ModelEntry[] }
 const MODELS_URL = '/api/trading/models';
 
@@ -97,12 +97,34 @@ export default function Settings() {
                 <select value={quickModel} onChange={(e) => setQuickModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
                   {currentModels.quick.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
+                {(() => {
+                  const m = currentModels.quick.find(x => x.id === quickModel);
+                  if (!m) return null;
+                  return (
+                    <div className="mt-2 space-y-1 text-[10px] text-[#848E9C]">
+                      <p>Context: {(m.context / 1000).toLocaleString()}K tokens</p>
+                      <p>Max output: {(m.maxOutput / 1000).toLocaleString()}K tokens</p>
+                      <p className="flex flex-wrap gap-1 mt-1">{m.capabilities.map(c => <span key={c} className="px-1.5 py-0.5 rounded bg-[#2B3139] text-[10px]">{c}</span>)}</p>
+                    </div>
+                  );
+                })()}
               </div>
               <div className="p-3 rounded-lg bg-background/50 border border-border">
                 <label className="text-xs text-muted flex items-center gap-1 mb-2"><Brain className="w-3 h-3 text-accent" /> Deep Model</label>
                 <select value={deepModel} onChange={(e) => setDeepModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
                   {currentModels.deep.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
+                {(() => {
+                  const m = currentModels.deep.find(x => x.id === deepModel);
+                  if (!m) return null;
+                  return (
+                    <div className="mt-2 space-y-1 text-[10px] text-[#848E9C]">
+                      <p>Context: {(m.context / 1000).toLocaleString()}K tokens</p>
+                      <p>Max output: {(m.maxOutput / 1000).toLocaleString()}K tokens</p>
+                      <p className="flex flex-wrap gap-1 mt-1">{m.capabilities.map(c => <span key={c} className="px-1.5 py-0.5 rounded bg-[#2B3139] text-[10px]">{c}</span>)}</p>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
