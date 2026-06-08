@@ -80,8 +80,8 @@ export interface Bot {
   positions: Position[];
   closedPositions: ClosedPosition[];
   totalPnl: number;
-  stopLoss: number;
-  takeProfit: number;
+  stopLoss?: number;
+  takeProfit?: number;
   closedTrades: number;
   winningTrades: number;
 }
@@ -100,7 +100,7 @@ interface AppState {
   setWalletBalance: (b: number) => void;
 
   bots: Bot[];
-  createBot: (config: { name: string; symbols: string[]; allocationType: 'percentage' | 'fixed'; allocationValue: number; stopLoss: number; takeProfit: number }) => void;
+  createBot: (config: { name: string; symbols: string[]; allocationType: 'percentage' | 'fixed'; allocationValue: number; stopLoss?: number; takeProfit?: number }) => void;
   deleteBot: (id: string) => void;
   startBot: (id: string) => void;
   stopBot: (id: string) => void;
@@ -148,7 +148,7 @@ export const useAppStore = create<AppState>()(
           allocationType: config.allocationType,
           allocationValue: config.allocationValue,
           frozenAmount: frozen,
-          status: 'stopped',
+          status: 'running',
           positions: [],
           closedPositions: [],
           totalPnl: 0,
@@ -157,7 +157,10 @@ export const useAppStore = create<AppState>()(
           closedTrades: 0,
           winningTrades: 0,
         };
-        set({ bots: [...get().bots, bot] });
+        set({
+          walletBalance: get().walletBalance - frozen,
+          bots: [...get().bots, bot],
+        });
       },
 
       deleteBot: (id) => {

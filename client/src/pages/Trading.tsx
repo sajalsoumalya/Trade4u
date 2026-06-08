@@ -33,6 +33,8 @@ export default function Trading() {
   const [formAllocValue, setFormAllocValue] = useState(10);
   const [formSL, setFormSL] = useState(2);
   const [formTP, setFormTP] = useState(5);
+  const [formSLEnabled, setFormSLEnabled] = useState(false);
+  const [formTPEnabled, setFormTPEnabled] = useState(false);
 
   useEffect(() => {
     loadPrices();
@@ -63,7 +65,11 @@ export default function Trading() {
 
   const handleCreate = () => {
     if (!formName || formSymbols.length === 0) return;
-    createBot({ name: formName, symbols: formSymbols, allocationType: formAllocType, allocationValue: formAllocValue, stopLoss: formSL, takeProfit: formTP });
+    createBot({
+      name: formName, symbols: formSymbols, allocationType: formAllocType, allocationValue: formAllocValue,
+      ...(formSLEnabled ? { stopLoss: formSL } : {}),
+      ...(formTPEnabled ? { takeProfit: formTP } : {}),
+    });
     setFormName('');
     setView('list');
   };
@@ -77,7 +83,7 @@ export default function Trading() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-white">Trading Bots</h1>
-          <button onClick={() => { setFormName(''); setFormSymbols(['BTCUSDT']); setFormAllocType('percentage'); setFormAllocValue(10); setFormSL(2); setFormTP(5); setView('create'); }}
+          <button onClick={() => { setFormName(''); setFormSymbols(['BTCUSDT']); setFormAllocType('percentage'); setFormAllocValue(10); setFormSL(2); setFormTP(5); setFormSLEnabled(false); setFormTPEnabled(false); setView('create'); }}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#F0B90B] text-black text-sm font-semibold hover:bg-[#F0B90B]/90 transition-all">
             <Plus className="w-4 h-4" /> Create Bot
           </button>
@@ -311,20 +317,38 @@ export default function Trading() {
 
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
-                <label className="block text-xs text-[#848E9C] mb-1.5">Stop Loss</label>
-                <div className="flex items-center gap-2">
-                  <input type="range" min="1" max="10" value={formSL} onChange={e => setFormSL(parseInt(e.target.value))}
-                    className="flex-1 h-1 bg-[#2B3139] rounded-lg appearance-none cursor-pointer accent-[#F6465D]" />
-                  <span className="text-xs text-[#F6465D] font-mono w-8 text-right">{formSL}%</span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs text-[#848E9C]">Stop Loss</label>
+                  <button onClick={() => setFormSLEnabled(!formSLEnabled)}
+                    className={`text-xs px-2 py-0.5 rounded transition-all ${formSLEnabled ? 'bg-[#F6465D]/10 text-[#F6465D]' : 'bg-[#2B3139] text-[#848E9C]'}`}>
+                    {formSLEnabled ? 'ON' : 'OFF'}
+                  </button>
                 </div>
+                {formSLEnabled && (
+                  <div className="flex items-center gap-2">
+                    <input type="range" min="0.5" max="10" step="0.5" value={formSL} onChange={e => setFormSL(parseFloat(e.target.value))}
+                      className="flex-1 h-1 bg-[#2B3139] rounded-lg appearance-none cursor-pointer accent-[#F6465D]" />
+                    <span className="text-xs text-[#F6465D] font-mono w-10 text-right">{formSL}%</span>
+                  </div>
+                )}
+                {!formSLEnabled && <p className="text-xs text-[#848E9C] mt-1">Not set</p>}
               </div>
               <div>
-                <label className="block text-xs text-[#848E9C] mb-1.5">Take Profit</label>
-                <div className="flex items-center gap-2">
-                  <input type="range" min="1" max="20" value={formTP} onChange={e => setFormTP(parseInt(e.target.value))}
-                    className="flex-1 h-1 bg-[#2B3139] rounded-lg appearance-none cursor-pointer accent-[#0ECB81]" />
-                  <span className="text-xs text-[#0ECB81] font-mono w-8 text-right">{formTP}%</span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs text-[#848E9C]">Take Profit</label>
+                  <button onClick={() => setFormTPEnabled(!formTPEnabled)}
+                    className={`text-xs px-2 py-0.5 rounded transition-all ${formTPEnabled ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#2B3139] text-[#848E9C]'}`}>
+                    {formTPEnabled ? 'ON' : 'OFF'}
+                  </button>
                 </div>
+                {formTPEnabled && (
+                  <div className="flex items-center gap-2">
+                    <input type="range" min="0.5" max="50" step="0.5" value={formTP} onChange={e => setFormTP(parseFloat(e.target.value))}
+                      className="flex-1 h-1 bg-[#2B3139] rounded-lg appearance-none cursor-pointer accent-[#0ECB81]" />
+                    <span className="text-xs text-[#0ECB81] font-mono w-10 text-right">{formTP}%</span>
+                  </div>
+                )}
+                {!formTPEnabled && <p className="text-xs text-[#848E9C] mt-1">Not set</p>}
               </div>
             </div>
 
@@ -359,16 +383,18 @@ export default function Trading() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-[#848E9C]">Stop Loss</span>
-                  <span className="text-[#F6465D] font-mono">{formSL}%</span>
+                  <span className="text-[#F6465D] font-mono">{formSLEnabled ? `${formSL}%` : '--'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#848E9C]">Take Profit</span>
-                  <span className="text-[#0ECB81] font-mono">{formTP}%</span>
+                  <span className="text-[#0ECB81] font-mono">{formTPEnabled ? `${formTP}%` : '--'}</span>
                 </div>
+                {formSLEnabled && formTPEnabled && (
                 <div className="flex justify-between">
                   <span className="text-[#848E9C]">Risk/Reward</span>
                   <span className="text-white font-mono">1:{(formTP / formSL).toFixed(1)}</span>
                 </div>
+                )}
               </div>
             </div>
 
@@ -567,12 +593,15 @@ export default function Trading() {
                   className="w-16 bg-[#0B0E11] border border-[#2B3139] rounded px-1.5 py-0.5 text-[#F6465D] font-mono text-xs focus:outline-none focus:border-[#F0B90B]" />
                 <span className="text-[#F6465D] text-xs">%</span>
                 <button onClick={() => { updateBotSLTP(bot.id, botSLEdit, bot.takeProfit); setEditingBotSL(false); }} className="text-[#0ECB81] hover:text-white"><Check className="w-3 h-3" /></button>
-                <button onClick={() => setEditingBotSL(false)} className="text-[#848E9C] hover:text-white"><X className="w-3 h-3" /></button>
+                <button onClick={() => { updateBotSLTP(bot.id, undefined, bot.takeProfit); setEditingBotSL(false); }} className="text-[#848E9C] hover:text-white" title="Remove SL"><X className="w-3 h-3" /></button>
               </div>
             ) : (
               <div className="flex items-center gap-1.5">
-                <span className="text-[#F6465D] font-mono">{bot.stopLoss}%</span>
-                <button onClick={() => { setBotSLEdit(bot.stopLoss); setEditingBotSL(true); setEditingBotTP(false); }} className="text-[#848E9C] hover:text-white"><PencilLine className="w-3 h-3" /></button>
+                {bot.stopLoss ? (
+                  <><span className="text-[#F6465D] font-mono">{bot.stopLoss}%</span><button onClick={() => { setBotSLEdit(bot.stopLoss!); setEditingBotSL(true); setEditingBotTP(false); }} className="text-[#848E9C] hover:text-white"><PencilLine className="w-3 h-3" /></button></>
+                ) : (
+                  <><span className="text-[#848E9C] font-mono">--</span><button onClick={() => { setBotSLEdit(2); setEditingBotSL(true); setEditingBotTP(false); }} className="text-[#848E9C] hover:text-[#F6465D]"><PencilLine className="w-3 h-3" /></button></>
+                )}
               </div>
             )}
           </div>
@@ -584,19 +613,24 @@ export default function Trading() {
                   className="w-16 bg-[#0B0E11] border border-[#2B3139] rounded px-1.5 py-0.5 text-[#0ECB81] font-mono text-xs focus:outline-none focus:border-[#F0B90B]" />
                 <span className="text-[#0ECB81] text-xs">%</span>
                 <button onClick={() => { updateBotSLTP(bot.id, bot.stopLoss, botTPEdit); setEditingBotTP(false); }} className="text-[#0ECB81] hover:text-white"><Check className="w-3 h-3" /></button>
-                <button onClick={() => setEditingBotTP(false)} className="text-[#848E9C] hover:text-white"><X className="w-3 h-3" /></button>
+                <button onClick={() => { updateBotSLTP(bot.id, bot.stopLoss, undefined); setEditingBotTP(false); }} className="text-[#848E9C] hover:text-white" title="Remove TP"><X className="w-3 h-3" /></button>
               </div>
             ) : (
               <div className="flex items-center gap-1.5">
-                <span className="text-[#0ECB81] font-mono">{bot.takeProfit}%</span>
-                <button onClick={() => { setBotTPEdit(bot.takeProfit); setEditingBotTP(true); setEditingBotSL(false); }} className="text-[#848E9C] hover:text-white"><PencilLine className="w-3 h-3" /></button>
+                {bot.takeProfit ? (
+                  <><span className="text-[#0ECB81] font-mono">{bot.takeProfit}%</span><button onClick={() => { setBotTPEdit(bot.takeProfit!); setEditingBotTP(true); setEditingBotSL(false); }} className="text-[#848E9C] hover:text-white"><PencilLine className="w-3 h-3" /></button></>
+                ) : (
+                  <><span className="text-[#848E9C] font-mono">--</span><button onClick={() => { setBotTPEdit(5); setEditingBotTP(true); setEditingBotSL(false); }} className="text-[#848E9C] hover:text-[#0ECB81]"><PencilLine className="w-3 h-3" /></button></>
+                )}
               </div>
             )}
           </div>
+          {bot.stopLoss && bot.takeProfit && (
           <div>
             <p className="text-xs text-[#848E9C]">Risk/Reward</p>
             <p className="text-white font-mono">1:{(bot.takeProfit / bot.stopLoss).toFixed(1)}</p>
           </div>
+          )}
           <div>
             <p className="text-xs text-[#848E9C]">Created</p>
             <p className="text-white font-mono text-xs">{new Date(bot.createdAt).toLocaleDateString()}</p>
