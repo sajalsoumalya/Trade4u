@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useAppStore, modelOptions } from '../store/appStore';
+import { useState, useEffect } from 'react';
+import { useAppStore } from '../store/appStore';
 import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles } from 'lucide-react';
 
 const llmProviders = [
@@ -10,6 +10,12 @@ const llmProviders = [
   { id: 'deepseek', name: 'DeepSeek' },
 ];
 
+interface ModelEntry { id: string; name: string; cost: string }
+interface Models { quick: ModelEntry[]; deep: ModelEntry[] }
+const MODELS_URL = '/api/trading/models';
+
+const defaultModels: Models = { quick: [], deep: [] };
+
 export default function Settings() {
   const {
     llmProvider, apiKey, deepModel, quickModel, walletBalance,
@@ -19,12 +25,20 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [balanceInput, setBalanceInput] = useState(String(walletBalance));
+  const [models, setModels] = useState<Record<string, Models>>({});
 
-  const models = modelOptions[llmProvider] || modelOptions.opencode;
+  useEffect(() => {
+    fetch(MODELS_URL)
+      .then(r => r.json())
+      .then(data => setModels(data))
+      .catch(() => {});
+  }, []);
+
+  const currentModels: Models = models[llmProvider] || defaultModels;
 
   const handleProviderChange = (providerId: string) => {
     setLlmProvider(providerId);
-    const m = modelOptions[providerId];
+    const m = models[providerId];
     if (m?.quick?.length > 0) setQuickModel(m.quick[0].id);
     if (m?.deep?.length > 0) setDeepModel(m.deep[0].id);
   };
@@ -81,13 +95,13 @@ export default function Settings() {
               <div className="p-3 rounded-lg bg-background/50 border border-border">
                 <label className="text-xs text-muted flex items-center gap-1 mb-2"><Cpu className="w-3 h-3 text-primary" /> Quick Model</label>
                 <select value={quickModel} onChange={(e) => setQuickModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
-                  {models.quick.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {currentModels.quick.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </div>
               <div className="p-3 rounded-lg bg-background/50 border border-border">
                 <label className="text-xs text-muted flex items-center gap-1 mb-2"><Brain className="w-3 h-3 text-accent" /> Deep Model</label>
                 <select value={deepModel} onChange={(e) => setDeepModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
-                  {models.deep.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {currentModels.deep.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </div>
             </div>
