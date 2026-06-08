@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -7,24 +8,42 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../../');
 
 const processes = new Map();
 
+function loadLlmConfig() {
+  const configPath = path.join(PROJECT_ROOT, 'server', 'data', 'llm-config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch {}
+  }
+  return {};
+}
+
 export function startAIEngine(bot, io) {
   if (processes.has(bot.id)) return false;
+
+  const config = loadLlmConfig();
 
   const scriptPath = path.join(PROJECT_ROOT, 'server', 'bot_signal.py');
   const args = [
     scriptPath,
     '--symbols', ...bot.symbols,
     '--interval', '15',
-    '--provider', 'opencode',
+    '--provider', config.provider || 'opencode',
+    '--deep-model', config.deepModel || 'minimax-m2.5-free',
+    '--quick-model', config.quickModel || 'minimax-m2.5-free',
     '--stop-loss', String(bot.stopLoss || 2),
     '--take-profit', String(bot.takeProfit || 5),
   ];
+
+  if (config.apiKey) {
+    args.push('--api-key', config.apiKey);
+  }
 
   const proc = spawn('python3', args, {
     env: {
       ...process.env,
       PYTHONPATH: `${PROJECT_ROOT}:${process.env.PYTHONPATH || ''}`,
-      OPENCODE_API_KEY: process.env.OPENCODE_API_KEY || '',
+      OPENCODE_API_KEY: process.env.OPENCODE_API_KEY || config.apiKey || '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -39,8 +58,14 @@ export function startAIEngine(bot, io) {
       if (!trimmed) continue;
       try {
         const signal = JSON.parse(trimmed);
+        // Forward every JSON line as a signal
         io.emit(`bot:${bot.id}:signal`, signal);
-        if ((signal.action === 'buy' || signal.action === 'sell') && signal.symbol) {
+        // Emit log events for analysis logs
+        if (signal.type === 'log') {
+          io.emit(`bot:${bot.id}:log`, signal);
+        }
+        // Emit trade events for buy/sell actions
+        if (signal.type === 'signal' && (signal.action === 'buy' || signal.action === 'sell') && signal.symbol) {
           io.emit(`bot:${bot.id}:trade`, signal);
         }
       } catch {

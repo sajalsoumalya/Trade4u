@@ -47,20 +47,48 @@ class SignalEmitter:
 
     async def analyze(self, symbol):
         try:
-            _, decision = self.agent.propagate(symbol.upper(), datetime.now().strftime('%Y-%m-%d'))
+            state, decision = self.agent.propagate(symbol.upper(), datetime.now().strftime('%Y-%m-%d'))
             d = decision.upper().strip() if decision else ''
+
+            # Extract reasoning log from state messages
+            reasoning_log = []
+            if state and 'messages' in state:
+                for msg in state['messages']:
+                    try:
+                        if hasattr(msg, 'content') and msg.content:
+                            content = msg.content[:2000] if isinstance(msg.content, str) else str(msg.content)[:2000]
+                            role = getattr(msg, 'type', 'unknown')
+                            reasoning_log.append({"role": role, "content": content})
+                    except:
+                        pass
+
+            signal_action = 'hold'
             if 'BUY' in d or 'LONG' in d:
-                return 'buy'
+                signal_action = 'buy'
             elif 'SELL' in d or 'SHORT' in d:
-                return 'sell'
-            return 'hold'
+                signal_action = 'sell'
+
+            return signal_action, reasoning_log
         except Exception as e:
-            return 'hold'
+            return 'hold', [{"role": "error", "content": str(e)}]
 
     async def run_cycle(self, symbols):
         for symbol in symbols:
             price = self.get_price(symbol)
-            action = await self.analyze(symbol)
+            action, logs = await self.analyze(symbol)
+
+            # Emit analysis log
+            log_entry = {
+                "type": "log",
+                "symbol": symbol,
+                "action": action,
+                "price": price,
+                "reasoning": logs,
+                "timestamp": datetime.now().isoformat(),
+            }
+            print(json.dumps(log_entry), flush=True)
+
+            # Emit trade signal
             signal = {
                 "type": "signal",
                 "symbol": symbol,

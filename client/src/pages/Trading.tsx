@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAppStore, Bot } from '../store/appStore';
 import { fetchCryptoPrices, startBotEngine, stopBotEngine } from '../lib/api';
 import { io } from 'socket.io-client';
-import { Plus, Play, Square, XCircle, Trash2, ChevronRight, ArrowLeft, TrendingUp, TrendingDown, Settings2, Zap, BarChart3, Wallet, History, PencilLine, Check, X } from 'lucide-react';
+import { Plus, Play, Square, XCircle, Trash2, ChevronRight, ArrowLeft, TrendingUp, TrendingDown, Settings2, Zap, BarChart3, Wallet, History, PencilLine, Check, X, Terminal } from 'lucide-react';
 
 const allPairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
 const PAIR_NAMES: Record<string, string> = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', SOLUSDT: 'SOL', BNBUSDT: 'BNB', XRPUSDT: 'XRP', ADAUSDT: 'ADA', DOGEUSDT: 'DOGE' };
@@ -13,10 +13,12 @@ export default function Trading() {
   const [view, setView] = useState<'list' | 'create' | 'detail'>('list');
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [tab, setTab] = useState<'running' | 'history'>('running');
-  const [detailTab, setDetailTab] = useState<'open' | 'history'>('open');
+  const [detailTab, setDetailTab] = useState<'open' | 'history' | 'logs'>('open');
   const [editingPosSLTP, setEditingPosSLTP] = useState<string | null>(null);
   const [editSL, setEditSL] = useState('');
   const [editTP, setEditTP] = useState('');
+  const [botLogs, setBotLogs] = useState<Record<string, any[]>>({});
+  const logsRef = useRef<Record<string, any[]>>({});
   const [editingBotSL, setEditingBotSL] = useState(false);
   const [editingBotTP, setEditingBotTP] = useState(false);
   const [botSLEdit, setBotSLEdit] = useState(0);
@@ -61,6 +63,13 @@ export default function Trading() {
         });
         socket.on(`bot:${bot.id}:status`, (status: any) => {
           console.log(`[Bot ${bot.id}] AI engine status:`, status);
+        });
+        // Collect decision engine logs
+        socket.on(`bot:${bot.id}:log`, (log: any) => {
+          const prev = logsRef.current[bot.id] || [];
+          const updated = [...prev, { ...log, receivedAt: Date.now() }];
+          logsRef.current[bot.id] = updated;
+          setBotLogs(prev => ({ ...prev, [bot.id]: updated }));
         });
       }
     });
@@ -607,7 +616,7 @@ export default function Trading() {
         </div>
       </div>
 
-      {/* Tabs: Open Positions | Position History */}
+      {/* Tabs: Open Positions | Position History | Logs */}
       <div className="bg-[#1E2329] border border-[#2B3139] rounded-lg overflow-hidden">
         <div className="p-4 border-b border-[#2B3139] flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -616,6 +625,9 @@ export default function Trading() {
             </button>
             <button onClick={() => setDetailTab('history')} className={`text-sm font-medium pb-1 border-b-2 transition-all ${detailTab === 'history' ? 'text-white border-[#F0B90B]' : 'text-[#848E9C] border-transparent hover:text-white'}`}>
               <span className="flex items-center gap-1.5"><History className="w-3.5 h-3.5" /> Position History ({bot.closedPositions.length})</span>
+            </button>
+            <button onClick={() => setDetailTab('logs')} className={`text-sm font-medium pb-1 border-b-2 transition-all ${detailTab === 'logs' ? 'text-white border-[#F0B90B]' : 'text-[#848E9C] border-transparent hover:text-white'}`}>
+              <span className="flex items-center gap-1.5"><Terminal className="w-3.5 h-3.5" /> Decision Engine Logs ({(botLogs[bot.id] || []).length})</span>
             </button>
           </div>
           {detailTab === 'open' && bot.positions.length > 0 && (
@@ -626,7 +638,45 @@ export default function Trading() {
           )}
         </div>
 
-        {detailTab === 'open' ? (
+        {detailTab === 'logs' ? (
+          <div className="p-4 max-h-[500px] overflow-y-auto">
+            {(!botLogs[bot.id] || botLogs[bot.id].length === 0) ? (
+              <div className="p-12 text-center">
+                <Terminal className="w-8 h-8 text-[#848E9C] mx-auto mb-2" />
+                <p className="text-sm text-[#848E9C]">No decision engine logs yet</p>
+                <p className="text-xs text-[#848E9C] mt-1">Logs appear here when the AI engine runs analysis</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {[...botLogs[bot.id]].reverse().map((log, i) => (
+                  <div key={i} className="bg-[#0B0E11] border border-[#2B3139] rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-white">{log.symbol}</span>
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                          log.action === 'buy' ? 'bg-[#0ECB81]/10 text-[#0ECB81]' :
+                          log.action === 'sell' ? 'bg-[#F6465D]/10 text-[#F6465D]' :
+                          'bg-[#2B3139] text-[#848E9C]'
+                        }`}>{log.action?.toUpperCase() || 'HOLD'}</span>
+                      </div>
+                      <span className="text-[10px] text-[#848E9C]">{log.price ? `$${log.price.toFixed(2)}` : ''} · {new Date(log.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    {log.reasoning && log.reasoning.length > 0 && (
+                      <div className="space-y-1 mt-1">
+                        {log.reasoning.map((r: any, j: number) => (
+                          <details key={j} className="text-[11px]">
+                            <summary className="text-[#848E9C] cursor-pointer hover:text-white">{r.role}</summary>
+                            <pre className="mt-1 text-[#848E9C] whitespace-pre-wrap font-mono text-[10px] leading-relaxed max-h-[200px] overflow-y-auto">{r.content}</pre>
+                          </details>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : detailTab === 'open' ? (
           <>
             {bot.positions.length === 0 ? (
               <div className="p-12 text-center">
