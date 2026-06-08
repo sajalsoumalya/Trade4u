@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { optionalAuth } from '../middleware/auth.js';
+import { startAIEngine, stopAIEngine, isEngineRunning } from '../services/botEngine.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../../data');
@@ -112,6 +113,38 @@ router.get('/balance', optionalAuth, async (req, res) => {
     const user = balances.find(b => b.uid === uid);
     const balance = user ? user.balance : 100000;
     res.json({ balance, tradingMode: 'paper' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI Engine lifecycle — managed by botEngine.js
+router.post('/bots/:id/start', optionalAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { symbols, stopLoss, takeProfit } = req.body;
+    const io = req.app.get('io');
+    const ok = startAIEngine({ id, symbols: symbols || [], stopLoss, takeProfit }, io);
+    res.json({ success: ok, running: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bots/:id/stop', optionalAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    stopAIEngine(id);
+    res.json({ success: true, running: false });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/bots/:id/status', optionalAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    res.json({ running: isEngineRunning(id) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppStore, Bot } from '../store/appStore';
-import { fetchCryptoPrices } from '../lib/api';
+import { fetchCryptoPrices, startBotEngine, stopBotEngine } from '../lib/api';
+import { io } from 'socket.io-client';
 import { Plus, Play, Square, XCircle, Trash2, ChevronRight, ArrowLeft, TrendingUp, TrendingDown, Settings2, Zap, BarChart3, Wallet, History, PencilLine, Check, X } from 'lucide-react';
 
 const allPairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
@@ -30,11 +31,40 @@ export default function Trading() {
   const [formSLEnabled, setFormSLEnabled] = useState(false);
   const [formTPEnabled, setFormTPEnabled] = useState(false);
 
+  const socketRef = useRef<any>(null);
+
   useEffect(() => {
     loadPrices();
     const interval = setInterval(loadPrices, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Socket.IO for AI engine signals
+  useEffect(() => {
+    const socket = io({ path: '/api/socket.io' });
+    socketRef.current = socket;
+
+    bots.forEach(bot => {
+      if (bot.status === 'running') {
+        socket.on(`bot:${bot.id}:trade`, (signal: any) => {
+          if (signal.action === 'buy' && signal.price) {
+            addPosition(bot.id, {
+              symbol: signal.symbol, type: 'buy',
+              quantity: 0.001, entryPrice: signal.price,
+            });
+          } else if (signal.action === 'sell') {
+            const pos = bot.positions.find(p => p.symbol === signal.symbol);
+            if (pos) closePosition(bot.id, pos.id, signal.price || signal.price);
+          }
+        });
+        socket.on(`bot:${bot.id}:status`, (status: any) => {
+          console.log(`[Bot ${bot.id}] AI engine status:`, status);
+        });
+      }
+    });
+
+    return () => { socket.disconnect(); };
+  }, [bots.length]);
 
   const loadPrices = async () => {
     try {
@@ -166,9 +196,9 @@ export default function Trading() {
                           <td className="p-4 text-right" onClick={e => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1">
                               {bot.status === 'running' ? (
-                                <button onClick={() => stopBot(bot.id)} className="p-1.5 rounded hover:bg-[#2B3139] text-[#F6465D]"><Square className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => { stopBot(bot.id); stopBotEngine(bot.id); }} className="p-1.5 rounded hover:bg-[#2B3139] text-[#F6465D]"><Square className="w-3.5 h-3.5" /></button>
                               ) : (
-                                <button onClick={() => startBot(bot.id)} className="p-1.5 rounded hover:bg-[#2B3139] text-[#0ECB81]"><Play className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit); }} className="p-1.5 rounded hover:bg-[#2B3139] text-[#0ECB81]"><Play className="w-3.5 h-3.5" /></button>
                               )}
                               <button onClick={() => handleDeleteBot(bot.id)} className="p-1.5 rounded hover:bg-[#2B3139] text-[#848E9C]"><Trash2 className="w-3.5 h-3.5" /></button>
                               <ChevronRight className="w-4 h-4 text-[#848E9C]" />
@@ -203,9 +233,9 @@ export default function Trading() {
                       </div>
                       <div className="flex gap-2 mt-3" onClick={e => e.stopPropagation()}>
                         {bot.status === 'running' ? (
-                          <button onClick={() => stopBot(bot.id)} className="flex-1 py-2 rounded bg-[#F6465D]/10 text-[#F6465D] text-xs font-medium">Stop</button>
+                          <button onClick={() => { stopBot(bot.id); stopBotEngine(bot.id); }} className="flex-1 py-2 rounded bg-[#F6465D]/10 text-[#F6465D] text-xs font-medium">Stop</button>
                         ) : (
-                          <button onClick={() => startBot(bot.id)} className="flex-1 py-2 rounded bg-[#0ECB81]/10 text-[#0ECB81] text-xs font-medium">Start</button>
+                          <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit); }} className="flex-1 py-2 rounded bg-[#0ECB81]/10 text-[#0ECB81] text-xs font-medium">Start</button>
                         )}
                         <button onClick={() => handleDeleteBot(bot.id)} className="px-3 py-2 rounded bg-[#2B3139] text-[#848E9C] text-xs"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
@@ -494,7 +524,7 @@ export default function Trading() {
       <div className="flex flex-wrap gap-2">
         {bot.status === 'running' ? (
           <>
-            <button onClick={() => stopBot(bot.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#F6465D]/10 text-[#F6465D] text-sm font-medium hover:bg-[#F6465D]/20 transition-all">
+            <button onClick={() => { stopBot(bot.id); stopBotEngine(bot.id); }} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#F6465D]/10 text-[#F6465D] text-sm font-medium hover:bg-[#F6465D]/20 transition-all">
               <Square className="w-4 h-4" /> Stop Bot
             </button>
             {bot.positions.length > 0 && (
@@ -505,7 +535,7 @@ export default function Trading() {
             )}
           </>
         ) : (
-          <button onClick={() => startBot(bot.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0ECB81]/10 text-[#0ECB81] text-sm font-medium hover:bg-[#0ECB81]/20 transition-all">
+          <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit); }} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0ECB81]/10 text-[#0ECB81] text-sm font-medium hover:bg-[#0ECB81]/20 transition-all">
             <Play className="w-4 h-4" /> Start Bot
           </button>
         )}

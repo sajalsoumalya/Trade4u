@@ -143,3 +143,21 @@ export const verifyToken = async (idToken: string) => {
   });
   return res.json();
 };
+
+// AI Bot Engine API
+export const startBotEngine = async (botId: string, symbols: string[], stopLoss?: number, takeProfit?: number) => {
+  const res = await fetch(`${API_BASE}/trading/bots/${botId}/start`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ symbols, stopLoss, takeProfit })
+  });
+  return res.json();
+};
+
+export const stopBotEngine = async (botId: string) => {
+  const res = await fetch(`${API_BASE}/trading/bots/${botId}/stop`, {
+    method: 'POST',
+    headers: getAuthHeaders()
+  });
+  return res.json();
+};
