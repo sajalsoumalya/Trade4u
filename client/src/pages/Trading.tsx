@@ -95,7 +95,7 @@ export default function Trading() {
     });
 
     return () => { socket.disconnect(); };
-  }, [bots.length]);
+  }, [bots.map(b => `${b.id}:${b.status}`).join(',')]);
 
   const loadPrices = async () => {
     try {
