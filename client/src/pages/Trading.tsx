@@ -46,6 +46,8 @@ export default function Trading() {
 
     bots.forEach(bot => {
       if (bot.status === 'running') {
+        // Re-spawn AI engine for existing running bots after page refresh
+        startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit);
         socket.on(`bot:${bot.id}:trade`, (signal: any) => {
           if (signal.action === 'buy' && signal.price) {
             addPosition(bot.id, {
@@ -54,7 +56,7 @@ export default function Trading() {
             });
           } else if (signal.action === 'sell') {
             const pos = bot.positions.find(p => p.symbol === signal.symbol);
-            if (pos) closePosition(bot.id, pos.id, signal.price || signal.price);
+            if (pos) closePosition(bot.id, pos.id, signal.price);
           }
         });
         socket.on(`bot:${bot.id}:status`, (status: any) => {
