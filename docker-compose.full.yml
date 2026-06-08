@@ -8,10 +8,10 @@ services:
       dockerfile: Dockerfile.full
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "8501:8501"
     env_file:
       - .env.full
     environment:
       - NODE_ENV=production
-      - PORT=3001
+      - PORT=8501
       - LLM_PROVIDER=opencode
