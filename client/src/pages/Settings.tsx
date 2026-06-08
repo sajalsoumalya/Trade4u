@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
-import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw } from 'lucide-react';
+import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider } from '../lib/api';
 
 interface ModelEntry { id: string; name: string; cost: string; context: number; maxOutput: number; capabilities: string[] }
@@ -25,6 +25,7 @@ export default function Settings() {
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [providerChanged, setProviderChanged] = useState(false);
+  const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
     loadLlmConfig().then(config => {
@@ -104,8 +105,11 @@ export default function Settings() {
               <label className="block text-xs text-muted mb-1.5">API Key</label>
               <div className="relative">
                 <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg pl-9 pr-3 py-2.5 text-white text-sm focus:outline-none focus:border-primary" placeholder="Enter API key" />
+                <input type={showKey ? 'text' : 'password'} value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg pl-9 pr-10 py-2.5 text-white text-sm focus:outline-none focus:border-primary" placeholder="Enter API key" />
+                <button type="button" onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors">
+                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
