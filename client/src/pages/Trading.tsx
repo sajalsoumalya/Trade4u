@@ -9,7 +9,7 @@ const allPairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSD
 const PAIR_NAMES: Record<string, string> = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', SOLUSDT: 'SOL', BNBUSDT: 'BNB', XRPUSDT: 'XRP', ADAUSDT: 'ADA', DOGEUSDT: 'DOGE' };
 
 export default function Trading() {
-  const { bots, walletBalance, createBot, deleteBot, startBot, stopBot, closePosition, closeAllPositions, addPosition, updatePositionSLTP, updateBotSLTP, updateBot } = useAppStore();
+  const { bots, walletBalance, createBot, deleteBot, startBot, stopBot, closePosition, closeAllPositions, addPosition, updatePositionSLTP, updateBotSLTP, updateBot, botLogs, addBotLog } = useAppStore();
   const [prices, setPrices] = useState<Record<string, any>>({});
   const [view, setView] = useState<'list' | 'create' | 'detail'>('list');
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
@@ -18,8 +18,6 @@ export default function Trading() {
   const [editingPosSLTP, setEditingPosSLTP] = useState<string | null>(null);
   const [editSL, setEditSL] = useState('');
   const [editTP, setEditTP] = useState('');
-  const [botLogs, setBotLogs] = useState<Record<string, any[]>>({});
-  const logsRef = useRef<Record<string, any[]>>({});
   const [editingBotId, setEditingBotId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPairs, setEditPairs] = useState<string[]>([]);
@@ -58,7 +56,10 @@ export default function Trading() {
     bots.forEach(bot => {
       if (bot.status === 'running') {
         // Re-spawn AI engine for existing running bots after page refresh
-        startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval, bot.botProvider, bot.botQuickModel, bot.botDeepModel);
+        // Stop any orphaned engine process first, then start with latest config
+        stopBotEngine(bot.id).then(() => {
+          startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval, bot.botProvider, bot.botQuickModel, bot.botDeepModel);
+        });
         socket.on(`bot:${bot.id}:trade`, (signal: any) => {
           if (signal.action === 'buy' && signal.price) {
             addPosition(bot.id, {
@@ -86,10 +87,7 @@ export default function Trading() {
         });
         // Collect decision engine logs
         socket.on(`bot:${bot.id}:log`, (log: any) => {
-          const prev = logsRef.current[bot.id] || [];
-          const updated = [...prev, { ...log, receivedAt: Date.now() }];
-          logsRef.current[bot.id] = updated;
-          setBotLogs(prev => ({ ...prev, [bot.id]: updated }));
+          addBotLog(bot.id, log);
         });
         // Forward Python stderr errors to the store
         socket.on(`bot:${bot.id}:engineError`, (msg: string) => {

@@ -77,6 +77,8 @@ interface AppState {
   updatePositionSLTP: (botId: string, posId: string, sl?: number, tp?: number) => void;
   updateBot: (id: string, changes: Partial<Bot>) => void;
   updateBotSLTP: (botId: string, sl: number, tp: number) => void;
+  botLogs: Record<string, any[]>;
+  addBotLog: (botId: string, log: any) => void;
 }
 
 function calcFrozen(walletBalance: number, type: 'percentage' | 'fixed', value: number): number {
@@ -104,6 +106,7 @@ export const useAppStore = create<AppState>()(
       setWalletBalance: (walletBalance) => set({ walletBalance }),
 
       bots: [],
+      botLogs: {},
 
       createBot: (config) => {
         const frozen = calcFrozen(get().walletBalance, config.allocationType, config.allocationValue);
@@ -292,6 +295,13 @@ export const useAppStore = create<AppState>()(
           bots: get().bots.map(b => b.id === botId ? { ...b, stopLoss: sl, takeProfit: tp } : b),
         });
       },
+
+      addBotLog: (botId, log) => {
+        const logs = get().botLogs;
+        const prev = logs[botId] || [];
+        const updated = [...prev, { ...log, receivedAt: Date.now() }].slice(-200);
+        set({ botLogs: { ...logs, [botId]: updated } });
+      },
     }),
     {
       name: 'trade4u-settings',
@@ -302,6 +312,7 @@ export const useAppStore = create<AppState>()(
         quickModel: state.quickModel,
         walletBalance: state.walletBalance,
         bots: state.bots,
+        botLogs: state.botLogs,
       }),
     }
   )
