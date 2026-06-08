@@ -58,7 +58,7 @@ export default function Trading() {
     bots.forEach(bot => {
       if (bot.status === 'running') {
         // Re-spawn AI engine for existing running bots after page refresh
-        startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval);
+        startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval, bot.botProvider, bot.botQuickModel, bot.botDeepModel);
         socket.on(`bot:${bot.id}:trade`, (signal: any) => {
           if (signal.action === 'buy' && signal.price) {
             addPosition(bot.id, {
@@ -90,6 +90,11 @@ export default function Trading() {
           const updated = [...prev, { ...log, receivedAt: Date.now() }];
           logsRef.current[bot.id] = updated;
           setBotLogs(prev => ({ ...prev, [bot.id]: updated }));
+        });
+        // Forward Python stderr errors to the store
+        socket.on(`bot:${bot.id}:engineError`, (msg: string) => {
+          updateBot(bot.id, { engineError: msg });
+          addToast('error', `${bot.name}: ${msg}`);
         });
       }
     });
@@ -238,7 +243,7 @@ export default function Trading() {
                               {bot.status === 'running' ? (
                                 <button onClick={() => { stopBot(bot.id); stopBotEngine(bot.id); }} className="p-1.5 rounded hover:bg-[#2B3139] text-[#F6465D]"><Square className="w-3.5 h-3.5" /></button>
                               ) : (
-                                <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval); }} className="p-1.5 rounded hover:bg-[#2B3139] text-[#0ECB81]"><Play className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval, bot.botProvider, bot.botQuickModel, bot.botDeepModel); }} className="p-1.5 rounded hover:bg-[#2B3139] text-[#0ECB81]"><Play className="w-3.5 h-3.5" /></button>
                               )}
                               <button onClick={() => handleDeleteBot(bot.id)} className="p-1.5 rounded hover:bg-[#2B3139] text-[#848E9C]"><Trash2 className="w-3.5 h-3.5" /></button>
                               <ChevronRight className="w-4 h-4 text-[#848E9C]" />
@@ -276,7 +281,7 @@ export default function Trading() {
                         {bot.status === 'running' ? (
                           <button onClick={() => { stopBot(bot.id); stopBotEngine(bot.id); }} className="flex-1 py-2 rounded bg-[#F6465D]/10 text-[#F6465D] text-xs font-medium">Stop</button>
                         ) : (
-                          <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval); }} className="flex-1 py-2 rounded bg-[#0ECB81]/10 text-[#0ECB81] text-xs font-medium">Start</button>
+                          <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval, bot.botProvider, bot.botQuickModel, bot.botDeepModel); }} className="flex-1 py-2 rounded bg-[#0ECB81]/10 text-[#0ECB81] text-xs font-medium">Start</button>
                         )}
                         <button onClick={() => handleDeleteBot(bot.id)} className="px-3 py-2 rounded bg-[#2B3139] text-[#848E9C] text-xs"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
@@ -595,7 +600,7 @@ export default function Trading() {
             )}
           </>
         ) : (
-          <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval); }} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0ECB81]/10 text-[#0ECB81] text-sm font-medium hover:bg-[#0ECB81]/20 transition-all">
+          <button onClick={() => { startBot(bot.id); startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval, bot.botProvider, bot.botQuickModel, bot.botDeepModel); }} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0ECB81]/10 text-[#0ECB81] text-sm font-medium hover:bg-[#0ECB81]/20 transition-all">
             <Play className="w-4 h-4" /> Start Bot
           </button>
         )}

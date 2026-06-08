@@ -126,9 +126,9 @@ router.get('/balance', optionalAuth, async (req, res) => {
 router.post('/bots/:id/start', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { symbols, stopLoss, takeProfit, interval } = req.body;
+    const { symbols, stopLoss, takeProfit, interval, provider, quickModel, deepModel } = req.body;
     const io = req.app.get('io');
-    const ok = startAIEngine({ id, symbols: symbols || [], stopLoss, takeProfit, interval }, io);
+    const ok = startAIEngine({ id, symbols: symbols || [], stopLoss, takeProfit, interval, provider, quickModel, deepModel }, io);
     res.json({ success: ok, running: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

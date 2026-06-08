@@ -28,9 +28,9 @@ export function startAIEngine(bot, io) {
     scriptPath,
     '--symbols', ...bot.symbols,
     '--interval', String(bot.interval || 5),
-    '--provider', config.provider || 'opencode',
-    '--deep-model', config.deepModel || 'minimax-m2.5-free',
-    '--quick-model', config.quickModel || 'minimax-m2.5-free',
+    '--provider', bot.provider || config.provider || 'opencode',
+    '--deep-model', bot.deepModel || config.deepModel || 'deepseek-chat',
+    '--quick-model', bot.quickModel || config.quickModel || 'deepseek-chat',
     '--stop-loss', String(bot.stopLoss || 2),
     '--take-profit', String(bot.takeProfit || 5),
   ];
@@ -75,7 +75,12 @@ export function startAIEngine(bot, io) {
   });
 
   proc.stderr.on('data', (data) => {
-    console.error(`[AI:${bot.id} Error] ${data.toString().trim()}`);
+    const msg = data.toString().trim();
+    console.error(`[AI:${bot.id} Error] ${msg}`);
+    // Forward engine errors to the client so they appear in the UI
+    if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('401') || msg.toLowerCase().includes('fail') || msg.toLowerCase().includes('traceback')) {
+      io.emit(`bot:${bot.id}:engineError`, msg.slice(0, 300));
+    }
   });
 
   proc.on('close', (code) => {
