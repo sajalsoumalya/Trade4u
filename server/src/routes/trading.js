@@ -177,11 +177,29 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
 
     switch (provider) {
       case 'opencode':
-        models = [
-          { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-          { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-          { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-        ];
+        try {
+          const resp = await fetch('https://opencode.ai/zen/v1/models', {
+            headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            models = (data.data || []).map((m, i) => ({
+              id: m.id,
+              name: m.id,
+              cost: 'Free',
+              context: 256000,
+              maxOutput: 16384,
+              capabilities: ['reasoning', 'tools', 'vision', 'open weights'],
+            }));
+          }
+        } catch (_) { /* fall through */ }
+        if (models.length === 0) {
+          models = [
+            { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
+            { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
+            { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
+          ];
+        }
         break;
 
       case 'openai':
