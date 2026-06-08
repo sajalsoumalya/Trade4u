@@ -7,6 +7,7 @@ import { optionalAuth } from '../middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../../data');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const getFile = (name) => path.join(DATA_DIR, `${name}.json`);
@@ -32,7 +33,7 @@ let botProcess = null;
 
 function startBot(settings) {
   if (botProcess) return;
-  const scriptPath = path.join(process.cwd(), 'bot.py');
+  const scriptPath = path.join(PROJECT_ROOT, 'bot.py');
   const args = [
     scriptPath,
     '--symbols', ...settings.symbols,

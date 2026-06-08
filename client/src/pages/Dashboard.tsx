@@ -1,499 +1,249 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
-import { fetchCryptoPrices } from '../lib/api';
-import {
-  Wallet,
-  Activity,
-  Zap,
-  Shield,
-  Pause,
-  Coins,
-  RefreshCw,
-  Brain
-} from 'lucide-react';
+import { createChart, IChartApi, ISeriesApi, ColorType, CandlestickData, Time } from 'lightweight-charts';
+import { fetchCryptoKlines } from '../lib/api';
+import { TrendingUp, TrendingDown, BarChart3, Wallet, Snowflake, LineChart } from 'lucide-react';
 
 const cryptoList = [
-  { symbol: 'BTCUSDT', name: 'Bitcoin', icon: '₿' },
-  { symbol: 'ETHUSDT', name: 'Ethereum', icon: 'Ξ' },
-  { symbol: 'SOLUSDT', name: 'Solana', icon: '◎' },
-  { symbol: 'BNBUSDT', name: 'BNB', icon: '🔶' },
-  { symbol: 'XRPUSDT', name: 'Ripple', icon: '✕' },
-  { symbol: 'ADAUSDT', name: 'Cardano', icon: '₳' },
-  { symbol: 'DOGEUSDT', name: 'Dogecoin', icon: 'Ð' },
-  { symbol: 'AVAXUSDT', name: 'Avalanche', icon: '▲' },
-  { symbol: 'LINKUSDT', name: 'Chainlink', icon: '🔗' },
-  { symbol: 'DOTUSDT', name: 'Polkadot', icon: '●' },
+  { symbol: 'BTCUSDT', name: 'Bitcoin' },
+  { symbol: 'ETHUSDT', name: 'Ethereum' },
+  { symbol: 'SOLUSDT', name: 'Solana' },
+  { symbol: 'BNBUSDT', name: 'BNB' },
+  { symbol: 'XRPUSDT', name: 'Ripple' },
+];
+
+const intervals = [
+  { value: '1h', label: '1H' }, { value: '4h', label: '4H' }, { value: '1d', label: '1D' }, { value: '1w', label: '1W' },
 ];
 
 export default function Dashboard() {
-  const {
-    balance,
-    walletBalance,
-    aiTradingEnabled,
-    aiTradingPercent,
-    aiSymbols,
-    aiStopLoss,
-    aiTakeProfit,
-    setAiTradingEnabled,
-    setAiTradingPercent,
-    setAiSymbols,
-    setAiStopLoss,
-    setAiTakeProfit,
-  } = useAppStore();
+  const { walletBalance, bots } = useAppStore();
+  const totalPnl = bots.reduce((s, b) => s + b.totalPnl, 0);
+  const totalFrozen = bots.reduce((s, b) => s + b.frozenAmount, 0);
+  const bot = bots.length > 0 ? bots[0] : null;
+  const [prices, setPrices] = useState<Record<string, any>>({});
+  const [symbol, setSymbol] = useState('BTCUSDT');
+  const [interval, setInterval] = useState('1h');
 
-  const [cryptoPrices, setCryptoPrices] = useState<Record<string, any>>({});
-  const [selectedCrypto, setSelectedCrypto] = useState('BTCUSDT');
-  const [loading, setLoading] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chartContainer = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
-  const loadPrices = async () => {
-    setLoading(true);
-    try {
-      const prices = await fetchCryptoPrices(cryptoList.map(c => c.symbol));
-      const priceObj: Record<string, any> = {};
-      prices.forEach((p: any) => { priceObj[p.symbol] = p; });
-      setCryptoPrices(priceObj);
-    } catch (e) {
-      console.error('Failed to load prices:', e);
-    }
-    setLoading(false);
-  };
+  useEffect(() => {
+    if (!chartContainer.current) return;
+    chartRef.current = createChart(chartContainer.current, {
+      layout: { background: { type: ColorType.Solid, color: '#111827' }, textColor: '#6b7280' },
+      grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
+      crosshair: { mode: 1, vertLine: { width: 1, color: '#10b981', style: 2, labelBackgroundColor: '#10b981' }, horzLine: { width: 1, color: '#10b981', style: 2, labelBackgroundColor: '#10b981' } },
+      rightPriceScale: { borderColor: '#1f2937' },
+      timeScale: { borderColor: '#1f2937', timeVisible: true, secondsVisible: false },
+      width: chartContainer.current.clientWidth,
+      height: 400,
+    });
+    seriesRef.current = chartRef.current.addCandlestickSeries({
+      upColor: '#10b981', downColor: '#ef4444', borderUpColor: '#10b981', borderDownColor: '#ef4444', wickUpColor: '#10b981', wickDownColor: '#ef4444',
+    });
+    const handleResize = () => { if (chartRef.current && chartContainer.current) chartRef.current.applyOptions({ width: chartContainer.current.clientWidth }); };
+    window.addEventListener('resize', handleResize);
+    return () => { window.removeEventListener('resize', handleResize); chartRef.current?.remove(); };
+  }, []);
 
-  const priceChange = cryptoPrices[selectedCrypto]?.priceChangePercent || 0;
+  useEffect(() => { loadChartData(); }, [symbol, interval]);
 
-  const connectWebSocket = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
-
-    const symbols = cryptoList.map(c => c.symbol.toLowerCase());
-    const streams = symbols.map(s => `${s}@ticker`).join('/');
-    const wsUrl = `wss://stream.binance.com:9443/ws/${streams}`;
-
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      console.log('Dashboard WebSocket connected');
-    };
-
+  useEffect(() => {
+    const streams = cryptoList.map(c => `${c.symbol.toLowerCase()}@ticker`).join('/');
+    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${streams}`);
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-
         if (data.e === '24hrTicker') {
-          setCryptoPrices(prev => ({
-            ...prev,
-            [data.s]: {
-              symbol: data.s,
-              price: parseFloat(data.c),
-              priceChange: parseFloat(data.p),
-              priceChangePercent: parseFloat(data.P),
-              high24h: parseFloat(data.h),
-              low24h: parseFloat(data.l),
-              volume: parseFloat(data.v),
-              quoteVolume: parseFloat(data.q),
-            },
-          }));
+          setPrices(prev => ({ ...prev, [data.s]: { symbol: data.s, price: parseFloat(data.c), priceChange: parseFloat(data.p), priceChangePercent: parseFloat(data.P), high24h: parseFloat(data.h), low24h: parseFloat(data.l), quoteVolume: parseFloat(data.q) } }));
         }
-      } catch (e) {
-        console.error('WS message error:', e);
-      }
+      } catch {}
     };
-
-    ws.onclose = () => {
-      console.log('Dashboard WebSocket disconnected, reconnecting in 5s...');
-      wsRef.current = null;
-      reconnectTimerRef.current = setTimeout(connectWebSocket, 5000);
-    };
-
-    ws.onerror = (error) => {
-      console.error('Dashboard WebSocket error:', error);
-    };
-
-    wsRef.current = ws;
-  };
-
-  useEffect(() => {
-    connectWebSocket();
-    return () => {
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      wsRef.current?.close();
-      wsRef.current = null;
-    };
+    return () => ws.close();
   }, []);
 
-  const aiTradingAmount = (walletBalance * aiTradingPercent) / 100;
+  const loadChartData = async () => {
+    if (!symbol || !seriesRef.current) return;
+    try {
+      const data = await fetchCryptoKlines(symbol, interval, 150);
+      if (data) {
+        seriesRef.current.setData(data.map((k: any) => ({ time: Math.floor(k.time / 1000) as Time, open: k.open, high: k.high, low: k.low, close: k.close })));
+        chartRef.current?.timeScale().fitContent();
+      }
+    } catch {}
+  };
+
+  const price = prices[symbol];
+  const isPositive = price?.priceChangePercent >= 0;
+  const available = walletBalance - totalFrozen;
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Trading Dashboard</h1>
-          <p className="text-muted">AI-Powered Crypto Trading Platform</p>
+    <div className="space-y-5 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+        <span className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-primary/20 text-primary border border-primary/30">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />Live
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <p className="text-xs text-muted mb-1 flex items-center gap-1"><Wallet className="w-3 h-3" /> Total Balance</p>
+          <p className="text-xl font-bold text-white">${walletBalance.toLocaleString()}</p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="badge-success flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            Live Market
-          </span>
-          <button onClick={loadPrices} disabled={loading} className="btn-ghost">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <p className="text-xs text-muted mb-1 flex items-center gap-1"><Snowflake className="w-3 h-3 text-accent" /> Frozen by Bot</p>
+          <p className="text-xl font-bold text-accent">${totalFrozen.toLocaleString()}</p>
+        </div>
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <p className="text-xs text-muted mb-1 flex items-center gap-1"><LineChart className="w-3 h-3" /> Available</p>
+          <p className="text-xl font-bold text-white">${available.toLocaleString()}</p>
+        </div>
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <p className="text-xs text-muted mb-1">Bot P&L</p>
+          <p className={`text-xl font-bold ${totalPnl >= 0 ? 'text-primary' : 'text-secondary'}`}>
+            {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+          </p>
         </div>
       </div>
 
-      {/* Account Balance & AI Trading Setup */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Wallet Balance Card */}
-        <div className="card p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-              <Wallet className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <h3 className="text-sm text-muted">Account Balance</h3>
-              <p className="text-2xl font-bold text-white">${walletBalance.toLocaleString()}</p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted">Trading Balance</span>
-              <span className="text-sm font-medium text-white">${walletBalance.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted">Paper Balance</span>
-              <span className="text-sm font-medium text-white">${balance.toLocaleString()}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* AI Trading Setup Card */}
-        <div className="card p-6 bg-gradient-to-br from-accent/5 to-transparent border-accent/20">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center">
-              <Brain className="w-6 h-6 text-accent" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-white">AI Trading Agent</h3>
-              <p className="text-sm text-muted">Auto-trade with AI</p>
-            </div>
-          </div>
-
-          {/* Percentage Slider */}
-          <div className="mb-4">
-            <div className="flex justify-between mb-2">
-              <span className="text-sm text-muted">Investment Amount</span>
-              <span className="text-sm font-medium text-accent">{aiTradingPercent}% (${aiTradingAmount.toFixed(0)})</span>
-            </div>
-            <input
-              type="range"
-              min="5"
-              max="100"
-              value={aiTradingPercent}
-              onChange={(e) => setAiTradingPercent(parseInt(e.target.value))}
-              className="w-full h-2 bg-surface rounded-lg appearance-none cursor-pointer accent-accent"
-            />
-          </div>
-
-          {/* Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-background/50">
-            <div className="flex items-center gap-2">
-              <Zap className={`w-5 h-5 ${aiTradingEnabled ? 'text-accent' : 'text-muted'}`} />
-              <span className="font-medium text-white">Enable AI Trading</span>
-            </div>
-            <button
-              onClick={() => setAiTradingEnabled(!aiTradingEnabled)}
-              className={`w-12 h-6 rounded-full transition-colors ${
-                aiTradingEnabled ? 'bg-accent' : 'bg-surface'
-              }`}
-            >
-              <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                aiTradingEnabled ? 'translate-x-6' : 'translate-x-0.5'
-              }`} />
-            </button>
-          </div>
-        </div>
-
-        {/* Risk Settings Card */}
-        <div className="card p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-warning/20 to-warning/5 flex items-center justify-center">
-              <Shield className="w-6 h-6 text-warning" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-white">Risk Management</h3>
-              <p className="text-sm text-muted">Stop Loss & Take Profit</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm text-muted">Stop Loss</span>
-                <span className="text-sm font-medium text-secondary">{aiStopLoss}%</span>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+        <div className="lg:col-span-3 space-y-4">
+          <div className="bg-surface border border-border rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 overflow-x-auto">
+                {cryptoList.map(c => (
+                  <button key={c.symbol} onClick={() => setSymbol(c.symbol)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${symbol === c.symbol ? 'bg-primary text-white' : 'bg-background text-muted hover:text-white'}`}>
+                    {c.symbol.replace('USDT', '')}
+                  </button>
+                ))}
               </div>
-              <input
-                type="range"
-                min="1"
-                max="10"
-                value={aiStopLoss}
-                onChange={(e) => setAiStopLoss(parseInt(e.target.value))}
-                className="w-full h-2 bg-surface rounded-lg appearance-none cursor-pointer accent-secondary"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm text-muted">Take Profit</span>
-                <span className="text-sm font-medium text-primary">{aiTakeProfit}%</span>
+              <div className="flex items-center gap-1">
+                {intervals.map(int => (
+                  <button key={int.value} onClick={() => setInterval(int.value)}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-all ${interval === int.value ? 'bg-primary/20 text-primary' : 'text-muted hover:text-white'}`}>
+                    {int.label}
+                  </button>
+                ))}
               </div>
-              <input
-                type="range"
-                min="1"
-                max="20"
-                value={aiTakeProfit}
-                onChange={(e) => setAiTakeProfit(parseInt(e.target.value))}
-                className="w-full h-2 bg-surface rounded-lg appearance-none cursor-pointer accent-primary"
-              />
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Crypto Selection */}
-      <div className="card p-6">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Coins className="w-5 h-5 text-primary" />
-          Select Crypto Pairs for AI Trading
-        </h3>
-
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {cryptoList.map((crypto) => {
-            const price = cryptoPrices[crypto.symbol]?.price || 0;
-            const change = cryptoPrices[crypto.symbol]?.priceChangePercent || 0;
-            const isSelected = aiSymbols.includes(crypto.symbol);
-
-            return (
-              <button
-                key={crypto.symbol}
-                onClick={() => {
-                  if (isSelected) {
-                    setAiSymbols(aiSymbols.filter(s => s !== crypto.symbol));
-                  } else {
-                    setAiSymbols([...aiSymbols, crypto.symbol]);
-                  }
-                }}
-                className={`relative p-4 rounded-xl border-2 transition-all text-left ${
-                  isSelected
-                    ? 'border-accent bg-accent/10'
-                    : 'border-border hover:border-gray-600'
-                }`}
-              >
-                {isSelected && (
-                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-accent flex items-center justify-center">
-                    <Zap className="w-3 h-3 text-white" />
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xl">{crypto.icon}</span>
-                  <span className="font-semibold text-white">{crypto.name}</span>
+            {price && (
+              <div className="flex items-center gap-4 mb-3">
+                <div>
+                  <p className="text-lg font-bold text-white">${price.price > 1 ? price.price.toFixed(2) : price.price.toFixed(6)}</p>
+                  <p className={`text-xs font-medium flex items-center gap-1 ${isPositive ? 'text-primary' : 'text-secondary'}`}>
+                    {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                    {isPositive ? '+' : ''}{price.priceChangePercent?.toFixed(2)}%
+                  </p>
                 </div>
-
-                <p className="text-xs text-muted">{crypto.symbol}</p>
-                <p className="text-sm font-medium text-white">
-                  ${price > 0 ? (price > 1 ? price.toFixed(2) : price.toFixed(6)) : '...'}
-                </p>
-                <p className={`text-xs font-medium ${change >= 0 ? 'text-primary' : 'text-secondary'}`}>
-                  {change >= 0 ? '+' : ''}{change.toFixed(2)}%
-                </p>
-              </button>
-            );
-          })}
-        </div>
-
-        {aiSymbols.length > 0 && (
-          <div className="mt-4 p-3 rounded-xl bg-accent/5 border border-accent/20">
-            <p className="text-sm text-white">
-              <span className="text-accent font-medium">{aiSymbols.length}</span> pairs selected for AI trading:
-              <span className="text-muted ml-2">{aiSymbols.join(', ')}</span>
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Live Prices Grid */}
-      <div className="card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Activity className="w-5 h-5 text-primary" />
-            Live Market Prices
-          </h3>
-          <button onClick={loadPrices} disabled={loading} className="btn-ghost text-sm">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {cryptoList.slice(0, 10).map((crypto) => {
-            const price = cryptoPrices[crypto.symbol]?.price || 0;
-            const change = cryptoPrices[crypto.symbol]?.priceChangePercent || 0;
-            const volume = cryptoPrices[crypto.symbol]?.quoteVolume || 0;
-            const isSelected = selectedCrypto === crypto.symbol;
-
-            return (
-              <button
-                key={crypto.symbol}
-                onClick={() => setSelectedCrypto(crypto.symbol)}
-                className={`p-4 rounded-xl border-2 transition-all text-left ${
-                  isSelected
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border hover:border-gray-600'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-lg">{crypto.icon}</span>
-                  <span className={`text-xs font-medium ${change >= 0 ? 'text-primary' : 'text-secondary'}`}>
-                    {change >= 0 ? '+' : ''}{change.toFixed(2)}%
-                  </span>
+                <div className="flex gap-4 text-xs text-muted">
+                  <span>H: ${price.high24h?.toFixed(2)}</span>
+                  <span>L: ${price.low24h?.toFixed(2)}</span>
+                  <span>Vol: ${(price.quoteVolume / 1000000).toFixed(1)}M</span>
                 </div>
-                <p className="font-semibold text-white text-sm">{crypto.symbol.replace('USDT', '')}</p>
-                <p className="text-lg font-bold text-white">
-                  ${price > 0 ? (price > 1 ? price.toFixed(2) : price.toFixed(6)) : '...'}
-                </p>
-                <p className="text-xs text-muted mt-1">
-                  Vol: ${volume > 1000000 ? (volume / 1000000).toFixed(1) + 'M' : volume.toFixed(0)}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Selected Crypto Detail */}
-      {selectedCrypto && cryptoPrices[selectedCrypto] && (
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-3xl">
-                {cryptoList.find(c => c.symbol === selectedCrypto)?.icon || '₿'}
               </div>
-              <div>
-                <h3 className="text-2xl font-bold text-white">
-                  {cryptoList.find(c => c.symbol === selectedCrypto)?.name || selectedCrypto}
-                </h3>
-                <p className="text-muted">{selectedCrypto}</p>
-              </div>
-            </div>
-
-            <div className="text-right">
-              <p className="text-3xl font-bold text-white">
-                ${cryptoPrices[selectedCrypto]?.price > 1
-                  ? cryptoPrices[selectedCrypto]?.price.toFixed(2)
-                  : cryptoPrices[selectedCrypto]?.price.toFixed(6)}
-              </p>
-              <p className={`text-lg font-medium ${priceChange >= 0 ? 'text-primary' : 'text-secondary'}`}>
-                {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-background/50">
-              <p className="text-sm text-muted mb-1">24h High</p>
-              <p className="text-lg font-semibold text-primary">
-                ${cryptoPrices[selectedCrypto]?.high24h?.toFixed(2) || '...'}
-              </p>
-            </div>
-            <div className="p-4 rounded-xl bg-background/50">
-              <p className="text-sm text-muted mb-1">24h Low</p>
-              <p className="text-lg font-semibold text-secondary">
-                ${cryptoPrices[selectedCrypto]?.low24h?.toFixed(2) || '...'}
-              </p>
-            </div>
-            <div className="p-4 rounded-xl bg-background/50">
-              <p className="text-sm text-muted mb-1">24h Volume</p>
-              <p className="text-lg font-semibold text-white">
-                ${(cryptoPrices[selectedCrypto]?.quoteVolume / 1000000).toFixed(2)}M
-              </p>
-            </div>
-            <div className="p-4 rounded-xl bg-background/50">
-              <p className="text-sm text-muted mb-1">Price Change</p>
-              <p className={`text-lg font-semibold ${cryptoPrices[selectedCrypto]?.priceChange >= 0 ? 'text-primary' : 'text-secondary'}`}>
-                {cryptoPrices[selectedCrypto]?.priceChange >= 0 ? '+' : ''}
-                ${cryptoPrices[selectedCrypto]?.priceChange?.toFixed(2) || '...'}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 flex gap-3">
-            {aiSymbols.includes(selectedCrypto) ? (
-              <button className="btn-ghost flex items-center gap-2">
-                <Zap className="w-4 h-4 text-accent" />
-                AI Trading Enabled
-              </button>
-            ) : (
-              <button
-                onClick={() => setAiSymbols([...aiSymbols, selectedCrypto])}
-                className="btn-accent flex items-center gap-2"
-              >
-                <Brain className="w-4 h-4" />
-                Add to AI Trading
-              </button>
             )}
-            <a href="/analysis" className="btn-primary flex items-center gap-2">
-              <Activity className="w-4 h-4" />
-              Run AI Analysis
-            </a>
-          </div>
-        </div>
-      )}
-
-      {/* AI Trading Status */}
-      {aiTradingEnabled && aiSymbols.length > 0 && (
-        <div className="card p-6 border-accent/30 bg-gradient-to-br from-accent/5 to-transparent">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center animate-pulse">
-                <Brain className="w-5 h-5 text-accent" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-white">AI Trading Agent Active</h3>
-                <p className="text-sm text-muted">
-                  Analyzing {aiSymbols.length} pairs with ${aiTradingAmount.toFixed(0)} from your wallet
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setAiTradingEnabled(false)}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <Pause className="w-4 h-4" />
-              Stop AI Trading
-            </button>
+            <div ref={chartContainer} className="w-full" />
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-3 rounded-xl bg-background/50 text-center">
-              <p className="text-xs text-muted">Trading Amount</p>
-              <p className="text-lg font-bold text-accent">${aiTradingAmount.toFixed(0)}</p>
-            </div>
-            <div className="p-3 rounded-xl bg-background/50 text-center">
-              <p className="text-xs text-muted">Pairs</p>
-              <p className="text-lg font-bold text-white">{aiSymbols.length}</p>
-            </div>
-            <div className="p-3 rounded-xl bg-background/50 text-center">
-              <p className="text-xs text-muted">Stop Loss</p>
-              <p className="text-lg font-bold text-secondary">{aiStopLoss}%</p>
-            </div>
-            <div className="p-3 rounded-xl bg-background/50 text-center">
-              <p className="text-xs text-muted">Take Profit</p>
-              <p className="text-lg font-bold text-primary">{aiTakeProfit}%</p>
+          <div className="bg-surface border border-border rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-primary" /> Market Prices
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {cryptoList.map(c => {
+                const p = prices[c.symbol];
+                if (!p) return null;
+                return (
+                  <button key={c.symbol} onClick={() => setSymbol(c.symbol)}
+                    className={`p-3 rounded-lg border transition-all text-left ${symbol === c.symbol ? 'border-primary bg-primary/5' : 'border-border hover:border-gray-600'}`}>
+                    <p className="text-xs text-muted">{c.symbol.replace('USDT', '')}</p>
+                    <p className="text-sm font-semibold text-white">${p.price > 1 ? p.price.toFixed(2) : p.price.toFixed(6)}</p>
+                    <p className={`text-xs font-medium ${p.priceChangePercent >= 0 ? 'text-primary' : 'text-secondary'}`}>
+                      {p.priceChangePercent >= 0 ? '+' : ''}{p.priceChangePercent.toFixed(2)}%
+                    </p>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
-      )}
+
+        <div className="space-y-4">
+          <div className="bg-surface border border-border rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-white mb-3">Trading Bot</h3>
+            {bot ? (
+              <>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted">Status</span>
+                    <span className={bot.status === 'running' ? 'text-primary' : 'text-muted'}>{bot.status === 'running' ? 'Running' : 'Stopped'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">Pairs</span>
+                    <span className="text-white">{bot.symbols.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">Allocation</span>
+                    <span className="text-white">{bot.allocationType === 'percentage' ? `${bot.allocationValue}%` : `$${bot.allocationValue}`}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">Positions</span>
+                    <span className="text-white">{bot.positions.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">Trades</span>
+                    <span className="text-white">{bot.closedTrades}</span>
+                  </div>
+                </div>
+                <a href="/trading" className="mt-4 block text-center py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-all">
+                  Manage Bot
+                </a>
+              </>
+            ) : (
+              <p className="text-sm text-muted py-2">No bots created yet</p>
+            )}
+          </div>
+
+          {bot && bot.positions.length > 0 && (
+            <div className="bg-surface border border-border rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-white mb-3">Open Positions</h3>
+              <div className="space-y-2">
+                {bot.positions.slice(0, 3).map(pos => {
+                  const cp = prices[pos.symbol]?.price || pos.entryPrice;
+                  const pnl = pos.type === 'sell' ? (pos.entryPrice - cp) * pos.quantity : (cp - pos.entryPrice) * pos.quantity;
+                  return (
+                    <div key={pos.id} className="flex items-center justify-between p-2 rounded-lg bg-background/50">
+                      <div>
+                        <p className="text-sm font-medium text-white">{pos.symbol.replace('USDT', '')}</p>
+                        <p className="text-xs text-muted">{pos.type.toUpperCase()} {pos.quantity}</p>
+                      </div>
+                      <p className={`text-sm font-semibold ${pnl >= 0 ? 'text-primary' : 'text-secondary'}`}>
+                        {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-surface border border-border rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-white mb-3">Quick Actions</h3>
+            <div className="space-y-2">
+              <a href="/trading" className="block text-center py-2 rounded-lg bg-accent/10 text-accent text-sm font-medium hover:bg-accent/20 transition-all">
+                Configure Bot
+              </a>
+              <a href="/settings" className="block text-center py-2 rounded-lg bg-background text-muted text-sm font-medium hover:bg-white/5 transition-all border border-border">
+                Settings
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

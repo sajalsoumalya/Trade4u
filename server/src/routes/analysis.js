@@ -7,6 +7,7 @@ import { optionalAuth } from '../middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../../data');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../');
 const analysesFile = path.join(DATA_DIR, 'analyses.json');
 
 if (!fs.existsSync(DATA_DIR)) {
@@ -54,7 +55,7 @@ router.post('/run', optionalAuth, async (req, res) => {
     io.emit(`analysis:${id}`, { status: 'starting' });
 
     const scriptPath = process.env.PYTHON_ANALYSIS_SCRIPT ||
-      path.join(process.cwd(), 'main.py');
+      path.join(PROJECT_ROOT, 'main.py');
 
     const args = [scriptPath, '--ticker', symbol, '--date', analysisDate];
     if (provider) args.push('--provider', provider);
