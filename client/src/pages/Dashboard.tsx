@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
 import { createChart, IChartApi, ISeriesApi, ColorType, CandlestickData, Time } from 'lightweight-charts';
 import { fetchCryptoKlines } from '../lib/api';
-import { TrendingUp, TrendingDown, BarChart3, Wallet, Snowflake, LineChart } from 'lucide-react';
+import { TrendingUp, TrendingDown, BarChart3, Wallet, Snowflake, LineChart, Trophy, Target, PieChart, Activity } from 'lucide-react';
 
 const cryptoList = [
   { symbol: 'BTCUSDT', name: 'Bitcoin' },
@@ -20,11 +20,16 @@ export default function Dashboard() {
   const { walletBalance, bots } = useAppStore();
   const totalPnl = bots.reduce((s, b) => s + b.totalPnl, 0);
   const totalFrozen = bots.reduce((s, b) => s + b.frozenAmount, 0);
-  const bot = bots.length > 0 ? bots[0] : null;
+  const totalTrades = bots.reduce((s, b) => s + b.closedTrades, 0);
+  const totalWins = bots.reduce((s, b) => s + b.winningTrades, 0);
+  const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100) : 0;
+  const totalPositions = bots.reduce((s, b) => s + b.positions.length, 0);
+  const available = walletBalance - totalFrozen;
+  const bestBot = [...bots].sort((a, b) => b.totalPnl - a.totalPnl)[0];
+
   const [prices, setPrices] = useState<Record<string, any>>({});
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [interval, setInterval] = useState('1h');
-
   const chartContainer = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -77,7 +82,6 @@ export default function Dashboard() {
 
   const price = prices[symbol];
   const isPositive = price?.priceChangePercent >= 0;
-  const available = walletBalance - totalFrozen;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -88,27 +92,65 @@ export default function Dashboard() {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Portfolio Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         <div className="bg-surface border border-border rounded-xl p-4">
           <p className="text-xs text-muted mb-1 flex items-center gap-1"><Wallet className="w-3 h-3" /> Total Balance</p>
           <p className="text-xl font-bold text-white">${walletBalance.toLocaleString()}</p>
         </div>
         <div className="bg-surface border border-border rounded-xl p-4">
-          <p className="text-xs text-muted mb-1 flex items-center gap-1"><Snowflake className="w-3 h-3 text-accent" /> Frozen by Bot</p>
+          <p className="text-xs text-muted mb-1 flex items-center gap-1"><Snowflake className="w-3 h-3 text-accent" /> Frozen</p>
           <p className="text-xl font-bold text-accent">${totalFrozen.toLocaleString()}</p>
         </div>
         <div className="bg-surface border border-border rounded-xl p-4">
-          <p className="text-xs text-muted mb-1 flex items-center gap-1"><LineChart className="w-3 h-3" /> Available</p>
+          <p className="text-xs text-muted mb-1 flex items-center gap-1"><Activity className="w-3 h-3" /> Available</p>
           <p className="text-xl font-bold text-white">${available.toLocaleString()}</p>
         </div>
         <div className="bg-surface border border-border rounded-xl p-4">
-          <p className="text-xs text-muted mb-1">Bot P&L</p>
-          <p className={`text-xl font-bold ${totalPnl >= 0 ? 'text-primary' : 'text-secondary'}`}>
-            {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
-          </p>
+          <p className="text-xs text-muted mb-1 flex items-center gap-1"><LineChart className="w-3 h-3" /> Total P&L</p>
+          <p className={`text-xl font-bold ${totalPnl >= 0 ? 'text-primary' : 'text-secondary'}`}>{totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</p>
+        </div>
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <p className="text-xs text-muted mb-1 flex items-center gap-1"><Target className="w-3 h-3 text-primary" /> Win Rate</p>
+          <p className={`text-xl font-bold ${winRate >= 50 ? 'text-primary' : 'text-secondary'}`}>{winRate.toFixed(1)}%</p>
+        </div>
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <p className="text-xs text-muted mb-1 flex items-center gap-1"><Trophy className="w-3 h-3 text-accent" /> Best Bot</p>
+          <p className="text-xl font-bold text-white truncate">{bestBot ? bestBot.name : '--'}</p>
         </div>
       </div>
 
+      {/* Per-Bot Performance Bars */}
+      {bots.length > 0 && (
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-primary" /> Bot Performance</h3>
+          <div className="space-y-2">
+            {bots.map(b => {
+              const maxPnl = Math.max(...bots.map(x => Math.abs(x.totalPnl)), 1);
+              const barPct = Math.abs(b.totalPnl) / maxPnl * 100;
+              return (
+                <div key={b.id} className="flex items-center gap-3">
+                  <span className="text-xs text-white w-20 truncate">{b.name}</span>
+                  <div className="flex-1 h-5 bg-[#1E2329] rounded overflow-hidden">
+                    <div className="h-full rounded" style={{
+                      width: `${barPct}%`,
+                      backgroundColor: b.totalPnl >= 0 ? '#0ECB81' : '#F6465D',
+                      marginLeft: b.totalPnl < 0 ? 'auto' : undefined,
+                      float: b.totalPnl >= 0 ? 'left' : 'right',
+                    }} />
+                  </div>
+                  <span className={`text-xs font-mono w-20 text-right ${b.totalPnl >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
+                    {b.totalPnl >= 0 ? '+' : ''}${b.totalPnl.toFixed(2)}
+                  </span>
+                  <span className="text-[10px] text-[#848E9C] w-16 text-right">{b.positions.length} pos</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
         <div className="lg:col-span-3 space-y-4">
           <div className="bg-surface border border-border rounded-xl p-4">
@@ -174,59 +216,57 @@ export default function Dashboard() {
 
         <div className="space-y-4">
           <div className="bg-surface border border-border rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-white mb-3">Trading Bot</h3>
-            {bot ? (
-              <>
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-muted">Status</span>
-                    <span className={bot.status === 'running' ? 'text-primary' : 'text-muted'}>{bot.status === 'running' ? 'Running' : 'Stopped'}</span>
+            <h3 className="text-sm font-semibold text-white mb-3">Bots Overview</h3>
+            {bots.length > 0 ? (
+              <div className="space-y-3">
+                {bots.map(b => (
+                  <div key={b.id} className="p-3 rounded-lg bg-background/50 border border-border">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-white">{b.name}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${b.status === 'running' ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#2B3139] text-[#848E9C]'}`}>
+                        {b.status === 'running' ? 'Running' : 'Stopped'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs text-[#848E9C]">
+                      <span>{b.symbols.length} pairs</span>
+                      <span>{b.positions.length} open</span>
+                      <span className={b.totalPnl >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}>
+                        {b.totalPnl >= 0 ? '+' : ''}${b.totalPnl.toFixed(2)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted">Pairs</span>
-                    <span className="text-white">{bot.symbols.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted">Allocation</span>
-                    <span className="text-white">{bot.allocationType === 'percentage' ? `${bot.allocationValue}%` : `$${bot.allocationValue}`}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted">Positions</span>
-                    <span className="text-white">{bot.positions.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted">Trades</span>
-                    <span className="text-white">{bot.closedTrades}</span>
-                  </div>
-                </div>
-                <a href="/trading" className="mt-4 block text-center py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-all">
-                  Manage Bot
+                ))}
+                <a href="/trading" className="block text-center py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-all">
+                  Manage Bots
                 </a>
-              </>
+              </div>
             ) : (
-              <p className="text-sm text-muted py-2">No bots created yet</p>
+              <div>
+                <p className="text-sm text-muted py-2">No bots created yet</p>
+                <a href="/trading" className="block text-center py-2 rounded-lg bg-accent/10 text-accent text-sm font-medium hover:bg-accent/20 transition-all">
+                  Create Bot
+                </a>
+              </div>
             )}
           </div>
 
-          {bot && bot.positions.length > 0 && (
+          {bots.length > 0 && (
             <div className="bg-surface border border-border rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-white mb-3">Open Positions</h3>
-              <div className="space-y-2">
-                {bot.positions.slice(0, 3).map(pos => {
-                  const cp = prices[pos.symbol]?.price || pos.entryPrice;
-                  const pnl = pos.type === 'sell' ? (pos.entryPrice - cp) * pos.quantity : (cp - pos.entryPrice) * pos.quantity;
-                  return (
-                    <div key={pos.id} className="flex items-center justify-between p-2 rounded-lg bg-background/50">
-                      <div>
-                        <p className="text-sm font-medium text-white">{pos.symbol.replace('USDT', '')}</p>
-                        <p className="text-xs text-muted">{pos.type.toUpperCase()} {pos.quantity}</p>
-                      </div>
-                      <p className={`text-sm font-semibold ${pnl >= 0 ? 'text-primary' : 'text-secondary'}`}>
-                        {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
-                      </p>
-                    </div>
-                  );
-                })}
+              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2"><PieChart className="w-4 h-4 text-accent" /> Win/Loss</h3>
+              <div className="flex items-center gap-3">
+                <div className="relative w-16 h-16">
+                  <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
+                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#2B3139" strokeWidth="2" />
+                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#0ECB81" strokeWidth="2"
+                      strokeDasharray={`${winRate} ${100 - winRate}`} strokeLinecap="round" />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">{winRate.toFixed(0)}%</span>
+                </div>
+                <div className="text-xs space-y-1">
+                  <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[#0ECB81]" />Wins: {totalWins}</div>
+                  <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[#F6465D]" />Losses: {totalTrades - totalWins}</div>
+                  <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[#848E9C]" />Total: {totalTrades}</div>
+                </div>
               </div>
             </div>
           )}
@@ -235,7 +275,7 @@ export default function Dashboard() {
             <h3 className="text-sm font-semibold text-white mb-3">Quick Actions</h3>
             <div className="space-y-2">
               <a href="/trading" className="block text-center py-2 rounded-lg bg-accent/10 text-accent text-sm font-medium hover:bg-accent/20 transition-all">
-                Configure Bot
+                Configure Bots
               </a>
               <a href="/settings" className="block text-center py-2 rounded-lg bg-background text-muted text-sm font-medium hover:bg-white/5 transition-all border border-border">
                 Settings

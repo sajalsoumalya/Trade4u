@@ -47,6 +47,10 @@ export interface Bot {
   interval: number;
   closedTrades: number;
   winningTrades: number;
+  engineError?: string;
+  botProvider?: string;
+  botQuickModel?: string;
+  botDeepModel?: string;
 }
 
 interface AppState {
@@ -71,6 +75,7 @@ interface AppState {
   closePosition: (botId: string, posId: string, closePrice: number, status?: 'closed' | 'sl' | 'tp' | 'stopped') => void;
   closeAllPositions: (botId: string, prices: Record<string, number>) => void;
   updatePositionSLTP: (botId: string, posId: string, sl?: number, tp?: number) => void;
+  updateBot: (id: string, changes: Partial<Bot>) => void;
   updateBotSLTP: (botId: string, sl: number, tp: number) => void;
 }
 
@@ -259,6 +264,12 @@ export const useAppStore = create<AppState>()(
             ...b,
             positions: b.positions.map(p => p.id === posId ? { ...p, stopLoss: sl, takeProfit: tp } : p),
           } : b),
+        });
+      },
+
+      updateBot: (id, changes) => {
+        set({
+          bots: get().bots.map(b => b.id === id ? { ...b, ...changes } : b),
         });
       },
 

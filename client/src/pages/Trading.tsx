@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { useAppStore, Bot } from '../store/appStore';
 import { fetchCryptoPrices, startBotEngine, stopBotEngine } from '../lib/api';
 import { io } from 'socket.io-client';
-import { Plus, Play, Square, XCircle, Trash2, ChevronRight, ArrowLeft, TrendingUp, TrendingDown, Settings2, Zap, BarChart3, Wallet, History, PencilLine, Check, X, Terminal } from 'lucide-react';
+import { useToast } from '../components/Toast';
+import { Plus, Play, Square, XCircle, Trash2, ChevronRight, ArrowLeft, TrendingUp, TrendingDown, Settings2, Zap, BarChart3, Wallet, History, PencilLine, Check, X, Terminal, Edit3, Save } from 'lucide-react';
 
 const allPairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
 const PAIR_NAMES: Record<string, string> = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', SOLUSDT: 'SOL', BNBUSDT: 'BNB', XRPUSDT: 'XRP', ADAUSDT: 'ADA', DOGEUSDT: 'DOGE' };
 
 export default function Trading() {
-  const { bots, walletBalance, createBot, deleteBot, startBot, stopBot, closePosition, closeAllPositions, addPosition, updatePositionSLTP, updateBotSLTP } = useAppStore();
+  const { bots, walletBalance, createBot, deleteBot, startBot, stopBot, closePosition, closeAllPositions, addPosition, updatePositionSLTP, updateBotSLTP, updateBot } = useAppStore();
   const [prices, setPrices] = useState<Record<string, any>>({});
   const [view, setView] = useState<'list' | 'create' | 'detail'>('list');
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
@@ -19,6 +20,12 @@ export default function Trading() {
   const [editTP, setEditTP] = useState('');
   const [botLogs, setBotLogs] = useState<Record<string, any[]>>({});
   const logsRef = useRef<Record<string, any[]>>({});
+  const [editingBotId, setEditingBotId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPairs, setEditPairs] = useState<string[]>([]);
+  const [editAllocType, setEditAllocType] = useState<'percentage' | 'fixed'>('percentage');
+  const [editAllocValue, setEditAllocValue] = useState(10);
+  const [editInterval, setEditInterval] = useState(5);
   const [editingBotSL, setEditingBotSL] = useState(false);
   const [editingBotTP, setEditingBotTP] = useState(false);
   const [botSLEdit, setBotSLEdit] = useState(0);
@@ -34,6 +41,7 @@ export default function Trading() {
   const [formSLEnabled, setFormSLEnabled] = useState(false);
   const [formTPEnabled, setFormTPEnabled] = useState(false);
 
+  const { addToast } = useToast();
   const socketRef = useRef<any>(null);
 
   useEffect(() => {
@@ -57,13 +65,24 @@ export default function Trading() {
               symbol: signal.symbol, type: 'buy',
               quantity: 0.001, entryPrice: signal.price,
             });
+            addToast('success', `${bot.name}: Bought ${signal.symbol} @ $${signal.price.toFixed(2)}`);
           } else if (signal.action === 'sell') {
             const pos = bot.positions.find(p => p.symbol === signal.symbol);
-            if (pos) closePosition(bot.id, pos.id, signal.price);
+            if (pos) {
+              closePosition(bot.id, pos.id, signal.price);
+              addToast('info', `${bot.name}: Sold ${signal.symbol} @ $${signal.price.toFixed(2)}`);
+            }
           }
         });
         socket.on(`bot:${bot.id}:status`, (status: any) => {
-          console.log(`[Bot ${bot.id}] AI engine status:`, status);
+          if (status.running) {
+            addToast('success', `${bot.name}: AI engine started`);
+          } else if (status.error) {
+            addToast('error', `${bot.name}: Engine error — ${status.error}`);
+            updateBot(bot.id, { engineError: status.error });
+          } else {
+            addToast('warning', `${bot.name}: AI engine stopped`);
+          }
         });
         // Collect decision engine logs
         socket.on(`bot:${bot.id}:log`, (log: any) => {
@@ -98,6 +117,10 @@ export default function Trading() {
 
   const formatPrice = (p: number) => p > 1 ? p.toFixed(2) : p.toFixed(6);
   const calcFrozen = (type: 'percentage' | 'fixed', val: number) => type === 'percentage' ? Math.round(walletBalance * (val / 100)) : Math.min(val, walletBalance);
+  const unrealizedPnl = (bot: Bot) => bot.positions.reduce((sum, pos) => {
+    const cp = prices[pos.symbol]?.price || pos.entryPrice;
+    return sum + (pos.type === 'sell' ? (pos.entryPrice - cp) * pos.quantity : (cp - pos.entryPrice) * pos.quantity);
+  }, 0);
 
   const handleCreate = () => {
     if (!formName || formSymbols.length === 0) return;
@@ -175,7 +198,8 @@ export default function Trading() {
                       <th className="text-left p-4 font-medium">Bot</th>
                       <th className="text-left p-4 font-medium">Status</th>
                       <th className="text-right p-4 font-medium">Allocated</th>
-                      <th className="text-right p-4 font-medium">PNL</th>
+                      <th className="text-right p-4 font-medium">Realized PNL</th>
+                      <th className="text-right p-4 font-medium">Unrealized PNL</th>
                       <th className="text-right p-4 font-medium">ROI</th>
                       <th className="text-right p-4 font-medium">Positions</th>
                       <th className="text-right p-4 font-medium">Actions</th>
@@ -201,6 +225,9 @@ export default function Trading() {
                           <td className="p-4 text-right text-sm font-mono text-white">${bot.frozenAmount.toLocaleString()}</td>
                           <td className={`p-4 text-right text-sm font-mono ${bot.totalPnl >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
                             {bot.totalPnl >= 0 ? '+' : ''}${bot.totalPnl.toFixed(2)}
+                          </td>
+                          <td className={`p-4 text-right text-sm font-mono ${unrealizedPnl(bot) >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
+                            {unrealizedPnl(bot) >= 0 ? '+' : ''}${unrealizedPnl(bot).toFixed(2)}
                           </td>
                           <td className={`p-4 text-right text-sm font-mono ${roi >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
                             {roi >= 0 ? '+' : ''}{roi.toFixed(2)}%
@@ -241,8 +268,9 @@ export default function Trading() {
                         <span className={`inline-flex items-center gap-1 ${bot.status === 'running' ? 'text-[#0ECB81]' : 'text-[#848E9C]'}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${bot.status === 'running' ? 'bg-[#0ECB81]' : 'bg-[#848E9C]'}`} />{bot.status === 'running' ? 'Running' : 'Stopped'}
                         </span>
-                        <span className="text-[#848E9C]">${bot.frozenAmount.toLocaleString()}</span>
-                        <span className={bot.totalPnl >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}>{bot.totalPnl >= 0 ? '+' : ''}${bot.totalPnl.toFixed(2)}</span>
+                        <span className="text-[#848E9C]">$${bot.frozenAmount.toLocaleString()}</span>
+                        <span className={bot.totalPnl >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}>R: {bot.totalPnl >= 0 ? '+' : ''}${bot.totalPnl.toFixed(2)}</span>
+                        <span className={unrealizedPnl(bot) >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}>U: {unrealizedPnl(bot) >= 0 ? '+' : ''}${unrealizedPnl(bot).toFixed(2)}</span>
                       </div>
                       <div className="flex gap-2 mt-3" onClick={e => e.stopPropagation()}>
                         {bot.status === 'running' ? (
@@ -517,15 +545,21 @@ export default function Trading() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <div className="bg-[#1E2329] border border-[#2B3139] rounded-lg p-4">
           <p className="text-xs text-[#848E9C] mb-1">Allocated</p>
           <p className="text-lg font-bold font-mono text-white">${bot.frozenAmount.toLocaleString()}</p>
         </div>
         <div className="bg-[#1E2329] border border-[#2B3139] rounded-lg p-4">
-          <p className="text-xs text-[#848E9C] mb-1">PNL</p>
+          <p className="text-xs text-[#848E9C] mb-1">Realized PNL</p>
           <p className={`text-lg font-bold font-mono ${bot.totalPnl >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
             {bot.totalPnl >= 0 ? '+' : ''}${bot.totalPnl.toFixed(2)}
+          </p>
+        </div>
+        <div className="bg-[#1E2329] border border-[#2B3139] rounded-lg p-4">
+          <p className="text-xs text-[#848E9C] mb-1">Unrealized PNL</p>
+          <p className={`text-lg font-bold font-mono ${unrealizedPnl(bot) >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
+            {unrealizedPnl(bot) >= 0 ? '+' : ''}${unrealizedPnl(bot).toFixed(2)}
           </p>
         </div>
         <div className="bg-[#1E2329] border border-[#2B3139] rounded-lg p-4">
@@ -565,18 +599,34 @@ export default function Trading() {
             <Play className="w-4 h-4" /> Start Bot
           </button>
         )}
+        <button onClick={() => { setEditingBotId(bot.id); setEditName(bot.name); setEditPairs([...bot.symbols]); setEditAllocType(bot.allocationType); setEditAllocValue(bot.allocationValue); setEditInterval(bot.interval); }} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2B3139] text-[#848E9C] text-sm font-medium hover:text-white transition-all">
+          <Edit3 className="w-4 h-4" /> Edit
+        </button>
         <button onClick={() => handleDeleteBot(bot.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2B3139] text-[#848E9C] text-sm font-medium hover:text-[#F6465D] transition-all">
           <Trash2 className="w-4 h-4" /> Delete
         </button>
       </div>
 
+      {/* Engine Error */}
+      {bot.engineError && (
+        <div className="bg-[#F6465D]/10 border border-[#F6465D]/30 rounded-lg px-4 py-3 flex items-center gap-2">
+          <XCircle className="w-4 h-4 text-[#F6465D] flex-shrink-0" />
+          <p className="text-xs text-[#F6465D] flex-1">{bot.engineError}</p>
+          <button onClick={() => updateBot(bot.id, { engineError: undefined })} className="text-[#848E9C] hover:text-white"><X className="w-3 h-3" /></button>
+        </div>
+      )}
+
       {/* Editable Bot Config */}
       <div className="bg-[#1E2329] border border-[#2B3139] rounded-lg p-4">
         <h3 className="text-sm font-semibold text-white mb-3">Bot Configuration</h3>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
             <p className="text-xs text-[#848E9C]">Allocation</p>
             <p className="text-white font-mono">{bot.allocationType === 'percentage' ? `${bot.allocationValue}%` : `$${bot.allocationValue}`}</p>
+          </div>
+          <div>
+            <p className="text-xs text-[#848E9C]">Interval</p>
+            <p className="text-white font-mono">{bot.interval} min</p>
           </div>
           <div>
             <p className="text-xs text-[#848E9C]">Stop Loss</p>
@@ -629,6 +679,13 @@ export default function Trading() {
             <p className="text-white font-mono text-xs">{new Date(bot.createdAt).toLocaleDateString()}</p>
           </div>
         </div>
+        {bot.botProvider && (
+          <div className="mt-3 pt-3 border-t border-[#2B3139] grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+            <div><p className="text-xs text-[#848E9C]">Provider</p><p className="text-white font-mono text-xs">{bot.botProvider}</p></div>
+            {bot.botQuickModel && <div><p className="text-xs text-[#848E9C]">Quick Model</p><p className="text-white font-mono text-xs">{bot.botQuickModel}</p></div>}
+            {bot.botDeepModel && <div><p className="text-xs text-[#848E9C]">Deep Model</p><p className="text-white font-mono text-xs">{bot.botDeepModel}</p></div>}
+          </div>
+        )}
       </div>
 
       {/* Tabs: Open Positions | Position History | Logs */}
@@ -938,6 +995,57 @@ export default function Trading() {
           </>
         )}
       </div>
+
+      {/* Edit Bot Modal */}
+      {editingBotId === bot.id && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setEditingBotId(null)}>
+          <div className="bg-[#1E2329] border border-[#2B3139] rounded-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-white mb-4">Edit Bot</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-[#848E9C] mb-1 block">Name</label>
+                <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                  className="w-full bg-[#0B0E11] border border-[#2B3139] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#F0B90B]" />
+              </div>
+              <div>
+                <label className="text-xs text-[#848E9C] mb-1 block">Pairs</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {allPairs.map(p => (
+                    <button key={p} onClick={() => setEditPairs(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}
+                      className={`px-2 py-1 rounded text-xs font-medium border transition-all ${editPairs.includes(p) ? 'border-[#F0B90B] bg-[#F0B90B]/10 text-white' : 'border-[#2B3139] text-[#848E9C] hover:text-white'}`}>
+                      {PAIR_NAMES[p] || p.replace('USDT', '')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-[#848E9C] mb-1 block">Allocation</label>
+                  <select value={editAllocType} onChange={e => setEditAllocType(e.target.value as any)}
+                    className="w-full bg-[#0B0E11] border border-[#2B3139] rounded px-2 py-1.5 text-white text-xs">
+                    <option value="percentage">Percentage</option>
+                    <option value="fixed">Fixed</option>
+                  </select>
+                  <input type="number" value={editAllocValue} onChange={e => setEditAllocValue(parseInt(e.target.value))}
+                    className="w-full mt-1 bg-[#0B0E11] border border-[#2B3139] rounded px-2 py-1.5 text-white text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-[#848E9C] mb-1 block">Interval (min)</label>
+                  <input type="number" min="1" max="60" value={editInterval} onChange={e => setEditInterval(parseInt(e.target.value))}
+                    className="w-full bg-[#0B0E11] border border-[#2B3139] rounded px-2 py-1.5 text-white text-sm" />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setEditingBotId(null)} className="flex-1 py-2 rounded-lg bg-[#2B3139] text-white text-sm font-medium">Cancel</button>
+              <button onClick={() => { updateBot(bot.id, { name: editName, symbols: editPairs, allocationType: editAllocType, allocationValue: editAllocValue, interval: editInterval }); setEditingBotId(null); addToast('success', `Bot "${editName}" updated`); }}
+                disabled={!editName || editPairs.length === 0} className="flex-1 py-2 rounded-lg bg-[#F0B90B] text-black text-sm font-semibold disabled:opacity-40">
+                <Save className="w-4 h-4 inline mr-1" /> Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bot Config Summary (read-only) */}
       <div className="bg-[#1E2329] border border-[#2B3139] rounded-lg p-4">

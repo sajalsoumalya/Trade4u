@@ -18,6 +18,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Trading from './pages/Trading';
 import SettingsPage from './pages/Settings';
+import { ToastProvider } from './components/Toast';
 
 let auth: any = null;
 try {
@@ -143,13 +144,15 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />} />
-        <Route path="/dashboard" element={isAuthenticated ? <Layout user={user}><Dashboard /></Layout> : <Navigate to="/login" />} />
-        <Route path="/trading" element={isAuthenticated ? <Layout user={user}><Trading /></Layout> : <Navigate to="/login" />} />
-        <Route path="/settings" element={isAuthenticated ? <Layout user={user}><SettingsPage /></Layout> : <Navigate to="/login" />} />
-        <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} />} />
-      </Routes>
+      <ToastProvider>
+        <Routes>
+          <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />} />
+          <Route path="/dashboard" element={isAuthenticated ? <Layout user={user}><Dashboard /></Layout> : <Navigate to="/login" />} />
+          <Route path="/trading" element={isAuthenticated ? <Layout user={user}><Trading /></Layout> : <Navigate to="/login" />} />
+          <Route path="/settings" element={isAuthenticated ? <Layout user={user}><SettingsPage /></Layout> : <Navigate to="/login" />} />
+          <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} />} />
+        </Routes>
+      </ToastProvider>
     </BrowserRouter>
   );
 }
