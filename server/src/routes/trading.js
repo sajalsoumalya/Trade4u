@@ -167,6 +167,79 @@ router.post('/config', optionalAuth, async (req, res) => {
   res.json({ success: true });
 });
 
+// --- Test API connection ---
+router.post('/test-connection', optionalAuth, async (req, res) => {
+  try {
+    const { provider, apiKey } = req.body;
+    if (!provider) return res.status(400).json({ ok: false, error: 'provider required' });
+
+    let ok = false;
+    let error = null;
+
+    switch (provider) {
+      case 'opencode':
+        if (apiKey) {
+          const r = await fetch('https://opencode.ai/zen/v1/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+          ok = r.ok;
+          if (!ok) error = `HTTP ${r.status}`;
+        } else {
+          ok = true;
+        }
+        break;
+      case 'openai':
+        if (apiKey) {
+          const r = await fetch('https://api.openai.com/v1/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+          ok = r.ok;
+          if (!ok) error = `HTTP ${r.status}`;
+        } else {
+          error = 'API key required';
+        }
+        break;
+      case 'anthropic':
+        if (apiKey) {
+          const r = await fetch('https://api.anthropic.com/v1/models', {
+            headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          });
+          ok = r.ok;
+          if (!ok) error = `HTTP ${r.status}`;
+        } else {
+          error = 'API key required';
+        }
+        break;
+      case 'google':
+        if (apiKey) {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+          ok = r.ok;
+          if (!ok) error = `HTTP ${r.status}`;
+        } else {
+          error = 'API key required';
+        }
+        break;
+      case 'deepseek':
+        if (apiKey) {
+          const r = await fetch('https://api.deepseek.com/v1/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+          ok = r.ok;
+          if (!ok) error = `HTTP ${r.status}`;
+        } else {
+          error = 'API key required';
+        }
+        break;
+      default:
+        error = 'Unknown provider';
+    }
+
+    res.json({ ok, error });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // --- Dynamic model fetch from provider ---
 router.post('/models/fetch', optionalAuth, async (req, res) => {
   try {

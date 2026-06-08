@@ -180,6 +180,15 @@ export const loadLlmConfig = async () => {
   return res.json();
 };
 
+export const testConnection = async (provider: string, apiKey?: string) => {
+  const res = await fetch(`${API_BASE}/trading/test-connection`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ provider, apiKey })
+  });
+  return res.json();
+};
+
 export const fetchModelsFromProvider = async (provider: string, apiKey?: string) => {
   const res = await fetch(`${API_BASE}/trading/models/fetch`, {
     method: 'POST',

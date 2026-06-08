@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
-import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff } from 'lucide-react';
-import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider } from '../lib/api';
+import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
+import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider, testConnection } from '../lib/api';
 
 interface ModelEntry { id: string; name: string; cost: string; context: number; maxOutput: number; capabilities: string[] }
 
@@ -12,6 +12,23 @@ const llmProviders = [
   { id: 'google', name: 'Google' },
   { id: 'deepseek', name: 'DeepSeek' },
 ];
+
+function ModelDetails({ model }: { model: ModelEntry | undefined }) {
+  if (!model) return null;
+  return (
+    <div className="mt-2 p-2 rounded-lg bg-background/50 border border-border">
+      <p className="text-xs font-medium text-white mb-1.5">{model.name}</p>
+      <div className="grid grid-cols-2 gap-1 text-[10px] text-[#848E9C] mb-1.5">
+        <div><span className="text-muted">Context:</span> {(model.context / 1000).toLocaleString()}K</div>
+        <div><span className="text-muted">Max output:</span> {(model.maxOutput / 1000).toLocaleString()}K</div>
+        <div><span className="text-muted">Cost:</span> {model.cost}</div>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {model.capabilities.map(c => <span key={c} className="px-1.5 py-0.5 rounded bg-[#2B3139] text-[10px] text-[#848E9C]">{c}</span>)}
+      </div>
+    </div>
+  );
+}
 
 export default function Settings() {
   const {
@@ -26,6 +43,8 @@ export default function Settings() {
   const [loadingModels, setLoadingModels] = useState(false);
   const [providerChanged, setProviderChanged] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     loadLlmConfig().then(config => {
@@ -39,6 +58,7 @@ export default function Settings() {
   const fetchModels = (provider: string, key: string) => {
     setLoadingModels(true);
     setProviderChanged(false);
+    setConnectionStatus(null);
     fetchModelsFromProvider(provider, key || undefined)
       .then(data => {
         setModels(data.models || []);
@@ -58,19 +78,29 @@ export default function Settings() {
     setModels([]);
     setQuickModel('');
     setDeepModel('');
+    setConnectionStatus(null);
   };
 
   const handleSave = async () => {
     setSaving(true);
+    setConnectionStatus(null);
+    setTesting(true);
+
+    const result = await testConnection(llmProvider, apiKey);
+    setConnectionStatus(result);
+    setTesting(false);
+
     const nb = parseInt(balanceInput);
     if (!isNaN(nb) && nb > 0) setWalletBalance(nb);
     await saveLlmConfig({ provider: llmProvider, apiKey, quickModel, deepModel });
+
     setSaving(false);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setTimeout(() => setSaved(false), 3000);
   };
 
-  const selectedModel = models.find(m => m.id === quickModel);
+  const quickModelDetails = models.find(m => m.id === quickModel);
+  const deepModelDetails = models.find(m => m.id === deepModel);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -124,39 +154,38 @@ export default function Settings() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 rounded-lg bg-background/50 border border-border">
-                <label className="text-xs text-muted flex items-center gap-1 mb-2"><Cpu className="w-3 h-3 text-primary" /> Quick Model</label>
-                <select value={quickModel} onChange={(e) => setQuickModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
-                  {models.length === 0 && <option value="">— fetch models first —</option>}
-                  {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
+              <div>
+                <div className="p-3 rounded-lg bg-background/50 border border-border">
+                  <label className="text-xs text-muted flex items-center gap-1 mb-2"><Cpu className="w-3 h-3 text-primary" /> Quick Model</label>
+                  <select value={quickModel} onChange={(e) => setQuickModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
+                    {models.length === 0 && <option value="">— fetch models first —</option>}
+                    {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                <ModelDetails model={quickModelDetails} />
               </div>
-              <div className="p-3 rounded-lg bg-background/50 border border-border">
-                <label className="text-xs text-muted flex items-center gap-1 mb-2"><Brain className="w-3 h-3 text-accent" /> Deep Model</label>
-                <select value={deepModel} onChange={(e) => setDeepModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
-                  {models.length === 0 && <option value="">— fetch models first —</option>}
-                  {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
+              <div>
+                <div className="p-3 rounded-lg bg-background/50 border border-border">
+                  <label className="text-xs text-muted flex items-center gap-1 mb-2"><Brain className="w-3 h-3 text-accent" /> Deep Model</label>
+                  <select value={deepModel} onChange={(e) => setDeepModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
+                    {models.length === 0 && <option value="">— fetch models first —</option>}
+                    {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                <ModelDetails model={deepModelDetails} />
               </div>
             </div>
 
-            {selectedModel && (
-              <div className="mt-3 p-3 rounded-lg bg-background/50 border border-border">
-                <p className="text-xs font-medium text-white mb-2">{selectedModel.name}</p>
-                <div className="grid grid-cols-3 gap-2 text-[10px] text-[#848E9C]">
-                  <div><span className="text-muted">Context: </span>{(selectedModel.context / 1000).toLocaleString()}K</div>
-                  <div><span className="text-muted">Max output: </span>{(selectedModel.maxOutput / 1000).toLocaleString()}K</div>
-                  <div><span className="text-muted">Cost: </span>{selectedModel.cost}</div>
-                </div>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {selectedModel.capabilities.map(c => <span key={c} className="px-1.5 py-0.5 rounded bg-[#2B3139] text-[10px] text-[#848E9C]">{c}</span>)}
-                </div>
+            {/* Connection Status */}
+            {connectionStatus && (
+              <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${connectionStatus.ok ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
+                {connectionStatus.ok ? <><Wifi className="w-4 h-4" /> Connected — API key valid</> : <><WifiOff className="w-4 h-4" /> {connectionStatus.error || 'Connection failed'}</>}
               </div>
             )}
 
-            <button onClick={handleSave} disabled={saving || !quickModel || !deepModel}
+            <button onClick={handleSave} disabled={saving || !quickModel || !deepModel || testing}
               className="mt-4 w-full py-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
-              {saving ? 'Saving...' : saved ? <><Check className="w-4 h-4" />Saved!</> : <><Save className="w-4 h-4" />Save Config</>}
+              {testing ? 'Testing connection...' : saving ? 'Saving...' : saved ? <><Check className="w-4 h-4" />Saved!</> : <><Save className="w-4 h-4" />Save Config</>}
             </button>
           </div>
         </div>
@@ -188,6 +217,11 @@ export default function Settings() {
               <div className="flex justify-between"><span className="text-muted">Quick</span><span className="text-white text-[10px]">{quickModel}</span></div>
               <div className="flex justify-between"><span className="text-muted">Deep</span><span className="text-white text-[10px]">{deepModel}</span></div>
               <div className="flex justify-between"><span className="text-muted">API Key</span><span className="text-white">{apiKey ? '••••••' : 'Not set'}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Connection</span>
+                <span className={connectionStatus?.ok ? 'text-[#0ECB81]' : 'text-[#848E9C]'}>
+                  {connectionStatus === null ? 'Not tested' : connectionStatus.ok ? 'Connected' : 'Failed'}
+                </span>
+              </div>
               <div className="flex justify-between"><span className="text-muted">Wallet</span><span className="text-white">${walletBalance.toLocaleString()}</span></div>
             </div>
           </div>
