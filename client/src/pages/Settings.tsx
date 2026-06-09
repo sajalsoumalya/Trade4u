@@ -114,14 +114,9 @@ export default function Settings() {
           setModels(data.models || []);
           const m = data.models || [];
           if (m.length > 0 && initialConfigLoaded.current) {
-            setQuickModel(prev => {
-              if (prev && m.some(x => x.id === prev)) return prev;
-              return m[0].id;
-            });
-            setDeepModel(prev => {
-              if (prev && m.some(x => x.id === prev)) return prev;
-              return m.length > 1 ? m[1].id : m[0].id;
-            });
+            const { quickModel: qm, deepModel: dm } = useAppStore.getState();
+            if (!qm || !m.some(x => x.id === qm)) setQuickModel(m[0].id);
+            if (!dm || !m.some(x => x.id === dm)) setDeepModel(m.length > 1 ? m[1].id : m[0].id);
           }
         })
         .catch(() => setModels([]))
@@ -147,14 +142,9 @@ export default function Settings() {
           setFallbackModels(data.models || []);
           const m = data.models || [];
           if (m.length > 0 && initialConfigLoaded.current) {
-            setFallbackQuickModel(prev => {
-              if (prev && m.some(x => x.id === prev)) return prev;
-              return m[0].id;
-            });
-            setFallbackDeepModel(prev => {
-              if (prev && m.some(x => x.id === prev)) return prev;
-              return m.length > 1 ? m[1].id : m[0].id;
-            });
+            const { fallbackQuickModel: fqm, fallbackDeepModel: fdm } = useAppStore.getState();
+            if (!fqm || !m.some(x => x.id === fqm)) setFallbackQuickModel(m[0].id);
+            if (!fdm || !m.some(x => x.id === fdm)) setFallbackDeepModel(m.length > 1 ? m[1].id : m[0].id);
           }
         })
         .catch(() => setFallbackModels([]))
@@ -485,14 +475,11 @@ export default function Settings() {
         setActiveModels(data.models || []);
         const m = data.models || [];
         if (m.length > 0) {
-          setActiveQuickModel(prev => {
-            if (prev && m.some(x => x.id === prev)) return prev;
-            return m[0].id;
-          });
-          setActiveDeepModel(prev => {
-            if (prev && m.some(x => x.id === prev)) return prev;
-            return m.length > 1 ? m[1].id : m[0].id;
-          });
+          const st = useAppStore.getState();
+          const curQuick = isMain ? st.quickModel : st.fallbackQuickModel;
+          const curDeep = isMain ? st.deepModel : st.fallbackDeepModel;
+          if (!curQuick || !m.some(x => x.id === curQuick)) setActiveQuickModel(m[0].id);
+          if (!curDeep || !m.some(x => x.id === curDeep)) setActiveDeepModel(m.length > 1 ? m[1].id : m[0].id);
         }
       })
       .catch(() => setActiveModels([]))
