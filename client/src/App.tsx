@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
@@ -59,11 +59,11 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (open: boo
           const isActive = location.pathname === item.href;
           const Icon = item.icon;
           return (
-            <a key={item.href} href={item.href} className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isActive ? 'bg-primary/10 text-primary' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+            <Link key={item.href} to={item.href} className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isActive ? 'bg-primary/10 text-primary' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
               {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-r-full" />}
               <Icon className="w-4 h-4 flex-shrink-0" />
               {isOpen && <span className="text-sm font-medium">{item.label}</span>}
-            </a>
+            </Link>
           );
         })}
       </nav>
@@ -125,7 +125,22 @@ function App() {
 
   useEffect(() => {
     if (!auth) { setInitializing(false); return; }
-    const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); setInitializing(false); });
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        try {
+          const token = await u.getIdToken();
+          localStorage.setItem('firebaseToken', token);
+          localStorage.setItem('userUid', u.uid);
+        } catch (err) {
+          console.error('Failed to retrieve Firebase ID token:', err);
+        }
+      } else {
+        localStorage.removeItem('firebaseToken');
+        localStorage.removeItem('userUid');
+      }
+      setUser(u);
+      setInitializing(false);
+    });
     return () => unsubscribe();
   }, []);
 

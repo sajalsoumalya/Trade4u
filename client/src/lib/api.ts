@@ -19,20 +19,20 @@ export const fetchCryptoPrice = async (symbol: string) => {
 };
 
 export const fetchCryptoPrices = async (symbols: string[]) => {
-  const res = await fetch(`${CRYPTO_API}/api/v3/ticker/24hr`);
-  const allData = await res.json();
-  return allData
-    .filter((t: any) => symbols.includes(t.symbol))
-    .map((t: any) => ({
-      symbol: t.symbol,
-      price: parseFloat(t.lastPrice),
-      priceChange: parseFloat(t.priceChange),
-      priceChangePercent: parseFloat(t.priceChangePercent),
-      high24h: parseFloat(t.highPrice),
-      low24h: parseFloat(t.lowPrice),
-      volume: parseFloat(t.volume),
-      quoteVolume: parseFloat(t.quoteVolume),
-    }));
+  const symbolsParam = encodeURIComponent(JSON.stringify(symbols.map(s => s.toUpperCase())));
+  const res = await fetch(`${CRYPTO_API}/api/v3/ticker/24hr?symbols=${symbolsParam}`);
+  const data = await res.json();
+  const arrayData = Array.isArray(data) ? data : [data];
+  return arrayData.map((t: any) => ({
+    symbol: t.symbol,
+    price: parseFloat(t.lastPrice),
+    priceChange: parseFloat(t.priceChange),
+    priceChangePercent: parseFloat(t.priceChangePercent),
+    high24h: parseFloat(t.highPrice),
+    low24h: parseFloat(t.lowPrice),
+    volume: parseFloat(t.volume),
+    quoteVolume: parseFloat(t.quoteVolume),
+  }));
 };
 
 export const fetchCryptoKlines = async (symbol: string, interval = '1h', limit = 100) => {

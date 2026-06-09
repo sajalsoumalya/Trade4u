@@ -1,0 +1,157 @@
+import Database from 'better-sqlite3';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = path.join(__dirname, '../../data');
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const dbPath = path.join(DATA_DIR, 'app.db');
+const db = new Database(dbPath);
+
+// Enable foreign keys
+db.pragma('foreign_keys = ON');
+
+// Initialize database schema
+db.exec(`
+  -- Users Table
+  CREATE TABLE IF NOT EXISTS users (
+    uid TEXT PRIMARY KEY,
+    email TEXT,
+    display_name TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Virtual Balances Table
+  CREATE TABLE IF NOT EXISTS balances (
+    uid TEXT PRIMARY KEY,
+    balance REAL NOT NULL DEFAULT 100000.0,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
+  );
+
+  -- LLM Configuration Table
+  CREATE TABLE IF NOT EXISTS llm_config (
+    uid TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    api_key TEXT, -- Encrypted (aes-256-gcm format)
+    quick_model TEXT,
+    deep_model TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
+  );
+
+  -- Bots Instance Persistence Table
+  CREATE TABLE IF NOT EXISTS bots (
+    id TEXT PRIMARY KEY,
+    uid TEXT NOT NULL,
+    name TEXT NOT NULL,
+    symbols TEXT NOT NULL, -- JSON-serialized array of strings, e.g. '["BTCUSDT"]'
+    allocation_type TEXT NOT NULL,
+    allocation_value REAL NOT NULL,
+    frozen_amount REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'stopped',
+    stop_loss REAL,
+    take_profit REAL,
+    interval INTEGER NOT NULL DEFAULT 5,
+    bot_provider TEXT,
+    bot_quick_model TEXT,
+    bot_deep_model TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
+  );
+
+  -- Unified Active Positions Table
+  CREATE TABLE IF NOT EXISTS positions (
+    id TEXT PRIMARY KEY,
+    bot_id TEXT, -- NULL if manual order
+    uid TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    type TEXT NOT NULL, -- 'buy' or 'sell'
+    quantity REAL NOT NULL,
+    entry_price REAL NOT NULL,
+    stop_loss REAL,
+    take_profit REAL,
+    status TEXT NOT NULL DEFAULT 'open',
+    opened_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
+    FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE SET NULL
+  );
+
+  -- Closed Positions Table
+  CREATE TABLE IF NOT EXISTS closed_positions (
+    id TEXT PRIMARY KEY,
+    bot_id TEXT,
+    uid TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    type TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    entry_price REAL NOT NULL,
+    exit_price REAL NOT NULL,
+    stop_loss REAL,
+    take_profit REAL,
+    pnl REAL NOT NULL,
+    pnl_pct REAL NOT NULL,
+    fee REAL NOT NULL DEFAULT 0.0,
+    status TEXT NOT NULL, -- 'closed', 'sl', 'tp', 'stopped'
+    opened_at TEXT NOT NULL,
+    closed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
+    FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE SET NULL
+  );
+
+  -- Comprehensive Trade/Order History Logger
+  CREATE TABLE IF NOT EXISTS trade_history (
+    id TEXT PRIMARY KEY,
+    uid TEXT NOT NULL,
+    bot_id TEXT,
+    symbol TEXT NOT NULL,
+    type TEXT NOT NULL, -- 'buy' or 'sell'
+    quantity REAL NOT NULL,
+    price REAL NOT NULL,
+    amount REAL NOT NULL,
+    pnl REAL DEFAULT 0.0,
+    status TEXT NOT NULL, -- 'open', 'closed', 'executed'
+    trading_mode TEXT NOT NULL DEFAULT 'paper',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
+    FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE SET NULL
+  );
+
+  -- AI Analyses Table
+  CREATE TABLE IF NOT EXISTS analyses (
+    id TEXT PRIMARY KEY,
+    uid TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'completed', 'failed'
+    decision TEXT, -- 'BUY', 'SELL', 'HOLD'
+    result TEXT, -- Raw text output
+    error TEXT, -- Stderr output
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
+  );
+
+  -- Autotrade settings Table
+  CREATE TABLE IF NOT EXISTS autotrade_settings (
+    uid TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    symbols TEXT NOT NULL DEFAULT '["BTCUSDT"]',
+    trade_amount REAL NOT NULL DEFAULT 100.0,
+    max_positions INTEGER NOT NULL DEFAULT 3,
+    stop_loss REAL NOT NULL DEFAULT 2.0,
+    take_profit REAL NOT NULL DEFAULT 5.0,
+    analysis_interval INTEGER NOT NULL DEFAULT 15,
+    risk_per_trade REAL NOT NULL DEFAULT 1.0,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
+  );
+`);
+
+console.log('SQLite database schema initialized at:', dbPath);
+
+export default db;

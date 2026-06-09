@@ -102,7 +102,7 @@ export const useAppStore = create<AppState>()(
       setDeepModel: (deepModel) => set({ deepModel }),
       setQuickModel: (quickModel) => set({ quickModel }),
 
-      walletBalance: 10000,
+      walletBalance: 100000,
       setWalletBalance: (walletBalance) => set({ walletBalance }),
 
       bots: [],

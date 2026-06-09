@@ -1,19 +1,27 @@
 import { spawn } from 'child_process';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import db from './db.js';
+import { decrypt } from './cryptoHelper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../../');
 
 const processes = new Map();
 
-function loadLlmConfig() {
-  const configPath = path.join(PROJECT_ROOT, 'server', 'data', 'llm-config.json');
-  if (fs.existsSync(configPath)) {
-    try {
-      return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch {}
+function loadLlmConfig(uid) {
+  try {
+    const config = db.prepare('SELECT * FROM llm_config WHERE uid = ?').get(uid || 'demo');
+    if (config) {
+      return {
+        provider: config.provider,
+        apiKey: decrypt(config.api_key),
+        quickModel: config.quick_model,
+        deepModel: config.deep_model,
+      };
+    }
+  } catch (err) {
+    console.error('Failed to load LLM config from DB:', err.message);
   }
   return {};
 }
@@ -21,7 +29,7 @@ function loadLlmConfig() {
 export function startAIEngine(bot, io) {
   if (processes.has(bot.id)) return false;
 
-  const config = loadLlmConfig();
+  const config = loadLlmConfig(bot.uid);
 
   const scriptPath = path.join(PROJECT_ROOT, 'server', 'bot_signal.py');
   const args = [

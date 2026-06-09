@@ -1,31 +1,20 @@
 import { Router } from 'express';
 import { spawn } from 'child_process';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { optionalAuth } from '../middleware/auth.js';
+import db from '../services/db.js';
+import { decrypt } from '../services/cryptoHelper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '../../data');
 const PROJECT_ROOT = path.resolve(__dirname, '../../../');
-const analysesFile = path.join(DATA_DIR, 'analyses.json');
-
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-if (!fs.existsSync(analysesFile)) {
-  fs.writeFileSync(analysesFile, JSON.stringify([]));
-}
-
-const readAnalyses = () => JSON.parse(fs.readFileSync(analysesFile, 'utf8'));
-const writeAnalyses = (data) => fs.writeFileSync(analysesFile, JSON.stringify(data, null, 2));
 const newId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
 
 const router = Router();
 
 router.post('/run', optionalAuth, async (req, res) => {
   try {
-    const { symbol, date, provider, deepModel, quickModel, apiKey } = req.body;
+    let { symbol, date, provider, deepModel, quickModel, apiKey } = req.body;
 
     if (!symbol) {
       return res.status(400).json({ error: 'Symbol required' });
@@ -35,21 +24,20 @@ router.post('/run', optionalAuth, async (req, res) => {
     const uid = req.uid;
     const id = newId();
 
-    const analyses = readAnalyses();
-    const analysis = {
-      id,
-      uid,
-      symbol: symbol.toUpperCase(),
-      date: analysisDate,
-      status: 'pending',
-      decision: null,
-      result: null,
-      error: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    analyses.unshift(analysis);
-    writeAnalyses(analyses);
+    db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
+
+    // If apiKey is masked, fetch and decrypt it from DB
+    if (apiKey === '●●●●●●●●' || apiKey === '******' || !apiKey) {
+      const config = db.prepare('SELECT api_key FROM llm_config WHERE uid = ?').get(uid);
+      if (config && config.api_key) {
+        apiKey = decrypt(config.api_key);
+      }
+    }
+
+    db.prepare(`
+      INSERT INTO analyses (id, uid, symbol, date, status, decision, result, error, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(id, uid, symbol.toUpperCase(), analysisDate, 'pending', null, null, null);
 
     const io = req.app.get('io');
     io.emit(`analysis:${id}`, { status: 'starting' });
@@ -80,15 +68,17 @@ router.post('/run', optionalAuth, async (req, res) => {
       else if (sellMatch) decision = 'SELL';
       else if (holdMatch) decision = 'HOLD';
 
-      const updated = readAnalyses().map(a => a.id === id ? {
-        ...a,
-        status: code === 0 ? 'completed' : 'failed',
+      db.prepare(`
+        UPDATE analyses
+        SET status = ?, decision = ?, result = ?, error = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(
+        code === 0 ? 'completed' : 'failed',
         decision,
-        result: output.substring(0, 10000),
-        error: errorOutput.substring(0, 5000),
-        updatedAt: new Date().toISOString()
-      } : a);
-      writeAnalyses(updated);
+        output.substring(0, 10000),
+        errorOutput.substring(0, 5000),
+        id
+      );
 
       io.emit(`analysis:${id}`, {
         status: code === 0 ? 'completed' : 'failed',
@@ -107,8 +97,7 @@ router.post('/run', optionalAuth, async (req, res) => {
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const analyses = readAnalyses();
-    const analysis = analyses.find(a => a.id === id);
+    const analysis = db.prepare('SELECT * FROM analyses WHERE id = ?').get(id);
 
     if (!analysis) {
       return res.status(404).json({ error: 'Analysis not found' });
@@ -117,7 +106,18 @@ router.get('/:id', optionalAuth, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    res.json(analysis);
+    res.json({
+      id: analysis.id,
+      uid: analysis.uid,
+      symbol: analysis.symbol,
+      date: analysis.date,
+      status: analysis.status,
+      decision: analysis.decision,
+      result: analysis.result,
+      error: analysis.error,
+      createdAt: analysis.created_at,
+      updatedAt: analysis.updated_at
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -126,8 +126,20 @@ router.get('/:id', optionalAuth, async (req, res) => {
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { limit = 20 } = req.query;
-    const analyses = readAnalyses().filter(a => a.uid === req.uid).slice(0, parseInt(limit));
-    res.json(analyses);
+    const analyses = db.prepare('SELECT * FROM analyses WHERE uid = ? ORDER BY created_at DESC LIMIT ?').all(req.uid, parseInt(limit));
+    const mapped = analyses.map(a => ({
+      id: a.id,
+      uid: a.uid,
+      symbol: a.symbol,
+      date: a.date,
+      status: a.status,
+      decision: a.decision,
+      result: a.result,
+      error: a.error,
+      createdAt: a.created_at,
+      updatedAt: a.updated_at
+    }));
+    res.json(mapped);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

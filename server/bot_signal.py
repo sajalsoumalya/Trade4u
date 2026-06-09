@@ -55,7 +55,7 @@ class SignalEmitter:
             r = requests.get(f'https://api.binance.com/api/v3/ticker/price', params={'symbol': symbol}, timeout=10)
             if r.ok:
                 return float(r.json()['price'])
-        except:
+        except Exception:
             pass
         return None
 
@@ -73,7 +73,7 @@ class SignalEmitter:
                             content = msg.content[:2000] if isinstance(msg.content, str) else str(msg.content)[:2000]
                             role = getattr(msg, 'type', 'unknown')
                             reasoning_log.append({"role": role, "content": content})
-                    except:
+                    except Exception:
                         pass
 
             signal_action = 'hold'
@@ -118,7 +118,7 @@ class SignalEmitter:
                 tp = float(parts[0].strip())
                 sl = float(parts[1].strip()) if len(parts) > 1 else None
                 return (tp, sl) if tp and sl else (None, None)
-        except:
+        except Exception:
             pass
         return None, None
 

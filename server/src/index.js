@@ -6,18 +6,43 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
 import analysisRoutes from './routes/analysis.js';
 import cryptoRoutes from './routes/crypto.js';
 import tradingRoutes from './routes/trading.js';
 import autotradeRoutes from './routes/autotrade.js';
+import './services/db.js';
+import { runMigration } from './services/migrate.js';
 
 dotenv.config();
+runMigration();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',') 
+  : ['http://localhost:5173', 'http://localhost:8501', 'http://127.0.0.1:5173', 'http://127.0.0.1:8501'];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+};
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: { 
+    origin: allowedOrigins.includes('*') ? '*' : allowedOrigins, 
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
   path: '/api/socket.io',
 });
 
@@ -39,7 +64,16 @@ console.log('Firebase config:', {
 
 const staticPath = path.join(__dirname, '../../public');
 
-app.use(cors());
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+app.use('/api', apiLimiter);
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Request logger

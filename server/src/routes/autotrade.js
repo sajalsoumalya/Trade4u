@@ -1,34 +1,14 @@
 import { Router } from 'express';
 import { spawn } from 'child_process';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { optionalAuth } from '../middleware/auth.js';
+import db from '../services/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '../../data');
 const PROJECT_ROOT = path.resolve(__dirname, '../../../');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-const getFile = (name) => path.join(DATA_DIR, `${name}.json`);
-const readData = (name) => {
-  const f = getFile(name);
-  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : [];
-};
-const writeData = (name, data) => fs.writeFileSync(getFile(name), JSON.stringify(data, null, 2));
 
 const router = Router();
-
-let autoTradeSettings = {
-  enabled: false,
-  symbols: ['BTCUSDT'],
-  tradeAmount: 100,
-  maxPositions: 3,
-  stopLoss: 2,
-  takeProfit: 5,
-  analysisInterval: 15,
-  riskPerTrade: 1,
-};
 let botProcess = null;
 
 function startBot(settings) {
@@ -74,48 +54,124 @@ function stopBot() {
   botProcess = null;
 }
 
+function getUserSettings(uid) {
+  db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
+  let settings = db.prepare('SELECT * FROM autotrade_settings WHERE uid = ?').get(uid);
+  if (!settings) {
+    db.prepare(`
+      INSERT INTO autotrade_settings (uid, enabled, symbols, trade_amount, max_positions, stop_loss, take_profit, analysis_interval, risk_per_trade)
+      VALUES (?, 0, '["BTCUSDT"]', 100.0, 3, 2.0, 5.0, 15, 1.0)
+    `).run(uid);
+    settings = db.prepare('SELECT * FROM autotrade_settings WHERE uid = ?').get(uid);
+  }
+  return {
+    enabled: settings.enabled === 1,
+    symbols: JSON.parse(settings.symbols),
+    tradeAmount: settings.trade_amount,
+    maxPositions: settings.max_positions,
+    stopLoss: settings.stop_loss,
+    takeProfit: settings.take_profit,
+    analysisInterval: settings.analysis_interval,
+    riskPerTrade: settings.risk_per_trade
+  };
+}
+
 router.get('/settings', optionalAuth, (req, res) => {
-  res.json(autoTradeSettings);
+  try {
+    const settings = getUserSettings(req.uid);
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 router.post('/settings', optionalAuth, (req, res) => {
-  const { enabled, symbols, tradeAmount, maxPositions, stopLoss, takeProfit, analysisInterval, riskPerTrade } = req.body;
-  autoTradeSettings = {
-    enabled: enabled ?? autoTradeSettings.enabled,
-    symbols: symbols ?? autoTradeSettings.symbols,
-    tradeAmount: tradeAmount ?? autoTradeSettings.tradeAmount,
-    maxPositions: maxPositions ?? autoTradeSettings.maxPositions,
-    stopLoss: stopLoss ?? autoTradeSettings.stopLoss,
-    takeProfit: takeProfit ?? autoTradeSettings.takeProfit,
-    analysisInterval: analysisInterval ?? autoTradeSettings.analysisInterval,
-    riskPerTrade: riskPerTrade ?? autoTradeSettings.riskPerTrade,
-  };
-  if (autoTradeSettings.enabled) {
-    stopBot();
-    startBot(autoTradeSettings);
+  try {
+    const uid = req.uid;
+    const current = getUserSettings(uid);
+    const { enabled, symbols, tradeAmount, maxPositions, stopLoss, takeProfit, analysisInterval, riskPerTrade } = req.body;
+
+    const newSettings = {
+      enabled: enabled ?? current.enabled,
+      symbols: symbols ?? current.symbols,
+      tradeAmount: tradeAmount ?? current.tradeAmount,
+      maxPositions: maxPositions ?? current.maxPositions,
+      stopLoss: stopLoss ?? current.stopLoss,
+      takeProfit: takeProfit ?? current.takeProfit,
+      analysisInterval: analysisInterval ?? current.analysisInterval,
+      riskPerTrade: riskPerTrade ?? current.riskPerTrade,
+    };
+
+    db.prepare(`
+      UPDATE autotrade_settings
+      SET enabled = ?, symbols = ?, trade_amount = ?, max_positions = ?, stop_loss = ?, take_profit = ?, analysis_interval = ?, risk_per_trade = ?, updated_at = datetime('now')
+      WHERE uid = ?
+    `).run(
+      newSettings.enabled ? 1 : 0,
+      JSON.stringify(newSettings.symbols),
+      newSettings.tradeAmount,
+      newSettings.maxPositions,
+      newSettings.stopLoss,
+      newSettings.takeProfit,
+      newSettings.analysisInterval,
+      newSettings.riskPerTrade,
+      uid
+    );
+
+    if (newSettings.enabled) {
+      stopBot();
+      startBot(newSettings);
+    }
+    res.json({ success: true, settings: newSettings });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
-  res.json({ success: true, settings: autoTradeSettings });
 });
 
 router.post('/toggle', optionalAuth, (req, res) => {
-  const { enabled } = req.body;
-  autoTradeSettings.enabled = enabled;
-  if (enabled) {
-    startBot(autoTradeSettings);
-  } else {
-    stopBot();
+  try {
+    const uid = req.uid;
+    const current = getUserSettings(uid);
+    const { enabled } = req.body;
+    
+    db.prepare('UPDATE autotrade_settings SET enabled = ?, updated_at = datetime("now") WHERE uid = ?')
+      .run(enabled ? 1 : 0, uid);
+    
+    current.enabled = !!enabled;
+
+    if (enabled) {
+      startBot(current);
+    } else {
+      stopBot();
+    }
+    const io = req.app.get('io');
+    io.emit('auto-trade-status', { enabled: current.enabled });
+    res.json({ success: true, enabled: current.enabled });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
-  const io = req.app.get('io');
-  io.emit('auto-trade-status', { enabled: autoTradeSettings.enabled });
-  res.json({ success: true, enabled: autoTradeSettings.enabled });
 });
 
 router.get('/history', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
     const { limit = 50 } = req.query;
-    const trades = readData('trades').filter(t => t.uid === uid).slice(0, parseInt(limit));
-    res.json(trades);
+    const trades = db.prepare('SELECT * FROM trade_history WHERE uid = ? ORDER BY created_at DESC LIMIT ?').all(uid, parseInt(limit));
+    const mapped = trades.map(t => ({
+      id: t.id,
+      uid: t.uid,
+      botId: t.bot_id,
+      symbol: t.symbol,
+      type: t.type,
+      quantity: t.quantity,
+      price: t.price,
+      amount: t.amount,
+      pnl: t.pnl,
+      status: t.status,
+      tradingMode: t.trading_mode,
+      createdAt: t.created_at
+    }));
+    res.json(mapped);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch history' });
   }
@@ -124,8 +180,21 @@ router.get('/history', optionalAuth, async (req, res) => {
 router.get('/positions', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
-    const positions = readData('trades').filter(t => t.uid === uid && t.status === 'open');
-    res.json(positions);
+    const positions = db.prepare('SELECT * FROM positions WHERE uid = ? AND status = "open"').all(uid);
+    const mapped = positions.map(p => ({
+      id: p.id,
+      botId: p.bot_id,
+      uid: p.uid,
+      symbol: p.symbol,
+      type: p.type,
+      quantity: p.quantity,
+      entryPrice: p.entry_price,
+      stopLoss: p.stop_loss,
+      takeProfit: p.take_profit,
+      status: p.status,
+      openedAt: p.opened_at
+    }));
+    res.json(mapped);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch positions' });
   }
@@ -136,29 +205,42 @@ router.post('/trade', optionalAuth, async (req, res) => {
     const { symbol, type, amount, price } = req.body;
     const uid = req.uid;
 
-    const trades = readData('trades');
-    const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
-    const trade = { id, uid, symbol, type, amount, price, status: 'executed', createdAt: new Date().toISOString() };
-    trades.unshift(trade);
-    writeData('trades', trades);
-
-    if (type === 'buy') {
-      const positions = readData('positions');
-      const posId = Date.now().toString(36) + Math.random().toString(36).substr(2);
-      positions.unshift({
-        id: posId, uid, symbol, type: 'buy', entryPrice: price, amount,
-        quantity: amount / price, status: 'open',
-        stopLoss: price * 0.98, takeProfit: price * 1.05,
-        createdAt: new Date().toISOString()
-      });
-      writeData('positions', positions);
+    db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
+    let balanceRow = db.prepare('SELECT balance FROM balances WHERE uid = ?').get(uid);
+    if (!balanceRow) {
+      db.prepare('INSERT INTO balances (uid, balance) VALUES (?, 100000.0)').run(uid);
+      balanceRow = { balance: 100000.0 };
     }
+
+    if (type === 'buy' && balanceRow.balance < amount) {
+      return res.status(400).json({ error: 'Insufficient balance' });
+    }
+
+    const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    const posId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    const quantity = amount / price;
+
+    db.transaction(() => {
+      if (type === 'buy') {
+        db.prepare('UPDATE balances SET balance = balance - ? WHERE uid = ?').run(amount, uid);
+        db.prepare(`
+          INSERT INTO positions (id, uid, symbol, type, quantity, entry_price, stop_loss, take_profit, status, opened_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `).run(posId, uid, symbol, 'buy', quantity, price, price * 0.98, price * 1.05, 'open');
+      }
+
+      db.prepare(`
+        INSERT INTO trade_history (id, uid, symbol, type, quantity, price, amount, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(id, uid, symbol, type, quantity, price, amount, 'executed');
+    })();
 
     const io = req.app.get('io');
     io.to(uid).emit('trade-executed', { id, symbol, type, amount, price });
 
     res.json({ success: true, id });
   } catch (error) {
+    console.error('AutoTrade trade error:', error);
     res.status(500).json({ error: 'Failed to execute trade' });
   }
 });
@@ -168,15 +250,28 @@ router.post('/close-position', optionalAuth, async (req, res) => {
     const { positionId, currentPrice } = req.body;
     const uid = req.uid;
 
-    const positions = readData('positions');
-    const idx = positions.findIndex(p => p.id === positionId && p.uid === uid);
+    const pos = db.prepare('SELECT * FROM positions WHERE id = ? AND uid = ? AND status = "open"').get(positionId, uid);
+    if (!pos) return res.status(404).json({ error: 'Position not found' });
 
-    if (idx === -1) return res.status(404).json({ error: 'Position not found' });
+    const pnl = (currentPrice - pos.entry_price) * pos.quantity * (pos.type === 'buy' ? 1 : -1);
+    const refund = pos.quantity * currentPrice;
 
-    const position = positions[idx];
-    const pnl = (currentPrice - position.entryPrice) * position.quantity * (position.type === 'buy' ? 1 : -1);
-    positions[idx] = { ...position, status: 'closed', exitPrice: currentPrice, pnl, closedAt: new Date().toISOString() };
-    writeData('positions', positions);
+    db.transaction(() => {
+      if (pos.type === 'buy') {
+        db.prepare('UPDATE balances SET balance = balance + ? WHERE uid = ?').run(refund, uid);
+      }
+      db.prepare('DELETE FROM positions WHERE id = ?').run(positionId);
+
+      db.prepare(`
+        INSERT INTO closed_positions (id, uid, symbol, type, quantity, entry_price, exit_price, pnl, pnl_pct, status, opened_at, closed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(positionId, uid, pos.symbol, pos.type, pos.quantity, pos.entry_price, currentPrice, pnl, ((currentPrice - pos.entry_price) / pos.entry_price) * 100, 'closed', pos.opened_at);
+
+      db.prepare(`
+        INSERT INTO trade_history (id, uid, symbol, type, quantity, price, amount, pnl, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(positionId + '_close', uid, pos.symbol, pos.type === 'buy' ? 'sell' : 'buy', pos.quantity, currentPrice, refund, pnl, 'closed');
+    })();
 
     const io = req.app.get('io');
     io.to(uid).emit('position-closed', { id: positionId, pnl, exitPrice: currentPrice });
@@ -190,17 +285,35 @@ router.post('/close-position', optionalAuth, async (req, res) => {
 router.get('/portfolio', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
-    const positions = readData('positions').filter(p => p.uid === uid && p.status === 'open');
-    const trades = readData('trades').filter(t => t.uid === uid && t.status === 'executed');
+    const positions = db.prepare('SELECT * FROM positions WHERE uid = ? AND status = "open"').all(uid);
+    const closed = db.prepare('SELECT * FROM closed_positions WHERE uid = ?').all(uid);
 
-    const totalPnL = trades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-    const totalTrades = trades.length;
-    const winningTrades = trades.filter(t => t.pnl > 0).length;
-    const losingTrades = trades.filter(t => t.pnl < 0).length;
+    const totalPnL = closed.reduce((sum, c) => sum + c.pnl, 0);
+    const totalTrades = closed.length;
+    const winningTrades = closed.filter(c => c.pnl > 0).length;
+    const losingTrades = closed.filter(c => c.pnl < 0).length;
+
+    const mappedPositions = positions.map(p => ({
+      id: p.id,
+      uid: p.uid,
+      symbol: p.symbol,
+      type: p.type,
+      entryPrice: p.entry_price,
+      amount: p.quantity * p.entry_price,
+      quantity: p.quantity,
+      status: p.status,
+      stopLoss: p.stop_loss,
+      takeProfit: p.take_profit,
+      createdAt: p.opened_at
+    }));
 
     res.json({
-      positions, totalPositions: positions.length, totalPnL, totalTrades,
-      winningTrades, losingTrades,
+      positions: mappedPositions,
+      totalPositions: mappedPositions.length,
+      totalPnL,
+      totalTrades,
+      winningTrades,
+      losingTrades,
       winRate: totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(2) : 0,
     });
   } catch (error) {

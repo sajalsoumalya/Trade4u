@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { optionalAuth } from '../middleware/auth.js';
 import { startAIEngine, stopAIEngine, isEngineRunning } from '../services/botEngine.js';
+import db from '../services/db.js';
+import { encrypt, decrypt } from '../services/cryptoHelper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../../data');
@@ -35,24 +37,41 @@ router.post('/order', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'type must be buy or sell' });
     }
 
-    const trades = readData('trades');
-    const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
+
+    let balanceRow = db.prepare('SELECT balance FROM balances WHERE uid = ?').get(uid);
+    if (!balanceRow) {
+      db.prepare('INSERT INTO balances (uid, balance) VALUES (?, 100000.0)').run(uid);
+      balanceRow = { balance: 100000.0 };
+    }
+
     const tradePrice = price || 0;
+    const orderCost = tradePrice * parseFloat(quantity);
+
+    if (type.toLowerCase() === 'buy' && balanceRow.balance < orderCost) {
+      return res.status(400).json({ error: 'Insufficient balance' });
+    }
+
+    const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
     const tradingMode = 'paper';
 
-    trades.unshift({
-      id, uid,
-      symbol: symbol.toUpperCase(),
-      type: type.toLowerCase(),
-      quantity: parseFloat(quantity),
-      price: tradePrice,
-      status: 'open',
-      tradingMode,
-      pnl: 0,
-      openedAt: new Date().toISOString(),
-      closedAt: null
-    });
-    writeData('trades', trades);
+    db.transaction(() => {
+      if (type.toLowerCase() === 'buy') {
+        db.prepare('UPDATE balances SET balance = balance - ? WHERE uid = ?').run(orderCost, uid);
+      } else {
+        db.prepare('UPDATE balances SET balance = balance + ? WHERE uid = ?').run(orderCost, uid);
+      }
+
+      db.prepare(`
+        INSERT INTO positions (id, uid, symbol, type, quantity, entry_price, status, opened_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(id, uid, symbol.toUpperCase(), type.toLowerCase(), parseFloat(quantity), tradePrice, 'open');
+
+      db.prepare(`
+        INSERT INTO trade_history (id, uid, symbol, type, quantity, price, amount, status, trading_mode, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(id, uid, symbol.toUpperCase(), type.toLowerCase(), parseFloat(quantity), tradePrice, orderCost, 'open', tradingMode);
+    })();
 
     res.json({ id, symbol: symbol.toUpperCase(), type: type.toLowerCase(), quantity, price: tradePrice, status: 'open', tradingMode });
   } catch (error) {
@@ -67,20 +86,30 @@ router.delete('/order/:id', optionalAuth, async (req, res) => {
     const { price } = req.body;
     const uid = req.uid;
 
-    const trades = readData('trades');
-    const idx = trades.findIndex(t => t.id === id && t.uid === uid);
+    const pos = db.prepare('SELECT * FROM positions WHERE id = ? AND uid = ? AND status = "open"').get(id, uid);
+    if (!pos) return res.status(404).json({ error: 'Trade not found' });
 
-    if (idx === -1) return res.status(404).json({ error: 'Trade not found' });
-    if (trades[idx].status === 'closed') return res.status(400).json({ error: 'Trade already closed' });
+    const closePrice = price || pos.entry_price || 0;
+    const pnl = pos.type === 'sell'
+      ? (pos.entry_price - closePrice) * pos.quantity
+      : (closePrice - pos.entry_price) * pos.quantity;
 
-    const trade = trades[idx];
-    const closePrice = price || trade.price || 0;
-    const pnl = trade.type === 'sell'
-      ? (trade.price - closePrice) * trade.quantity
-      : (closePrice - trade.price) * trade.quantity;
+    db.transaction(() => {
+      if (pos.type === 'buy') {
+        db.prepare('UPDATE balances SET balance = balance + ? WHERE uid = ?').run(pos.quantity * closePrice, uid);
+      } else {
+        db.prepare('UPDATE balances SET balance = balance - ? WHERE uid = ?').run(pos.quantity * closePrice, uid);
+      }
 
-    trades[idx] = { ...trade, status: 'closed', closePrice, pnl, closedAt: new Date().toISOString() };
-    writeData('trades', trades);
+      db.prepare('DELETE FROM positions WHERE id = ?').run(id);
+
+      db.prepare(`
+        INSERT INTO closed_positions (id, uid, symbol, type, quantity, entry_price, exit_price, pnl, pnl_pct, status, opened_at, closed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(id, uid, pos.symbol, pos.type, pos.quantity, pos.entry_price, closePrice, pnl, pos.entry_price > 0 ? (pnl / (pos.entry_price * pos.quantity)) * 100 : 0.0, 'closed', pos.opened_at);
+
+      db.prepare('UPDATE trade_history SET status = "closed", pnl = ? WHERE id = ?').run(pnl, id);
+    })();
 
     res.json({ id, status: 'closed', pnl });
   } catch (error) {
@@ -91,8 +120,21 @@ router.delete('/order/:id', optionalAuth, async (req, res) => {
 router.get('/positions', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
-    const positions = readData('trades').filter(t => t.uid === uid && t.status === 'open');
-    res.json(positions);
+    const positions = db.prepare('SELECT * FROM positions WHERE uid = ? AND status = "open"').all(uid);
+    const mapped = positions.map(p => ({
+      id: p.id,
+      botId: p.bot_id,
+      uid: p.uid,
+      symbol: p.symbol,
+      type: p.type,
+      quantity: p.quantity,
+      entryPrice: p.entry_price,
+      stopLoss: p.stop_loss,
+      takeProfit: p.take_profit,
+      status: p.status,
+      openedAt: p.opened_at
+    }));
+    res.json(mapped);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -102,9 +144,27 @@ router.get('/history', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
     const { limit = 50 } = req.query;
-    const trades = readData('trades').filter(t => t.uid === uid).slice(0, parseInt(limit));
-    const totalPnl = trades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-    res.json({ trades, totalPnl });
+    
+    const trades = db.prepare('SELECT * FROM trade_history WHERE uid = ? ORDER BY created_at DESC LIMIT ?').all(uid, parseInt(limit));
+    const mapped = trades.map(t => ({
+      id: t.id,
+      uid: t.uid,
+      botId: t.bot_id,
+      symbol: t.symbol,
+      type: t.type,
+      quantity: t.quantity,
+      price: t.price,
+      amount: t.amount,
+      pnl: t.pnl,
+      status: t.status,
+      tradingMode: t.trading_mode,
+      createdAt: t.created_at
+    }));
+
+    const totalPnlRow = db.prepare('SELECT SUM(pnl) as total FROM closed_positions WHERE uid = ?').get(uid);
+    const totalPnl = totalPnlRow ? (totalPnlRow.total || 0) : 0;
+
+    res.json({ trades: mapped, totalPnl });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -113,10 +173,13 @@ router.get('/history', optionalAuth, async (req, res) => {
 router.get('/balance', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
-    const balances = readData('balances');
-    const user = balances.find(b => b.uid === uid);
-    const balance = user ? user.balance : 100000;
-    res.json({ balance, tradingMode: 'paper' });
+    db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
+    let balanceRow = db.prepare('SELECT balance FROM balances WHERE uid = ?').get(uid);
+    if (!balanceRow) {
+      db.prepare('INSERT INTO balances (uid, balance) VALUES (?, 100000.0)').run(uid);
+      balanceRow = { balance: 100000.0 };
+    }
+    res.json({ balance: balanceRow.balance, tradingMode: 'paper' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -128,7 +191,8 @@ router.post('/bots/:id/start', optionalAuth, async (req, res) => {
     const { id } = req.params;
     const { symbols, stopLoss, takeProfit, interval, provider, quickModel, deepModel } = req.body;
     const io = req.app.get('io');
-    const ok = startAIEngine({ id, symbols: symbols || [], stopLoss, takeProfit, interval, provider, quickModel, deepModel }, io);
+    const uid = req.uid;
+    const ok = startAIEngine({ id, uid, symbols: symbols || [], stopLoss, takeProfit, interval, provider, quickModel, deepModel }, io);
     res.json({ success: ok, running: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -156,22 +220,67 @@ router.get('/bots/:id/status', optionalAuth, async (req, res) => {
 
 // --- LLM Config persistence ---
 router.get('/config', optionalAuth, async (req, res) => {
-  const config = readJsonData('llm-config');
-  res.json(config);
+  try {
+    const uid = req.uid;
+    const config = db.prepare('SELECT * FROM llm_config WHERE uid = ?').get(uid);
+    if (!config) {
+      return res.json({ provider: 'opencode', apiKey: '', quickModel: 'minimax-m2.5-free', deepModel: 'minimax-m2.5-free' });
+    }
+    res.json({
+      provider: config.provider,
+      apiKey: config.api_key ? '●●●●●●●●' : '',
+      quickModel: config.quick_model,
+      deepModel: config.deep_model,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 router.post('/config', optionalAuth, async (req, res) => {
-  const { provider, apiKey, quickModel, deepModel } = req.body;
-  const config = { provider, apiKey, quickModel, deepModel, updatedAt: new Date().toISOString() };
-  writeData('llm-config', config);
-  res.json({ success: true });
+  try {
+    const { provider, apiKey, quickModel, deepModel } = req.body;
+    const uid = req.uid;
+
+    db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
+
+    const existing = db.prepare('SELECT api_key FROM llm_config WHERE uid = ?').get(uid);
+    let finalKey = existing ? existing.api_key : '';
+
+    if (apiKey && apiKey !== '●●●●●●●●' && !apiKey.includes('●')) {
+      finalKey = encrypt(apiKey);
+    }
+
+    db.prepare(`
+      INSERT INTO llm_config (uid, provider, api_key, quick_model, deep_model, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(uid) DO UPDATE SET
+        provider = excluded.provider,
+        api_key = excluded.api_key,
+        quick_model = excluded.quick_model,
+        deep_model = excluded.deep_model,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(uid, provider, finalKey, quickModel, deepModel);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // --- Test API connection ---
 router.post('/test-connection', optionalAuth, async (req, res) => {
   try {
-    const { provider, apiKey } = req.body;
+    let { provider, apiKey } = req.body;
     if (!provider) return res.status(400).json({ ok: false, error: 'provider required' });
+
+    const uid = req.uid;
+    if (apiKey === '●●●●●●●●' || apiKey === '******' || !apiKey) {
+      const config = db.prepare('SELECT api_key FROM llm_config WHERE uid = ?').get(uid);
+      if (config && config.api_key) {
+        apiKey = decrypt(config.api_key);
+      }
+    }
 
     let ok = false;
     let error = null;
@@ -266,8 +375,16 @@ router.post('/test-connection', optionalAuth, async (req, res) => {
 // --- Dynamic model fetch from provider ---
 router.post('/models/fetch', optionalAuth, async (req, res) => {
   try {
-    const { provider, apiKey } = req.body;
+    let { provider, apiKey } = req.body;
     if (!provider) return res.status(400).json({ error: 'provider required' });
+
+    const uid = req.uid;
+    if (apiKey === '●●●●●●●●' || apiKey === '******' || !apiKey) {
+      const config = db.prepare('SELECT api_key FROM llm_config WHERE uid = ?').get(uid);
+      if (config && config.api_key) {
+        apiKey = decrypt(config.api_key);
+      }
+    }
 
     let models = [];
 
@@ -403,6 +520,7 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
             { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'code'] },
           ];
         }
+        break;
       case 'openrouter':
         if (apiKey) {
           try {
