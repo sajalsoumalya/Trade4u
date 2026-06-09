@@ -447,6 +447,10 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
     }
 
     let models = [];
+    // 'live' once a provider's real API returns models; flipped to 'fallback'
+    // whenever we have to use the static suggestion list (no/invalid key, or
+    // the provider lookup failed). The client uses this to prompt for a key.
+    let source = 'live';
 
     switch (provider) {
       case 'opencode':
@@ -467,6 +471,7 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
           }
         } catch (_) { /* fall through */ }
         if (models.length === 0) {
+          source = 'fallback';
           models = [
             { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
             { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
@@ -477,25 +482,28 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
 
       case 'openai':
         if (apiKey) {
-          const resp = await fetch('https://api.openai.com/v1/models', {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            models = (data.data || [])
-              .filter(m => m.id.startsWith('gpt-') || m.id.startsWith('o'))
-              .map(m => ({
-                id: m.id,
-                name: m.id,
-                cost: 'Paid',
-                context: 128000,
-                maxOutput: 16384,
-                capabilities: ['reasoning', 'tools', 'vision'],
-              }));
-          }
+          try {
+            const resp = await fetch('https://api.openai.com/v1/models', {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              models = (data.data || [])
+                .filter(m => m.id && (m.id.startsWith('gpt-') || m.id.startsWith('o')))
+                .map(m => ({
+                  id: m.id,
+                  name: m.id,
+                  cost: 'Paid',
+                  context: 128000,
+                  maxOutput: 16384,
+                  capabilities: ['reasoning', 'tools', 'vision'],
+                }));
+            }
+          } catch (_) { /* fall through to fallback list */ }
         }
         // fallback
         if (models.length === 0) {
+          source = 'fallback';
           models = [
             { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', cost: 'Paid', context: 128000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision'] },
             { id: 'gpt-4.1', name: 'GPT-4.1', cost: 'Paid', context: 1048576, maxOutput: 32768, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
@@ -507,22 +515,25 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
 
       case 'anthropic':
         if (apiKey) {
-          const resp = await fetch('https://api.anthropic.com/v1/models', {
-            headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            models = (data.data || []).map(m => ({
-              id: m.id,
-              name: m.display_name || m.id,
-              cost: 'Paid',
-              context: 200000,
-              maxOutput: 8192,
-              capabilities: ['reasoning', 'tools', 'vision'],
-            }));
-          }
+          try {
+            const resp = await fetch('https://api.anthropic.com/v1/models', {
+              headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              models = (data.data || []).map(m => ({
+                id: m.id,
+                name: m.display_name || m.id,
+                cost: 'Paid',
+                context: 200000,
+                maxOutput: 8192,
+                capabilities: ['reasoning', 'tools', 'vision'],
+              }));
+            }
+          } catch (_) { /* fall through to fallback list */ }
         }
         if (models.length === 0) {
+          source = 'fallback';
           models = [
             { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
             { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['tools', 'vision', 'fast'] },
@@ -533,20 +544,26 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
 
       case 'google':
         if (apiKey) {
-          const resp = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
-          if (resp.ok) {
-            const data = await resp.json();
-            models = (data.models || []).map(m => ({
-              id: m.name.replace('models/', ''),
-              name: m.display_name || m.name.replace('models/', ''),
-              cost: 'Paid',
-              context: 1048576,
-              maxOutput: 8192,
-              capabilities: ['reasoning', 'tools', 'vision'],
-            }));
-          }
+          try {
+            const resp = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+            if (resp.ok) {
+              const data = await resp.json();
+              models = (data.models || []).map(m => {
+                const id = (m.name || '').replace('models/', '');
+                return {
+                  id,
+                  name: m.displayName || m.display_name || id,
+                  cost: 'Paid',
+                  context: 1048576,
+                  maxOutput: 8192,
+                  capabilities: ['reasoning', 'tools', 'vision'],
+                };
+              }).filter(m => m.id);
+            }
+          } catch (_) { /* fall through to fallback list */ }
         }
         if (models.length === 0) {
+          source = 'fallback';
           models = [
             { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: 'Paid', context: 1048576, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'vision', 'fast'] },
             { id: 'gemini-3-flash', name: 'Gemini 3 Flash', cost: 'Paid', context: 1048576, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'fast'] },
@@ -558,22 +575,25 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
 
       case 'deepseek':
         if (apiKey) {
-          const resp = await fetch('https://api.deepseek.com/v1/models', {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            models = (data.data || []).map(m => ({
-              id: m.id,
-              name: m.id,
-              cost: 'Paid',
-              context: 262144,
-              maxOutput: 16384,
-              capabilities: ['reasoning', 'tools', 'code'],
-            }));
-          }
+          try {
+            const resp = await fetch('https://api.deepseek.com/v1/models', {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              models = (data.data || []).map(m => ({
+                id: m.id,
+                name: m.id,
+                cost: 'Paid',
+                context: 262144,
+                maxOutput: 16384,
+                capabilities: ['reasoning', 'tools', 'code'],
+              }));
+            }
+          } catch (_) { /* fall through to fallback list */ }
         }
         if (models.length === 0) {
+          source = 'fallback';
           models = [
             { id: 'deepseek-chat', name: 'DeepSeek V3', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
             { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
@@ -582,22 +602,22 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
         }
         break;
       case 'openrouter':
-        if (apiKey) {
-          try {
-            const resp = await fetch('https://openrouter.ai/api/v1/models', {
-              headers: { Authorization: `Bearer ${apiKey}` },
-            });
-            if (resp.ok) {
-              const data = await resp.json();
-              models = (data.data || []).map(m => ({
-                id: m.id, name: m.name || m.id, cost: 'Paid',
-                context: m.context_length || 128000, maxOutput: m.top_provider?.max_completion_tokens || 8192,
-                capabilities: ['reasoning', 'tools'],
-              }));
-            }
-          } catch (_) {}
-        }
+        // OpenRouter's model list is public — fetch it with or without a key.
+        try {
+          const resp = await fetch('https://openrouter.ai/api/v1/models', {
+            headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            models = (data.data || []).map(m => ({
+              id: m.id, name: m.name || m.id, cost: 'Paid',
+              context: m.context_length || 128000, maxOutput: m.top_provider?.max_completion_tokens || 8192,
+              capabilities: ['reasoning', 'tools'],
+            }));
+          }
+        } catch (_) { /* fall through to fallback list */ }
         if (models.length === 0) {
+          source = 'fallback';
           models = [
             { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
             { id: 'openai/gpt-5.4-mini', name: 'GPT-5.4 Mini', cost: 'Paid', context: 128000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'fast'] },
@@ -610,22 +630,25 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
       case 'nvidia':
       case 'nvidia_nim':
         if (apiKey) {
-          const resp = await fetch('https://integrate.api.nvidia.com/v1/models', {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            models = (data.data || []).map(m => ({
-              id: m.id,
-              name: m.id,
-              cost: 'Paid',
-              context: 131072,
-              maxOutput: 8192,
-              capabilities: ['reasoning', 'tools', 'code'],
-            }));
-          }
+          try {
+            const resp = await fetch('https://integrate.api.nvidia.com/v1/models', {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              models = (data.data || []).map(m => ({
+                id: m.id,
+                name: m.id,
+                cost: 'Paid',
+                context: 131072,
+                maxOutput: 8192,
+                capabilities: ['reasoning', 'tools', 'code'],
+              }));
+            }
+          } catch (_) { /* fall through to fallback list */ }
         }
         if (models.length === 0) {
+          source = 'fallback';
           models = [
             { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'code'] },
             { id: 'nvidia/deepseek-ai/deepseek-v3-671b', name: 'DeepSeek V3 671B', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'code'] },
@@ -635,7 +658,7 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
         break;
     }
 
-    res.json({ models });
+    res.json({ models, source });
   } catch (error) {
     console.error('Model fetch error:', error);
     res.status(500).json({ error: error.message });

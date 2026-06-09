@@ -6,7 +6,6 @@ import {
   runAnalysis,
   getAnalysis,
   getAnalysisHistory,
-  fetchCryptoPrices,
   fetchBinanceSymbols
 } from '../lib/api';
 import { useQuery } from '@tanstack/react-query';
@@ -16,35 +15,13 @@ import {
   History,
   Calendar,
   AlertTriangle,
-  FileText,
-  Key,
-  Database,
   Loader2,
-  ChevronRight,
   Sparkles,
-  User,
   ArrowRight,
-  Clock,
-  ExternalLink
+  Clock
 } from 'lucide-react';
 
 const DEFAULT_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
-
-const providers = [
-  { id: 'opencode', name: 'OpenCode Agent Engine' },
-  { id: 'google', name: 'Google Gemini' },
-  { id: 'openai', name: 'OpenAI GPT' },
-  { id: 'anthropic', name: 'Anthropic Claude' },
-  { id: 'deepseek', name: 'DeepSeek AI' }
-];
-
-const DEFAULT_MODELS: Record<string, { quick: string; deep: string }> = {
-  opencode: { quick: 'minimax-m2.5-free', deep: 'minimax-m2.5-free' },
-  openai: { quick: 'gpt-4o-mini', deep: 'gpt-4o' },
-  anthropic: { quick: 'claude-3-5-haiku-20241022', deep: 'claude-3-5-sonnet-20241022' },
-  google: { quick: 'gemini-2.5-flash', deep: 'gemini-2.5-pro' },
-  deepseek: { quick: 'deepseek-chat', deep: 'deepseek-reasoner' },
-};
 
 const STAGES = [
   { id: 1, name: 'Market Analyst', desc: 'Analyzing charts, order book liquidity, and technical trends...' },
@@ -120,18 +97,13 @@ function parseInlineFormatting(text: string) {
 }
 
 export default function Analysis() {
-  const { llmProvider, apiKey, quickModel, deepModel } = useAppStore();
+  const { llmProvider, quickModel } = useAppStore();
   const { addToast } = useToast();
 
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [searchQuery, setSearchQuery] = useState('BTCUSDT');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const [provider, setProvider] = useState(llmProvider || 'opencode');
-  const [selectedQuickModel, setSelectedQuickModel] = useState(quickModel || 'minimax-m2.5-free');
-  const [selectedDeepModel, setSelectedDeepModel] = useState(deepModel || 'minimax-m2.5-free');
-  const [customApiKey, setCustomApiKey] = useState('');
 
   // Fetch full symbols list dynamically from Binance API
   const { data: allPairs = DEFAULT_PAIRS } = useQuery({
@@ -150,18 +122,6 @@ export default function Analysis() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [symbol]);
-
-  const handleProviderChange = (newProvider: string) => {
-    setProvider(newProvider);
-    if (newProvider === llmProvider) {
-      setSelectedQuickModel(quickModel || 'minimax-m2.5-free');
-      setSelectedDeepModel(deepModel || 'minimax-m2.5-free');
-    } else {
-      const defaults = DEFAULT_MODELS[newProvider] || { quick: '', deep: '' };
-      setSelectedQuickModel(defaults.quick);
-      setSelectedDeepModel(defaults.deep);
-    }
-  };
 
   const [history, setHistory] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -232,13 +192,7 @@ export default function Analysis() {
     try {
       startTracking();
 
-      const options: Record<string, string> = {};
-      if (provider) options.provider = provider;
-      if (selectedQuickModel) options.quickModel = selectedQuickModel;
-      if (selectedDeepModel) options.deepModel = selectedDeepModel;
-      if (customApiKey) options.apiKey = customApiKey;
-
-      const res = await runAnalysis(symbol, undefined, options);
+      const res = await runAnalysis(symbol);
       if (res.error) {
         throw new Error(res.error);
       }
@@ -398,64 +352,20 @@ export default function Analysis() {
                 )}
               </div>
 
-              <div>
-                <label className="block text-xs text-muted mb-1.5 font-semibold uppercase tracking-wide">AI Provider</label>
-                <select
-                  value={provider}
-                  onChange={e => handleProviderChange(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-3.5 py-2 text-white text-xs font-semibold focus:outline-none focus:border-primary"
-                  disabled={status === 'running'}
-                >
-                  {providers.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-muted mb-1.5 font-semibold uppercase tracking-wide">Decision Model</label>
-                  <input
-                    type="text"
-                    value={selectedQuickModel}
-                    onChange={e => setSelectedQuickModel(e.target.value)}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-primary"
-                    placeholder="e.g. gpt-4o-mini"
-                    disabled={status === 'running'}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-muted mb-1.5 font-semibold uppercase tracking-wide">Debate Model</label>
-                  <input
-                    type="text"
-                    value={selectedDeepModel}
-                    onChange={e => setSelectedDeepModel(e.target.value)}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-primary"
-                    placeholder="e.g. gpt-4o"
-                    disabled={status === 'running'}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs text-muted font-semibold uppercase tracking-wide">Overwrite API Key</label>
-                  <span className="text-[10px] text-muted font-semibold">Optional</span>
-                </div>
-                <div className="relative">
-                  <Key className="w-4 h-4 text-muted absolute left-3 top-2.5" />
-                  <input
-                    type="password"
-                    value={customApiKey}
-                    onChange={e => setCustomApiKey(e.target.value)}
-                    className="w-full bg-background border border-border rounded-lg pl-9 pr-3 py-2 text-white text-xs focus:outline-none focus:border-primary"
-                    placeholder={apiKey ? '●●●●●●●● (using system config)' : 'Enter custom credentials'}
-                    disabled={status === 'running'}
-                  />
-                </div>
-              </div>
+              {(llmProvider || quickModel) && (
+                <p className="text-[10px] text-muted leading-relaxed">
+                  Using{' '}
+                  <span className="text-white font-semibold">{llmProvider || 'default'}</span>
+                  {quickModel && (
+                    <>
+                      {' · '}
+                      <span className="font-mono text-white">{quickModel}</span>
+                    </>
+                  )}
+                  {' — '}
+                  <span className="italic">configured in Settings</span>
+                </p>
+              )}
 
               <button
                 type="button"
@@ -649,7 +559,7 @@ export default function Analysis() {
               <Brain className="w-14 h-14 text-muted mb-4" />
               <h3 className="text-sm font-bold text-white mb-1">Launch Intelligent Co-agents</h3>
               <p className="text-xs text-muted max-w-sm mb-4">
-                Select an asset ticker and provider constraints. The system will deploy a cooperation pipeline to perform data ingestion, debate, and compile proposal.
+                Select an asset ticker and start the pipeline. The system will deploy cooperating agents to perform data ingestion, debate, and compile a strategic proposal.
               </p>
               <button
                 onClick={handleRun}

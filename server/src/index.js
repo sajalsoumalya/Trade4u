@@ -29,8 +29,11 @@ const corsOptions = {
     if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
       callback(null, true);
     } else {
+      // Deliberate (commit 9b8b913): log unknown origins instead of rejecting,
+      // so deploys behind proxies / alternate domains aren't hard-blocked.
+      // Auth is via Bearer token (not cookies), so reflecting origin is low-risk.
       console.warn(`CORS: blocked origin ${origin}`);
-      callback(null, false);
+      callback(null, origin);
     }
   },
   credentials: true

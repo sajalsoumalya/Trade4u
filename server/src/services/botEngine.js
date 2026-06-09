@@ -129,14 +129,20 @@ export function startAIEngine(bot, io) {
 
   proc.on('close', (code) => {
     console.log(`[AI:${bot.id}] Process exited with code ${code}`);
-    processes.delete(bot.id);
-    io.emit(`bot:${bot.id}:status`, { running: false });
+    // Only clear state if the map still points to THIS process — a restart may
+    // have already replaced it with a new process under the same bot id.
+    if (processes.get(bot.id)?.process === proc) {
+      processes.delete(bot.id);
+      io.emit(`bot:${bot.id}:status`, { running: false });
+    }
   });
 
   proc.on('error', (err) => {
     console.error(`[AI:${bot.id}] Failed to start: ${err.message}`);
-    processes.delete(bot.id);
-    io.emit(`bot:${bot.id}:status`, { running: false, error: err.message });
+    if (processes.get(bot.id)?.process === proc) {
+      processes.delete(bot.id);
+      io.emit(`bot:${bot.id}:status`, { running: false, error: err.message });
+    }
   });
 
   processes.set(bot.id, { process: proc, io });
@@ -147,12 +153,15 @@ export function startAIEngine(bot, io) {
 export function stopAIEngine(botId) {
   const entry = processes.get(botId);
   if (!entry) return false;
-  entry.process.kill('SIGTERM');
+  // Free the id immediately so an instant restart (same bot id) isn't rejected
+  // by the `processes.has(bot.id)` guard in startAIEngine.
+  processes.delete(botId);
+  const proc = entry.process;
+  proc.kill('SIGTERM');
+  // Escalate to SIGKILL for THIS specific process if it hasn't exited. We hold a
+  // direct reference (not a map lookup) so a restarted same-id process is safe.
   setTimeout(() => {
-    if (processes.has(botId)) {
-      processes.get(botId).process.kill('SIGKILL');
-      processes.delete(botId);
-    }
+    try { proc.kill('SIGKILL'); } catch (_) { /* already exited */ }
   }, 5000);
   return true;
 }

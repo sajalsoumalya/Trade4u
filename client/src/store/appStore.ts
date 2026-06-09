@@ -85,6 +85,7 @@ interface AppState {
   updatePositionSLTP: (botId: string, posId: string, sl?: number, tp?: number) => void;
   updateBot: (id: string, changes: Partial<Bot>) => void;
   updateBotSLTP: (botId: string, sl: number, tp: number) => void;
+  applyGlobalLlmToAllBots: (provider: string, quickModel: string, deepModel: string) => void;
   botLogs: Record<string, any[]>;
   addBotLog: (botId: string, log: any) => void;
 }
@@ -313,6 +314,12 @@ export const useAppStore = create<AppState>()(
       updateBotSLTP: (botId, sl, tp) => {
         set({
           bots: get().bots.map(b => b.id === botId ? { ...b, stopLoss: sl, takeProfit: tp } : b),
+        });
+      },
+
+      applyGlobalLlmToAllBots: (provider, quickModel, deepModel) => {
+        set({
+          bots: get().bots.map(b => ({ ...b, botProvider: provider, botQuickModel: quickModel, botDeepModel: deepModel })),
         });
       },
 
