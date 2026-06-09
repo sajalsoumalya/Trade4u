@@ -87,7 +87,7 @@ export default function Trading() {
         const qModel = bot.botQuickModel || quickModel || 'minimax-m2.5-free';
         const dModel = bot.botDeepModel || deepModel || 'minimax-m2.5-free';
         stopBotEngine(bot.id).then(() => {
-          startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval, provider, qModel, dModel);
+          startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval, provider, qModel, dModel, bot.name);
         });
       }
     });
@@ -226,7 +226,8 @@ export default function Trading() {
         target.interval,
         provider,
         qModel,
-        dModel
+        dModel,
+        target.name
       );
     }
   };
@@ -277,7 +278,8 @@ export default function Trading() {
         newBot.interval,
         provider,
         qModel,
-        dModel
+        dModel,
+        newBot.name
       );
     }
 

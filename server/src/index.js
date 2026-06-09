@@ -11,8 +11,9 @@ import analysisRoutes from './routes/analysis.js';
 import cryptoRoutes from './routes/crypto.js';
 import tradingRoutes from './routes/trading.js';
 import autotradeRoutes from './routes/autotrade.js';
-import './services/db.js';
+import db from './services/db.js';
 import { runMigration } from './services/migrate.js';
+import { startAIEngine } from './services/botEngine.js';
 
 dotenv.config();
 runMigration();
@@ -183,6 +184,28 @@ app.set('io', io);
 const PORT = process.env.PORT || 8501;
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+
+  // Auto-restart previously running bots from DB
+  try {
+    const runningBots = db.prepare("SELECT * FROM bots WHERE status = 'running'").all();
+    for (const bot of runningBots) {
+      const symbols = JSON.parse(bot.symbols || '[]');
+      startAIEngine({
+        id: bot.id,
+        uid: bot.uid,
+        symbols,
+        stopLoss: bot.stop_loss,
+        takeProfit: bot.take_profit,
+        interval: bot.interval,
+        provider: bot.bot_provider,
+        quickModel: bot.bot_quick_model,
+        deepModel: bot.bot_deep_model,
+      }, io);
+    }
+    if (runningBots.length > 0) console.log(`Auto-restarted ${runningBots.length} bot(s) from DB`);
+  } catch (err) {
+    console.error('Auto-restart bots error:', err.message);
+  }
 });
 
 export { io };

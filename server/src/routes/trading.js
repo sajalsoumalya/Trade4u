@@ -206,9 +206,20 @@ router.get('/balance', optionalAuth, async (req, res) => {
 router.post('/bots/:id/start', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { symbols, stopLoss, takeProfit, interval, provider, quickModel, deepModel } = req.body;
+    const { name, symbols, stopLoss, takeProfit, interval, provider, quickModel, deepModel } = req.body;
     const io = req.app.get('io');
     const uid = req.uid;
+
+    // Persist bot to SQLite so it can be auto-restarted on server boot
+    db.prepare(`
+      INSERT INTO bots (id, uid, name, symbols, allocation_type, allocation_value, frozen_amount, status, stop_loss, take_profit, interval, bot_provider, bot_quick_model, bot_deep_model)
+      VALUES (?, ?, ?, ?, 'percentage', 0, 0, 'running', ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        status = 'running', symbols = COALESCE(?, symbols), stop_loss = COALESCE(?, stop_loss), take_profit = COALESCE(?, take_profit),
+        interval = COALESCE(?, interval), bot_provider = COALESCE(?, bot_provider), bot_quick_model = COALESCE(?, bot_quick_model), bot_deep_model = COALESCE(?, bot_deep_model)
+    `).run(id, uid, name || id, JSON.stringify(symbols || []), stopLoss ?? null, takeProfit ?? null, interval ?? 5, provider ?? null, quickModel ?? null, deepModel ?? null,
+      JSON.stringify(symbols || []), stopLoss ?? null, takeProfit ?? null, interval ?? 5, provider ?? null, quickModel ?? null, deepModel ?? null);
+
     const ok = startAIEngine({ id, uid, symbols: symbols || [], stopLoss, takeProfit, interval, provider, quickModel, deepModel }, io);
     res.json({ success: ok, running: true });
   } catch (error) {
@@ -219,6 +230,7 @@ router.post('/bots/:id/start', optionalAuth, async (req, res) => {
 router.post('/bots/:id/stop', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    db.prepare('UPDATE bots SET status = ? WHERE id = ?').run('stopped', id);
     stopAIEngine(id);
     res.json({ success: true, running: false });
   } catch (error) {
