@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
 import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
 import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider, testConnection } from '../lib/api';
@@ -49,6 +49,7 @@ export default function Settings() {
   const [showKey, setShowKey] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<{ ok: boolean; error?: string } | null>(null);
   const [testing, setTesting] = useState(false);
+  const initialConfigLoaded = useRef(false);
 
   // Fallback LLM states
   const [fallbackModels, setFallbackModels] = useState<ModelEntry[]>([]);
@@ -63,7 +64,6 @@ export default function Settings() {
       if (config.provider) setLlmProvider(config.provider);
       if (config.apiKey) {
         setApiKey(config.apiKey);
-        // Automatically test the connection in the background if an API key is saved
         testConnection(config.provider, config.apiKey, false)
           .then(result => setConnectionStatus(result))
           .catch(e => setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' }));
@@ -71,17 +71,17 @@ export default function Settings() {
       if (config.quickModel) setQuickModel(config.quickModel);
       if (config.deepModel) setDeepModel(config.deepModel);
 
-      // Load fallback config
       if (config.fallbackProvider) setFallbackProvider(config.fallbackProvider);
       if (config.fallbackApiKey) {
         setFallbackApiKey(config.fallbackApiKey);
-        // Automatically test fallback connection in the background
         testConnection(config.fallbackProvider, config.fallbackApiKey, true)
           .then(result => setFallbackConnectionStatus(result))
           .catch(e => setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' }));
       }
       if (config.fallbackQuickModel) setFallbackQuickModel(config.fallbackQuickModel);
       if (config.fallbackDeepModel) setFallbackDeepModel(config.fallbackDeepModel);
+    }).finally(() => {
+      initialConfigLoaded.current = true;
     });
   }, []);
 
@@ -101,7 +101,7 @@ export default function Settings() {
         .then(data => {
           setModels(data.models || []);
           const m = data.models || [];
-          if (m.length > 0) {
+          if (m.length > 0 && initialConfigLoaded.current) {
             setQuickModel(prev => {
               if (prev && m.some(x => x.id === prev)) return prev;
               return m[0].id;
@@ -135,7 +135,7 @@ export default function Settings() {
         .then(data => {
           setFallbackModels(data.models || []);
           const m = data.models || [];
-          if (m.length > 0) {
+          if (m.length > 0 && initialConfigLoaded.current) {
             setFallbackQuickModel(prev => {
               if (prev && m.some(x => x.id === prev)) return prev;
               return m[0].id;
