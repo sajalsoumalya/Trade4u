@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense, lazy } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { firebaseConfig } from './lib/firebase';
@@ -11,14 +11,27 @@ import {
   LogOut,
   TrendingUp,
   User,
-  Menu
+  Menu,
+  BarChart3
 } from 'lucide-react';
 
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Trading from './pages/Trading';
-import SettingsPage from './pages/Settings';
 import { ToastProvider } from './components/Toast';
+
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Trading = lazy(() => import('./pages/Trading'));
+const Analysis = lazy(() => import('./pages/Analysis'));
+const SettingsPage = lazy(() => import('./pages/Settings'));
+
+const PageLoader = () => (
+  <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+    <div className="relative w-16 h-16">
+      <div className="absolute inset-0 rounded-full border-4 border-primary/10" />
+      <div className="absolute inset-0 rounded-full border-4 border-t-primary animate-spin" />
+    </div>
+    <p className="text-sm font-medium text-muted animate-pulse">Loading interface...</p>
+  </div>
+);
 
 let auth: any = null;
 try {
@@ -32,6 +45,7 @@ try {
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/trading', label: 'Trading', icon: ArrowLeftRight },
+  { href: '/analysis', label: 'Analysis', icon: BarChart3 },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -160,13 +174,16 @@ function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
-        <Routes>
-          <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />} />
-          <Route path="/dashboard" element={isAuthenticated ? <Layout user={user}><Dashboard /></Layout> : <Navigate to="/login" />} />
-          <Route path="/trading" element={isAuthenticated ? <Layout user={user}><Trading /></Layout> : <Navigate to="/login" />} />
-          <Route path="/settings" element={isAuthenticated ? <Layout user={user}><SettingsPage /></Layout> : <Navigate to="/login" />} />
-          <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} />} />
-        </Routes>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />} />
+            <Route path="/dashboard" element={isAuthenticated ? <Layout user={user}><Dashboard /></Layout> : <Navigate to="/login" />} />
+            <Route path="/trading" element={isAuthenticated ? <Layout user={user}><Trading /></Layout> : <Navigate to="/login" />} />
+            <Route path="/analysis" element={isAuthenticated ? <Layout user={user}><Analysis /></Layout> : <Navigate to="/login" />} />
+            <Route path="/settings" element={isAuthenticated ? <Layout user={user}><SettingsPage /></Layout> : <Navigate to="/login" />} />
+            <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} />} />
+          </Routes>
+        </Suspense>
       </ToastProvider>
     </BrowserRouter>
   );

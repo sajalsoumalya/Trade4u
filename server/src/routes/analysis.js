@@ -26,13 +26,34 @@ router.post('/run', optionalAuth, async (req, res) => {
 
     db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
 
-    // If apiKey is masked, fetch and decrypt it from DB
-    if (apiKey === '●●●●●●●●' || apiKey === '******' || !apiKey) {
-      const config = db.prepare('SELECT api_key FROM llm_config WHERE uid = ?').get(uid);
-      if (config && config.api_key) {
-        apiKey = decrypt(config.api_key);
+    // Fetch user LLM config from DB to resolve credentials and fallbacks
+    const config = db.prepare('SELECT * FROM llm_config WHERE uid = ?').get(uid);
+
+    // Determine target provider, models and key based on request parameters -> user settings config -> system fallback config
+    let targetProvider = provider || (config ? config.provider : '') || (config ? config.fallback_provider : '') || 'opencode';
+    let targetQuickModel = quickModel || (config ? config.quick_model : '') || (config ? config.fallback_quick_model : '') || 'minimax-m2.5-free';
+    let targetDeepModel = deepModel || (config ? config.deep_model : '') || (config ? config.fallback_deep_model : '') || 'minimax-m2.5-free';
+    let targetApiKey = apiKey;
+
+    if (targetApiKey === '●●●●●●●●' || targetApiKey === '******' || !targetApiKey) {
+      if (config) {
+        if (targetProvider === config.provider) {
+          targetApiKey = config.api_key ? decrypt(config.api_key) : '';
+        } else if (targetProvider === config.fallback_provider) {
+          targetApiKey = config.fallback_api_key ? decrypt(config.fallback_api_key) : '';
+        } else {
+          targetApiKey = '';
+        }
+      } else {
+        targetApiKey = '';
       }
     }
+
+    // Override local variables with final resolved targets
+    provider = targetProvider;
+    quickModel = targetQuickModel;
+    deepModel = targetDeepModel;
+    apiKey = targetApiKey;
 
     db.prepare(`
       INSERT INTO analyses (id, uid, symbol, date, status, decision, result, error, created_at, updated_at)

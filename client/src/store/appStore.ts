@@ -62,6 +62,14 @@ interface AppState {
   setApiKey: (k: string) => void;
   setDeepModel: (m: string) => void;
   setQuickModel: (m: string) => void;
+  fallbackProvider: string;
+  fallbackApiKey: string;
+  fallbackDeepModel: string;
+  fallbackQuickModel: string;
+  setFallbackProvider: (p: string) => void;
+  setFallbackApiKey: (k: string) => void;
+  setFallbackDeepModel: (m: string) => void;
+  setFallbackQuickModel: (m: string) => void;
 
   walletBalance: number;
   setWalletBalance: (b: number) => void;
@@ -101,6 +109,14 @@ export const useAppStore = create<AppState>()(
       setApiKey: (apiKey) => set({ apiKey }),
       setDeepModel: (deepModel) => set({ deepModel }),
       setQuickModel: (quickModel) => set({ quickModel }),
+      fallbackProvider: 'opencode',
+      fallbackApiKey: '',
+      fallbackDeepModel: 'minimax-m2.5-free',
+      fallbackQuickModel: 'minimax-m2.5-free',
+      setFallbackProvider: (fallbackProvider) => set({ fallbackProvider }),
+      setFallbackApiKey: (fallbackApiKey) => set({ fallbackApiKey }),
+      setFallbackDeepModel: (fallbackDeepModel) => set({ fallbackDeepModel }),
+      setFallbackQuickModel: (fallbackQuickModel) => set({ fallbackQuickModel }),
 
       walletBalance: 100000,
       setWalletBalance: (walletBalance) => set({ walletBalance }),
@@ -310,6 +326,10 @@ export const useAppStore = create<AppState>()(
         apiKey: state.apiKey,
         deepModel: state.deepModel,
         quickModel: state.quickModel,
+        fallbackProvider: state.fallbackProvider,
+        fallbackApiKey: state.fallbackApiKey,
+        fallbackDeepModel: state.fallbackDeepModel,
+        fallbackQuickModel: state.fallbackQuickModel,
         walletBalance: state.walletBalance,
         bots: state.bots,
         botLogs: state.botLogs,

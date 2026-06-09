@@ -15,9 +15,13 @@ function loadLlmConfig(uid) {
     if (config) {
       return {
         provider: config.provider,
-        apiKey: decrypt(config.api_key),
+        apiKey: config.api_key ? decrypt(config.api_key) : '',
         quickModel: config.quick_model,
         deepModel: config.deep_model,
+        fallbackProvider: config.fallback_provider || 'opencode',
+        fallbackApiKey: config.fallback_api_key ? decrypt(config.fallback_api_key) : '',
+        fallbackQuickModel: config.fallback_quick_model || 'minimax-m2.5-free',
+        fallbackDeepModel: config.fallback_deep_model || 'minimax-m2.5-free',
       };
     }
   } catch (err) {
@@ -31,20 +35,33 @@ export function startAIEngine(bot, io) {
 
   const config = loadLlmConfig(bot.uid);
 
+  // Determine LLM provider and models based on bot config -> user settings config -> system fallback config
+  let provider = bot.provider || config.provider;
+  let qModel = bot.quickModel || config.quickModel;
+  let dModel = bot.deepModel || config.deepModel;
+  let apiKey = config.apiKey || '';
+
+  if (!provider) {
+    provider = config.fallbackProvider || 'opencode';
+    qModel = config.fallbackQuickModel || 'minimax-m2.5-free';
+    dModel = config.fallbackDeepModel || 'minimax-m2.5-free';
+    apiKey = config.fallbackApiKey || '';
+  }
+
   const scriptPath = path.join(PROJECT_ROOT, 'server', 'bot_signal.py');
   const args = [
     scriptPath,
     '--symbols', ...bot.symbols,
     '--interval', String(bot.interval || 5),
-    '--provider', bot.provider || config.provider || 'opencode',
-    '--deep-model', bot.deepModel || config.deepModel || 'deepseek/deepseek-chat',
-    '--quick-model', bot.quickModel || config.quickModel || 'deepseek/deepseek-chat',
+    '--provider', provider,
+    '--deep-model', dModel,
+    '--quick-model', qModel,
     '--stop-loss', String(bot.stopLoss || 2),
     '--take-profit', String(bot.takeProfit || 5),
   ];
 
-  if (config.apiKey) {
-    args.push('--api-key', config.apiKey);
+  if (apiKey) {
+    args.push('--api-key', apiKey);
   }
 
   // Map provider to its expected API key env var
@@ -57,13 +74,13 @@ export function startAIEngine(bot, io) {
     deepseek: 'DEEPSEEK_API_KEY',
     openrouter: 'OPENROUTER_API_KEY',
   };
-  const providerEnvVar = providerEnvMap[bot.provider || config.provider] || 'OPENAI_API_KEY';
+  const providerEnvVar = providerEnvMap[provider] || 'OPENAI_API_KEY';
 
   const proc = spawn('python3', args, {
     env: {
       ...process.env,
       PYTHONPATH: `${PROJECT_ROOT}:${process.env.PYTHONPATH || ''}`,
-      [providerEnvVar]: config.apiKey || '',
+      [providerEnvVar]: apiKey,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

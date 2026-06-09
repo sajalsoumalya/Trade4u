@@ -40,6 +40,10 @@ db.exec(`
     api_key TEXT, -- Encrypted (aes-256-gcm format)
     quick_model TEXT,
     deep_model TEXT,
+    fallback_provider TEXT DEFAULT 'opencode',
+    fallback_api_key TEXT,
+    fallback_quick_model TEXT DEFAULT 'minimax-m2.5-free',
+    fallback_deep_model TEXT DEFAULT 'minimax-m2.5-free',
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
   );
@@ -151,6 +155,20 @@ db.exec(`
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
   );
 `);
+
+// Add fallback columns to existing DB if they don't exist
+try {
+  db.exec("ALTER TABLE llm_config ADD COLUMN fallback_provider TEXT DEFAULT 'opencode';");
+} catch (_) {}
+try {
+  db.exec("ALTER TABLE llm_config ADD COLUMN fallback_api_key TEXT;");
+} catch (_) {}
+try {
+  db.exec("ALTER TABLE llm_config ADD COLUMN fallback_quick_model TEXT DEFAULT 'minimax-m2.5-free';");
+} catch (_) {}
+try {
+  db.exec("ALTER TABLE llm_config ADD COLUMN fallback_deep_model TEXT DEFAULT 'minimax-m2.5-free';");
+} catch (_) {}
 
 console.log('SQLite database schema initialized at:', dbPath);
 

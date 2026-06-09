@@ -224,13 +224,26 @@ router.get('/config', optionalAuth, async (req, res) => {
     const uid = req.uid;
     const config = db.prepare('SELECT * FROM llm_config WHERE uid = ?').get(uid);
     if (!config) {
-      return res.json({ provider: 'opencode', apiKey: '', quickModel: 'minimax-m2.5-free', deepModel: 'minimax-m2.5-free' });
+      return res.json({
+        provider: 'opencode',
+        apiKey: '',
+        quickModel: 'minimax-m2.5-free',
+        deepModel: 'minimax-m2.5-free',
+        fallbackProvider: 'opencode',
+        fallbackApiKey: '',
+        fallbackQuickModel: 'minimax-m2.5-free',
+        fallbackDeepModel: 'minimax-m2.5-free',
+      });
     }
     res.json({
       provider: config.provider,
       apiKey: config.api_key ? '●●●●●●●●' : '',
       quickModel: config.quick_model,
       deepModel: config.deep_model,
+      fallbackProvider: config.fallback_provider || 'opencode',
+      fallbackApiKey: config.fallback_api_key ? '●●●●●●●●' : '',
+      fallbackQuickModel: config.fallback_quick_model || 'minimax-m2.5-free',
+      fallbackDeepModel: config.fallback_deep_model || 'minimax-m2.5-free',
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -239,28 +252,64 @@ router.get('/config', optionalAuth, async (req, res) => {
 
 router.post('/config', optionalAuth, async (req, res) => {
   try {
-    const { provider, apiKey, quickModel, deepModel } = req.body;
+    const {
+      provider,
+      apiKey,
+      quickModel,
+      deepModel,
+      fallbackProvider,
+      fallbackApiKey,
+      fallbackQuickModel,
+      fallbackDeepModel,
+    } = req.body;
     const uid = req.uid;
 
     db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
 
-    const existing = db.prepare('SELECT api_key FROM llm_config WHERE uid = ?').get(uid);
+    const existing = db.prepare('SELECT api_key, fallback_api_key FROM llm_config WHERE uid = ?').get(uid);
     let finalKey = existing ? existing.api_key : '';
+    let finalFallbackKey = existing ? existing.fallback_api_key : '';
 
     if (apiKey && apiKey !== '●●●●●●●●' && !apiKey.includes('●')) {
       finalKey = encrypt(apiKey);
+    } else if (apiKey === '') {
+      finalKey = '';
+    }
+
+    if (fallbackApiKey && fallbackApiKey !== '●●●●●●●●' && !fallbackApiKey.includes('●')) {
+      finalFallbackKey = encrypt(fallbackApiKey);
+    } else if (fallbackApiKey === '') {
+      finalFallbackKey = '';
     }
 
     db.prepare(`
-      INSERT INTO llm_config (uid, provider, api_key, quick_model, deep_model, updated_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO llm_config (
+        uid, provider, api_key, quick_model, deep_model,
+        fallback_provider, fallback_api_key, fallback_quick_model, fallback_deep_model,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(uid) DO UPDATE SET
         provider = excluded.provider,
         api_key = excluded.api_key,
         quick_model = excluded.quick_model,
         deep_model = excluded.deep_model,
+        fallback_provider = excluded.fallback_provider,
+        fallback_api_key = excluded.fallback_api_key,
+        fallback_quick_model = excluded.fallback_quick_model,
+        fallback_deep_model = excluded.fallback_deep_model,
         updated_at = CURRENT_TIMESTAMP
-    `).run(uid, provider, finalKey, quickModel, deepModel);
+    `).run(
+      uid,
+      provider,
+      finalKey,
+      quickModel,
+      deepModel,
+      fallbackProvider || 'opencode',
+      finalFallbackKey,
+      fallbackQuickModel || 'minimax-m2.5-free',
+      fallbackDeepModel || 'minimax-m2.5-free'
+    );
 
     res.json({ success: true });
   } catch (error) {
@@ -271,14 +320,16 @@ router.post('/config', optionalAuth, async (req, res) => {
 // --- Test API connection ---
 router.post('/test-connection', optionalAuth, async (req, res) => {
   try {
-    let { provider, apiKey } = req.body;
+    let { provider, apiKey, isFallback } = req.body;
     if (!provider) return res.status(400).json({ ok: false, error: 'provider required' });
 
     const uid = req.uid;
     if (apiKey === '●●●●●●●●' || apiKey === '******' || !apiKey) {
-      const config = db.prepare('SELECT api_key FROM llm_config WHERE uid = ?').get(uid);
-      if (config && config.api_key) {
-        apiKey = decrypt(config.api_key);
+      const config = db.prepare('SELECT api_key, fallback_api_key FROM llm_config WHERE uid = ?').get(uid);
+      if (config) {
+        apiKey = isFallback
+          ? (config.fallback_api_key ? decrypt(config.fallback_api_key) : '')
+          : (config.api_key ? decrypt(config.api_key) : '');
       }
     }
 

@@ -182,11 +182,11 @@ export const loadLlmConfig = async () => {
   try { return JSON.parse(text); } catch { return {}; }
 };
 
-export const testConnection = async (provider: string, apiKey?: string) => {
+export const testConnection = async (provider: string, apiKey?: string, isFallback = false) => {
   const res = await fetch(`${API_BASE}/trading/test-connection`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ provider, apiKey })
+    body: JSON.stringify({ provider, apiKey, isFallback })
   });
   const text = await res.text();
   try { return JSON.parse(text); } catch { return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 100)}` }; }
@@ -199,4 +199,20 @@ export const fetchModelsFromProvider = async (provider: string, apiKey?: string)
     body: JSON.stringify({ provider, apiKey })
   });
   return res.json();
+};
+
+export const fetchBinanceSymbols = async (): Promise<string[]> => {
+  try {
+    const res = await fetch('https://api.binance.com/api/v3/exchangeInfo');
+    const data = await res.json();
+    if (data && data.symbols) {
+      return data.symbols
+        .filter((s: any) => s.status === 'TRADING' && s.quoteAsset === 'USDT')
+        .map((s: any) => s.symbol)
+        .sort();
+    }
+  } catch (e) {
+    console.error('Failed to fetch Binance symbols:', e);
+  }
+  return ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
 };

@@ -13,6 +13,7 @@ def _normalize_crypto_symbol(symbol: str) -> str:
     - BTC/USDT -> BTC-USD
     - ETH/USDT -> ETH-USD
     - BTC-USD -> BTC-USD (unchanged)
+    - BTCUSDT -> BTC-USD
     - EURUSD -> EURUSD=X (forex suffix)
     - USDJPY -> USDJPY=X (forex suffix)
     """
@@ -25,6 +26,23 @@ def _normalize_crypto_symbol(symbol: str) -> str:
         if quote in ("USDT", "USD", "USDC"):
             quote = "USD"
         return f"{base}-{quote}"
+
+    # Handle standard crypto symbols without slashes (e.g. BTCUSDT, ETHUSDT, SOLUSDT, BTCUSDC)
+    for quote in ("USDT", "USDC"):
+        if symbol.endswith(quote):
+            base = symbol[:-len(quote)]
+            return f"{base}-USD"
+
+    # Handle crypto symbols ending with USD that are longer than 6 characters (e.g., BTCUSD)
+    if symbol.endswith("USD") and len(symbol) > 6:
+        base = symbol[:-3]
+        return f"{base}-USD"
+
+    # Handle hyphenated crypto symbols (e.g., BTC-USDT)
+    if "-" in symbol:
+        base, quote = symbol.split("-", 1)
+        if quote in ("USDT", "USDC", "USD"):
+            return f"{base}-USD"
 
     # Handle forex pairs (3-6 char symbols without slash)
     # yfinance uses =X suffix for forex
