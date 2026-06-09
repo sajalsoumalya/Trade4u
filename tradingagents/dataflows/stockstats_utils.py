@@ -34,7 +34,13 @@ def yf_retry(func, max_retries=3, base_delay=2.0):
 
 def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     """Normalize a stock DataFrame for stockstats: parse dates, drop invalid rows, fill price gaps."""
-    data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
+    date_col = next((c for c in data.columns if str(c).lower() in ("date", "datetime", "timestamp", "time")), None)
+    if date_col is None:
+        data = data.reset_index()
+        date_col = next((c for c in data.columns if str(c).lower() in ("date", "datetime", "timestamp", "time")), None)
+    if date_col is None or date_col not in data.columns:
+        raise KeyError("'Date' — no date column found in downloaded data")
+    data["Date"] = pd.to_datetime(data[date_col], errors="coerce")
     data = data.dropna(subset=["Date"])
 
     price_cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in data.columns]

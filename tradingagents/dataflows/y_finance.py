@@ -248,23 +248,29 @@ def _get_stock_stats_bulk(
 
     data = load_ohlcv(symbol, curr_date)
     df = wrap(data)
-    df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
-    
+
+    # stockstats' wrap() lowercases every column, so find the date column
+    # case-insensitively, falling back to the index if absent.
+    date_col = next((c for c in df.columns if str(c).lower() == "date"), None)
+    raw_dates = df[date_col] if date_col is not None else df.index.to_series()
+    date_strs = pd.to_datetime(raw_dates, errors="coerce").dt.strftime("%Y-%m-%d")
+
     # Calculate the indicator for all rows at once
     df[indicator]  # This triggers stockstats to calculate the indicator
-    
+
     # Create a dictionary mapping date strings to indicator values
     result_dict = {}
-    for _, row in df.iterrows():
-        date_str = row["Date"]
+    for i, (_, row) in enumerate(df.iterrows()):
+        ds = date_strs.iloc[i] if i < len(date_strs) else None
+        if not ds:
+            continue
         indicator_value = row[indicator]
-        
         # Handle NaN/None values
         if pd.isna(indicator_value):
-            result_dict[date_str] = "N/A"
+            result_dict[ds] = "N/A"
         else:
-            result_dict[date_str] = str(indicator_value)
-    
+            result_dict[ds] = str(indicator_value)
+
     return result_dict
 
 
