@@ -86,10 +86,56 @@ class SignalEmitter:
         except Exception as e:
             return 'hold', [{"role": "error", "content": str(e)}]
 
+    def get_sltp_suggestion(self, symbol, action, price, reasoning):
+        """Ask the LLM for take-profit and stop-loss percentages via a quick API call."""
+        try:
+            provider = self.config.get('provider', 'opencode')
+            api_key = os.environ.get(_PROVIDER_ENV_VARS.get(provider, 'OPENAI_API_KEY'))
+            if not api_key:
+                return None, None
+            from tradingagents.llm_clients.openai_client import _PROVIDER_CONFIG
+            cfg = _PROVIDER_CONFIG.get(provider)
+            base_url = cfg[0] if cfg else 'https://api.openai.com/v1'
+            prompt = (
+                f"Given a {action.upper()} signal for {symbol} at ${price:.2f}, "
+                f"suggest take-profit % and stop-loss % as two comma-separated numbers only. "
+                f"Example: 5.0,2.0"
+            )
+            resp = requests.post(
+                f"{base_url.rstrip('/')}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": self.config.get('quick_model', 'deepseek/deepseek-chat'),
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 20,
+                    "temperature": 0,
+                },
+                timeout=10,
+            )
+            if resp.ok:
+                text = resp.json()['choices'][0]['message']['content'].strip()
+                parts = text.replace('%', '').split(',')
+                tp = float(parts[0].strip())
+                sl = float(parts[1].strip()) if len(parts) > 1 else None
+                return (tp, sl) if tp and sl else (None, None)
+        except:
+            pass
+        return None, None
+
     async def run_cycle(self, symbols):
         for symbol in symbols:
             price = self.get_price(symbol)
             action, logs = await self.analyze(symbol)
+
+            # Determine SL/TP from AI suggestion or fall back to configured defaults
+            stop_loss = self.stop_loss_pct
+            take_profit = self.take_profit_pct
+            if action in ('buy', 'sell') and price:
+                ai_tp, ai_sl = self.get_sltp_suggestion(symbol, action, price, logs)
+                if ai_tp is not None:
+                    take_profit = ai_tp
+                if ai_sl is not None:
+                    stop_loss = ai_sl
 
             # Emit analysis log
             log_entry = {
@@ -97,6 +143,8 @@ class SignalEmitter:
                 "symbol": symbol,
                 "action": action,
                 "price": price,
+                "stopLoss": stop_loss,
+                "takeProfit": take_profit,
                 "reasoning": logs,
                 "timestamp": datetime.now().isoformat(),
             }
@@ -108,9 +156,18 @@ class SignalEmitter:
                 "symbol": symbol,
                 "action": action,
                 "price": price,
+                "stopLoss": stop_loss,
+                "takeProfit": take_profit,
                 "timestamp": datetime.now().isoformat(),
             }
             print(json.dumps(signal), flush=True)
+            # Emit update_sltp for existing positions (AI suggests SL/TP levels)
+            print(json.dumps({
+                "type": "update_sltp",
+                "symbol": symbol,
+                "stopLoss": stop_loss,
+                "takeProfit": take_profit,
+            }), flush=True)
 
         print(json.dumps({"type": "cycle_complete", "timestamp": datetime.now().isoformat()}), flush=True)
 

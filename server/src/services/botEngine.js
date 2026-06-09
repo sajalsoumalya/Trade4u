@@ -80,6 +80,10 @@ export function startAIEngine(bot, io) {
         if (signal.type === 'signal' && (signal.action === 'buy' || signal.action === 'sell') && signal.symbol) {
           io.emit(`bot:${bot.id}:trade`, signal);
         }
+        // Emit SL/TP updates from AI
+        if (signal.type === 'update_sltp' && signal.symbol) {
+          io.emit(`bot:${bot.id}:update_sltp`, signal);
+        }
       } catch {
         console.log(`[AI:${bot.id}] ${trimmed}`);
       }

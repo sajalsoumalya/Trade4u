@@ -65,6 +65,7 @@ export default function Trading() {
             addPosition(bot.id, {
               symbol: signal.symbol, type: 'buy',
               quantity: 0.001, entryPrice: signal.price,
+              stopLoss: signal.stopLoss, takeProfit: signal.takeProfit,
             });
             addToast('success', `${bot.name}: Bought ${signal.symbol} @ $${signal.price.toFixed(2)}`);
           } else if (signal.action === 'sell') {
@@ -73,6 +74,14 @@ export default function Trading() {
               closePosition(bot.id, pos.id, signal.price);
               addToast('info', `${bot.name}: Sold ${signal.symbol} @ $${signal.price.toFixed(2)}`);
             }
+          }
+        });
+        // AI can dynamically update SL/TP per position
+        socket.on(`bot:${bot.id}:update_sltp`, (data: any) => {
+          const pos = bot.positions.find(p => p.symbol === data.symbol);
+          if (pos && (data.stopLoss !== undefined || data.takeProfit !== undefined)) {
+            updatePositionSLTP(bot.id, pos.id, data.stopLoss, data.takeProfit);
+            addToast('info', `${bot.name}: SL/TP updated for ${data.symbol}`);
           }
         });
         socket.on(`bot:${bot.id}:status`, (status: any) => {
@@ -106,6 +115,22 @@ export default function Trading() {
       const map: Record<string, any> = {};
       data.forEach((d: any) => { map[d.symbol] = d; });
       setPrices(map);
+      // Auto-close positions when SL or TP is hit
+      bots.forEach(bot => {
+        if (bot.status !== 'running') return;
+        bot.positions.forEach(pos => {
+          const cp = map[pos.symbol]?.price;
+          if (!cp) return;
+          if (pos.stopLoss) {
+            const slHit = pos.type === 'buy' ? cp <= pos.entryPrice * (1 - pos.stopLoss / 100) : cp >= pos.entryPrice * (1 + pos.stopLoss / 100);
+            if (slHit) { closePosition(bot.id, pos.id, cp); addToast('error', `${bot.name}: SL hit ${pos.symbol} @ $${cp.toFixed(2)}`); return; }
+          }
+          if (pos.takeProfit) {
+            const tpHit = pos.type === 'buy' ? cp >= pos.entryPrice * (1 + pos.takeProfit / 100) : cp <= pos.entryPrice * (1 - pos.takeProfit / 100);
+            if (tpHit) { closePosition(bot.id, pos.id, cp); addToast('success', `${bot.name}: TP hit ${pos.symbol} @ $${cp.toFixed(2)}`); return; }
+          }
+        });
+      });
     } catch {}
   };
 
