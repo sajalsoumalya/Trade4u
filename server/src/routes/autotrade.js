@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { optionalAuth } from '../middleware/auth.js';
 import db from '../services/db.js';
+import { decrypt } from '../services/cryptoHelper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../../');
@@ -11,8 +12,43 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../../');
 const router = Router();
 let botProcess = null;
 
-function startBot(settings) {
+// Map provider -> expected API key env var (mirrors botEngine.js).
+const PROVIDER_ENV_MAP = {
+  opencode: 'OPENCODE_API_KEY',
+  nvidia_nim: 'NVIDIA_NIM_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  google: 'GOOGLE_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+};
+
+// Resolve the user's saved LLM config (decrypted) so autotrade uses the same
+// provider/models/key as the rest of the app instead of a hardcoded provider.
+function loadLlmConfig(uid) {
+  try {
+    const c = db.prepare('SELECT * FROM llm_config WHERE uid = ?').get(uid);
+    if (!c) return {};
+    return {
+      provider: c.provider,
+      apiKey: c.api_key ? decrypt(c.api_key) : '',
+      quickModel: c.quick_model,
+      deepModel: c.deep_model,
+    };
+  } catch (err) {
+    console.error('AutoTrade: failed to load LLM config:', err.message);
+    return {};
+  }
+}
+
+function startBot(settings, llm = {}) {
   if (botProcess) return;
+  const provider = llm.provider || 'opencode';
+  const quickModel = llm.quickModel || 'minimax-m2.5-free';
+  const deepModel = llm.deepModel || 'minimax-m2.5-free';
+  const providerEnvVar = PROVIDER_ENV_MAP[provider] || 'OPENAI_API_KEY';
+  const apiKey = llm.apiKey || process.env[providerEnvVar] || '';
+
   const scriptPath = path.join(PROJECT_ROOT, 'bot.py');
   const args = [
     scriptPath,
@@ -22,14 +58,19 @@ function startBot(settings) {
     '--stop-loss', String(settings.stopLoss),
     '--take-profit', String(settings.takeProfit),
     '--max-positions', String(settings.maxPositions),
-    '--provider', 'opencode',
+    '--provider', provider,
+    '--deep-model', deepModel,
+    '--quick-model', quickModel,
   ];
-  if (process.env.OPENCODE_API_KEY) {
-    args.push('--api-key', process.env.OPENCODE_API_KEY);
+  if (apiKey) {
+    args.push('--api-key', apiKey);
   }
+
   const python = process.env.PYTHON || 'python3';
+  const childEnv = { ...process.env };
+  if (apiKey) childEnv[providerEnvVar] = apiKey;
   botProcess = spawn(python, args, {
-    env: { ...process.env },
+    env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   botProcess.stdout.on('data', (data) => {
@@ -120,7 +161,7 @@ router.post('/settings', optionalAuth, (req, res) => {
 
     if (newSettings.enabled) {
       stopBot();
-      startBot(newSettings);
+      startBot(newSettings, loadLlmConfig(uid));
     }
     res.json({ success: true, settings: newSettings });
   } catch (error) {
@@ -140,7 +181,7 @@ router.post('/toggle', optionalAuth, (req, res) => {
     current.enabled = !!enabled;
 
     if (enabled) {
-      startBot(current);
+      startBot(current, loadLlmConfig(uid));
     } else {
       stopBot();
     }
