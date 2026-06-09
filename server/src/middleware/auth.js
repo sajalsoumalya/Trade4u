@@ -1,4 +1,5 @@
 import firebaseAdmin from '../services/firebase.js';
+import { getAuth } from 'firebase-admin/auth';
 
 export const requireAuth = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -23,7 +24,7 @@ export const requireAuth = async (req, res, next) => {
   }
 
   try {
-    const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
+    const decodedToken = await getAuth(firebaseAdmin).verifyIdToken(token);
     req.uid = decodedToken.uid;
     next();
   } catch (error) {
@@ -46,7 +47,7 @@ export const optionalAuth = async (req, res, next) => {
   }
 
   try {
-    const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
+    const decodedToken = await getAuth(firebaseAdmin).verifyIdToken(token);
     req.uid = decodedToken.uid;
   } catch (error) {
     req.uid = req.headers['x-uid'] || req.body.uid || req.query.uid || 'demo';
