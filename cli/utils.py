@@ -166,20 +166,28 @@ def select_openrouter_model() -> str:
     ).ask()
 
     if choice is None or choice == "custom":
-        return questionary.text(
+        custom = questionary.text(
             "Enter OpenRouter model ID (e.g. google/gemma-4-26b-a4b-it):",
             validate=lambda x: len(x.strip()) > 0 or "Please enter a model ID.",
-        ).ask().strip()
+        ).ask()
+        if not custom:
+            console.print("\n[red]No model ID provided. Exiting...[/red]")
+            exit(1)
+        return custom.strip()
 
     return choice
 
 
 def _prompt_custom_model_id() -> str:
     """Prompt user to type a custom model ID."""
-    return questionary.text(
+    model_id = questionary.text(
         "Enter model ID:",
         validate=lambda x: len(x.strip()) > 0 or "Please enter a model ID.",
-    ).ask().strip()
+    ).ask()
+    if not model_id:
+        console.print("\n[red]No model ID provided. Exiting...[/red]")
+        exit(1)
+    return model_id.strip()
 
 
 def _select_model(provider: str, mode: str) -> str:
@@ -188,10 +196,14 @@ def _select_model(provider: str, mode: str) -> str:
         return select_openrouter_model()
 
     if provider.lower() == "azure":
-        return questionary.text(
+        deployment = questionary.text(
             f"Enter Azure deployment name ({mode}-thinking):",
             validate=lambda x: len(x.strip()) > 0 or "Please enter a deployment name.",
-        ).ask().strip()
+        ).ask()
+        if not deployment:
+            console.print("\n[red]No deployment name provided. Exiting...[/red]")
+            exit(1)
+        return deployment.strip()
 
     choice = questionary.select(
         f"Select Your [{mode.title()}-Thinking LLM Engine]:",
@@ -353,10 +365,14 @@ def ask_output_language() -> str:
     ).ask()
 
     if choice == "custom":
-        return questionary.text(
+        language = questionary.text(
             "Enter language name (e.g. Turkish, Vietnamese, Thai, Indonesian):",
             validate=lambda x: len(x.strip()) > 0 or "Please enter a language name.",
-        ).ask().strip()
+        ).ask()
+        if not language:
+            console.print("\n[red]No language provided. Exiting...[/red]")
+            exit(1)
+        return language.strip()
 
     return choice
 

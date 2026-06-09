@@ -158,7 +158,8 @@ class AutoTradeBot:
                 import requests
                 response = requests.get(
                     f'https://api.binance.com/api/v3/ticker/price',
-                    params={'symbol': symbol}
+                    params={'symbol': symbol},
+                    timeout=10,
                 )
                 if response.ok:
                     symbol_prices[symbol] = float(response.json()['price'])

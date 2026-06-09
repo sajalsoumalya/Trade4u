@@ -501,7 +501,7 @@ def get_live_price(symbol: Annotated[str, "ticker symbol"]) -> str:
         result += f"Current Price: {current_price}\n"
         result += f"Day High: {day_high}\n"
         result += f"Day Low: {day_low}\n"
-        result += f"Volume: {volume:,}" if volume else "Volume: N/A\n"
+        result += f"Volume: {volume:,}\n" if volume else "Volume: N/A\n"
         if avg_volume:
             result += f"Avg Volume (20d): {avg_volume:,}\n"
         if market_cap:
