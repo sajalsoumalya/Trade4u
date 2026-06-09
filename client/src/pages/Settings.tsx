@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
-import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
+import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff, Wifi, WifiOff, RotateCw, Pencil, X, AlertCircle, Settings2, Zap, Activity } from 'lucide-react';
 import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider, testConnection } from '../lib/api';
 
 interface ModelEntry { id: string; name: string; cost: string; context: number; maxOutput: number; capabilities: string[] }
@@ -14,6 +14,17 @@ const llmProviders = [
   { id: 'nvidia_nim', name: 'NVIDIA NIM' },
   { id: 'openrouter', name: 'OpenRouter' },
 ];
+
+function maskApiKey(key: string): string {
+  if (!key) return 'Not set';
+  if (key.includes('●')) return '••••••••••';
+  if (key.length < 10) return '••••••••••';
+  return `${key.slice(0, 5)}****${key.slice(-5)}`;
+}
+
+function providerLabel(id: string) {
+  return llmProviders.find(p => p.id === id)?.name || id;
+}
 
 function ModelDetails({ model }: { model: ModelEntry | undefined }) {
   if (!model) return null;
@@ -40,6 +51,7 @@ export default function Settings() {
     setFallbackProvider, setFallbackApiKey, setFallbackDeepModel, setFallbackQuickModel,
   } = useAppStore();
 
+  const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [balanceInput, setBalanceInput] = useState(String(walletBalance));
@@ -48,16 +60,17 @@ export default function Settings() {
   const [providerChanged, setProviderChanged] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<{ ok: boolean; error?: string } | null>(null);
-  const [testing, setTesting] = useState(false);
+  const [testingConn, setTestingConn] = useState(false);
   const initialConfigLoaded = useRef(false);
 
-  // Fallback LLM states
   const [fallbackModels, setFallbackModels] = useState<ModelEntry[]>([]);
   const [loadingFallbackModels, setLoadingFallbackModels] = useState(false);
   const [fallbackProviderChanged, setFallbackProviderChanged] = useState(false);
   const [showFallbackKey, setShowFallbackKey] = useState(false);
   const [fallbackConnectionStatus, setFallbackConnectionStatus] = useState<{ ok: boolean; error?: string } | null>(null);
-  const [testingFallback, setTestingFallback] = useState(false);
+  const [testingFallbackConn, setTestingFallbackConn] = useState(false);
+
+  const hasConfig = llmProvider && quickModel && deepModel;
 
   useEffect(() => {
     loadLlmConfig().then(config => {
@@ -85,7 +98,6 @@ export default function Settings() {
     });
   }, []);
 
-  // Debounced auto-fetch for primary provider
   useEffect(() => {
     const isOpencode = llmProvider === 'opencode';
     const hasKey = apiKey && apiKey.trim() !== '' && apiKey !== 'Not set';
@@ -119,7 +131,6 @@ export default function Settings() {
     return () => clearTimeout(timer);
   }, [llmProvider, apiKey]);
 
-  // Debounced auto-fetch for fallback provider
   useEffect(() => {
     const isOpencode = fallbackProvider === 'opencode';
     const hasKey = fallbackApiKey && fallbackApiKey.trim() !== '' && fallbackApiKey !== 'Not set';
@@ -213,8 +224,6 @@ export default function Settings() {
     setSaving(true);
     setConnectionStatus(null);
     setFallbackConnectionStatus(null);
-    setTesting(true);
-    setTestingFallback(true);
 
     try {
       const result = await testConnection(llmProvider, apiKey, false);
@@ -222,7 +231,6 @@ export default function Settings() {
     } catch (e: any) {
       setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
     }
-    setTesting(false);
 
     try {
       const result = await testConnection(fallbackProvider, fallbackApiKey, true);
@@ -230,7 +238,6 @@ export default function Settings() {
     } catch (e: any) {
       setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
     }
-    setTestingFallback(false);
 
     const nb = parseInt(balanceInput);
     if (!isNaN(nb) && nb > 0) setWalletBalance(nb);
@@ -252,6 +259,31 @@ export default function Settings() {
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
+    setMode('view');
+  };
+
+  const testPrimaryConnection = async () => {
+    setTestingConn(true);
+    setConnectionStatus(null);
+    try {
+      const result = await testConnection(llmProvider, apiKey, false);
+      setConnectionStatus(result);
+    } catch (e: any) {
+      setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
+    }
+    setTestingConn(false);
+  };
+
+  const testFallbackConnection = async () => {
+    setTestingFallbackConn(true);
+    setFallbackConnectionStatus(null);
+    try {
+      const result = await testConnection(fallbackProvider, fallbackApiKey, true);
+      setFallbackConnectionStatus(result);
+    } catch (e: any) {
+      setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
+    }
+    setTestingFallbackConn(false);
   };
 
   const quickModelDetails = models.find(m => m.id === quickModel);
@@ -259,236 +291,376 @@ export default function Settings() {
   const fallbackQuickModelDetails = fallbackModels.find(m => m.id === fallbackQuickModel);
   const fallbackDeepModelDetails = fallbackModels.find(m => m.id === fallbackDeepModel);
 
-  return (
-    <div className="space-y-5 animate-fade-in">
-      <h1 className="text-2xl font-bold text-white">Settings</h1>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 space-y-5">
-          <div className="bg-surface border border-border rounded-xl p-5">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-accent" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold text-white">AI Engine</h2>
-                <p className="text-xs text-muted">LLM provider and model configuration</p>
-              </div>
-            </div>
-
-            <div className="mb-5">
-              <label className="block text-xs text-muted mb-2">Provider</label>
-              <div className="flex gap-2 flex-wrap">
-                {llmProviders.map(p => (
-                  <button key={p.id} onClick={() => handleProviderChange(p.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${llmProvider === p.id ? 'border-accent bg-accent/10 text-white' : 'border-border text-muted hover:text-white'}`}>
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-xs text-muted mb-1.5">API Key</label>
-              <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <input type={showKey ? 'text' : 'password'} value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg pl-9 pr-10 py-2.5 text-white text-sm focus:outline-none focus:border-primary" placeholder="Enter API key" />
-                <button type="button" onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors">
-                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 mb-4">
-              <button onClick={() => fetchModels(llmProvider, apiKey)} disabled={loadingModels}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 text-accent text-xs font-medium border border-accent/30 hover:bg-accent/20 disabled:opacity-50 transition-all">
-                <RefreshCw className={`w-3 h-3 ${loadingModels ? 'animate-spin' : ''}`} /> {loadingModels ? 'Loading...' : 'Fetch Models'}
-              </button>
-              {providerChanged && (
-                <span className="text-[10px] text-[#F0B90B]">Provider changed — click Fetch Models</span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="p-3 rounded-lg bg-background/50 border border-border">
-                  <label className="text-xs text-muted flex items-center gap-1 mb-2"><Cpu className="w-3 h-3 text-primary" /> Quick Model</label>
-                  <select value={quickModel} onChange={(e) => setQuickModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
-                    {quickModel && !models.some(m => m.id === quickModel) && (
-                      <option value={quickModel}>{quickModel}</option>
-                    )}
-                    {models.length === 0 && !quickModel && <option value="">— fetch models first —</option>}
-                    {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
-                <ModelDetails model={quickModelDetails} />
-              </div>
-              <div>
-                <div className="p-3 rounded-lg bg-background/50 border border-border">
-                  <label className="text-xs text-muted flex items-center gap-1 mb-2"><Brain className="w-3 h-3 text-accent" /> Deep Model</label>
-                  <select value={deepModel} onChange={(e) => setDeepModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
-                    {deepModel && !models.some(m => m.id === deepModel) && (
-                      <option value={deepModel}>{deepModel}</option>
-                    )}
-                    {models.length === 0 && !deepModel && <option value="">— fetch models first —</option>}
-                    {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
-                <ModelDetails model={deepModelDetails} />
-              </div>
-            </div>
-
-            {/* Connection Status */}
-            {connectionStatus && (
-              <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${connectionStatus.ok ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
-                {connectionStatus.ok ? <><Wifi className="w-4 h-4" /> Connected — API key valid</> : <><WifiOff className="w-4 h-4" /> {connectionStatus.error || 'Connection failed'}</>}
-              </div>
-            )}
-
-            <button onClick={handleSave} disabled={saving || !quickModel || !deepModel || testing}
-              className="mt-4 w-full py-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
-              {testing ? 'Testing connection...' : saving ? 'Saving...' : saved ? <><Check className="w-4 h-4" />Saved!</> : <><Save className="w-4 h-4" />Save Config</>}
+  // ============ VIEW MODE ============
+  if (mode === 'view') {
+    return (
+      <div className="space-y-5 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-white">Settings</h1>
+          {hasConfig && (
+            <button onClick={() => setMode('edit')}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent/10 text-accent text-sm font-medium border border-accent/30 hover:bg-accent/20 transition-all">
+              <Pencil className="w-4 h-4" /> Update
             </button>
-          </div>
+          )}
+        </div>
 
-          {/* System Fallback LLM Section */}
-          <div className="bg-surface border border-border rounded-xl p-5">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                <Brain className="w-5 h-5 text-primary" />
+        {!hasConfig ? (
+          <>
+            {/* First-time setup prompt */}
+            <div className="bg-surface border border-border rounded-xl p-8 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-8 h-8 text-accent" />
               </div>
-              <div>
-                <h2 className="text-sm font-semibold text-white">System Fallback LLM</h2>
-                <p className="text-xs text-muted">Backup LLM settings used when primary models are unavailable or unconfigured</p>
-              </div>
+              <h2 className="text-lg font-bold text-white mb-2">Set Your AI Engine</h2>
+              <p className="text-sm text-muted max-w-md mx-auto mb-6">
+                Configure your LLM provider and models to power AI trading analysis, 
+                bot decision-making, and market insights.
+              </p>
+              <button onClick={() => setMode('edit')}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-primary text-black text-sm font-bold hover:bg-primary-light transition-all shadow-lg shadow-primary/10">
+                <Zap className="w-4 h-4" /> Configure Now
+              </button>
             </div>
 
-            <div className="mb-5">
-              <label className="block text-xs text-muted mb-2">Fallback Provider</label>
-              <div className="flex gap-2 flex-wrap">
-                {llmProviders.map(p => (
-                  <button key={p.id} onClick={() => {
-                    setFallbackProvider(p.id);
-                    setFallbackProviderChanged(true);
-                    setFallbackModels([]);
-                    setFallbackApiKey('');
-                    setFallbackQuickModel('');
-                    setFallbackDeepModel('');
-                    setFallbackConnectionStatus(null);
-                  }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${fallbackProvider === p.id ? 'border-primary bg-primary/10 text-white' : 'border-border text-muted hover:text-white'}`}>
-                    {p.name}
+            {/* Wallet card */}
+            <div className="bg-surface border border-border rounded-xl p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                  <Wallet className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Paper Wallet</h3>
+                  <p className="text-xs text-muted">Virtual trading balance</p>
+                </div>
+              </div>
+              <label className="block text-xs text-muted mb-1.5">Balance</label>
+              <input type="number" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-primary mb-4" />
+              <button onClick={handleSave} disabled={saving}
+                className="w-full py-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                {saving ? 'Saving...' : saved ? <><Check className="w-4 h-4" />Saved!</> : <><Save className="w-4 h-4" />Save</>}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="lg:col-span-2 space-y-5">
+              {/* Primary AI Engine Card */}
+              <div className="bg-surface border border-border rounded-xl p-5">
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-accent" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold text-white">AI Engine</h2>
+                      <p className="text-xs text-muted">Primary LLM provider</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={testPrimaryConnection} disabled={testingConn}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background border border-border text-xs text-muted hover:text-white hover:border-gray-500 disabled:opacity-50 transition-all"
+                      title="Test connection">
+                      <RotateCw className={`w-3.5 h-3.5 ${testingConn ? 'animate-spin' : ''}`} />
+                      <span>{testingConn ? 'Testing...' : connectionStatus?.ok ? 'Connected' : 'Test'}</span>
+                    </button>
+                    <button onClick={() => setMode('edit')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 text-accent text-xs font-medium border border-accent/30 hover:bg-accent/20 transition-all">
+                      <Pencil className="w-3.5 h-3.5" /> Edit
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <label className="text-[10px] text-muted uppercase tracking-wider font-medium">Provider</label>
+                    <p className="text-sm text-white font-semibold mt-1">{providerLabel(llmProvider)}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <label className="text-[10px] text-muted uppercase tracking-wider font-medium">API Key</label>
+                    <p className="text-sm text-white font-mono mt-1">{maskApiKey(apiKey)}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <label className="text-[10px] text-muted uppercase tracking-wider font-medium">Quick Model</label>
+                    <p className="text-sm text-white font-semibold mt-1">{quickModel}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <label className="text-[10px] text-muted uppercase tracking-wider font-medium">Deep Model</label>
+                    <p className="text-sm text-white font-semibold mt-1">{deepModel}</p>
+                  </div>
+                </div>
+
+                {connectionStatus && (
+                  <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${connectionStatus.ok ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
+                    {connectionStatus.ok ? <><Wifi className="w-4 h-4" /> Connected</> : <><WifiOff className="w-4 h-4" /> {connectionStatus.error || 'Connection failed'}</>}
+                  </div>
+                )}
+              </div>
+
+              {/* Fallback AI Engine Card */}
+              <div className="bg-surface border border-border rounded-xl p-5">
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                      <Brain className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold text-white">Fallback AI Engine</h2>
+                      <p className="text-xs text-muted">Backup LLM when primary is unavailable</p>
+                    </div>
+                  </div>
+                  <button onClick={testFallbackConnection} disabled={testingFallbackConn}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background border border-border text-xs text-muted hover:text-white hover:border-gray-500 disabled:opacity-50 transition-all"
+                    title="Test fallback connection">
+                    <RotateCw className={`w-3.5 h-3.5 ${testingFallbackConn ? 'animate-spin' : ''}`} />
+                    <span>{testingFallbackConn ? 'Testing...' : fallbackConnectionStatus?.ok ? 'Connected' : 'Test'}</span>
                   </button>
-                ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <label className="text-[10px] text-muted uppercase tracking-wider font-medium">Provider</label>
+                    <p className="text-sm text-white font-semibold mt-1">{providerLabel(fallbackProvider)}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <label className="text-[10px] text-muted uppercase tracking-wider font-medium">API Key</label>
+                    <p className="text-sm text-white font-mono mt-1">{maskApiKey(fallbackApiKey)}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <label className="text-[10px] text-muted uppercase tracking-wider font-medium">Quick Model</label>
+                    <p className="text-sm text-white font-semibold mt-1">{fallbackQuickModel || 'Not configured'}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-background/50 border border-border">
+                    <label className="text-[10px] text-muted uppercase tracking-wider font-medium">Deep Model</label>
+                    <p className="text-sm text-white font-semibold mt-1">{fallbackDeepModel || 'Not configured'}</p>
+                  </div>
+                </div>
+
+                {fallbackConnectionStatus && (
+                  <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${fallbackConnectionStatus.ok ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
+                    {fallbackConnectionStatus.ok ? <><Wifi className="w-4 h-4" /> Connected</> : <><WifiOff className="w-4 h-4" /> {fallbackConnectionStatus.error || 'Connection failed'}</>}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="mb-4">
-              <label className="block text-xs text-muted mb-1.5">Fallback API Key</label>
-              <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <input type={showFallbackKey ? 'text' : 'password'} value={fallbackApiKey} onChange={(e) => setFallbackApiKey(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg pl-9 pr-10 py-2.5 text-white text-sm focus:outline-none focus:border-primary" placeholder="Enter fallback API key" />
-                <button type="button" onClick={() => setShowFallbackKey(!showFallbackKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors">
-                  {showFallbackKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            <div className="space-y-5">
+              <div className="bg-surface border border-border rounded-xl p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                    <Wallet className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Paper Wallet</h3>
+                    <p className="text-xs text-muted">Virtual trading balance</p>
+                  </div>
+                </div>
+                <label className="block text-xs text-muted mb-1.5">Balance</label>
+                <input type="number" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-primary mb-4" />
+                <button onClick={handleSave} disabled={saving}
+                  className="w-full py-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                  {saving ? 'Saving...' : saved ? <><Check className="w-4 h-4" />Saved!</> : <><Save className="w-4 h-4" />Save</>}
                 </button>
               </div>
-            </div>
 
-            <div className="flex items-center gap-2 mb-4">
-              <button onClick={() => fetchFallbackModels(fallbackProvider, fallbackApiKey)} disabled={loadingFallbackModels}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium border border-primary/30 hover:bg-primary/20 disabled:opacity-50 transition-all">
-                <RefreshCw className={`w-3 h-3 ${loadingFallbackModels ? 'animate-spin' : ''}`} /> {loadingFallbackModels ? 'Loading...' : 'Fetch Fallback Models'}
+              <div className="bg-surface border border-border rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-white mb-4">System Status</h3>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted">Primary AI</span>
+                    <span className={`flex items-center gap-1 ${connectionStatus?.ok ? 'text-[#0ECB81]' : 'text-[#848E9C]'}`}>
+                      <Activity className="w-3 h-3" />
+                      {connectionStatus === null ? 'Untested' : connectionStatus.ok ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">Fallback AI</span>
+                    <span className={`flex items-center gap-1 ${fallbackConnectionStatus?.ok ? 'text-[#0ECB81]' : 'text-[#848E9C]'}`}>
+                      <Activity className="w-3 h-3" />
+                      {fallbackConnectionStatus === null ? 'Untested' : fallbackConnectionStatus.ok ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+                  <div className="h-px bg-border/40 my-1.5" />
+                  <div className="flex justify-between">
+                    <span className="text-muted">Wallet</span>
+                    <span className="text-white font-mono">${walletBalance.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const [editTarget, setEditTarget] = useState<'main' | 'fallback'>('main');
+
+  // ============ EDIT MODE ============
+  const isMain = editTarget === 'main';
+  const activeProvider = isMain ? llmProvider : fallbackProvider;
+  const activeApiKey = isMain ? apiKey : fallbackApiKey;
+  const activeQuickModel = isMain ? quickModel : fallbackQuickModel;
+  const activeDeepModel = isMain ? deepModel : fallbackDeepModel;
+  const activeModels = isMain ? models : fallbackModels;
+  const activeLoadingModels = isMain ? loadingModels : loadingFallbackModels;
+  const activeProviderChanged = isMain ? providerChanged : fallbackProviderChanged;
+  const activeConnectionStatus = isMain ? connectionStatus : fallbackConnectionStatus;
+  const activeShowKey = isMain ? showKey : showFallbackKey;
+  const activeQuickModelDetails = isMain ? quickModelDetails : fallbackQuickModelDetails;
+  const activeDeepModelDetails = isMain ? deepModelDetails : fallbackDeepModelDetails;
+
+  const setActiveProvider = isMain ? setLlmProvider : setFallbackProvider;
+  const setActiveApiKey = isMain ? setApiKey : setFallbackApiKey;
+  const setActiveQuickModel = isMain ? setQuickModel : setFallbackQuickModel;
+  const setActiveDeepModel = isMain ? setDeepModel : setFallbackDeepModel;
+  const setActiveModels = isMain ? setModels : setFallbackModels;
+  const setActiveProviderChanged = isMain ? setProviderChanged : setFallbackProviderChanged;
+  const setActiveConnectionStatus = isMain ? setConnectionStatus : setFallbackConnectionStatus;
+  const setActiveShowKey = isMain ? setShowKey : setShowFallbackKey;
+  const setActiveLoadingModels = isMain ? setLoadingModels : setLoadingFallbackModels;
+
+  const handleActiveProviderChange = (id: string) => {
+    setActiveProvider(id);
+    setActiveProviderChanged(true);
+    setActiveModels([]);
+    setActiveApiKey('');
+    setActiveQuickModel('');
+    setActiveDeepModel('');
+    setActiveConnectionStatus(null);
+  };
+
+  const fetchActiveModels = () => {
+    setActiveLoadingModels(true);
+    setActiveProviderChanged(false);
+    setActiveConnectionStatus(null);
+    fetchModelsFromProvider(activeProvider, activeApiKey || undefined)
+      .then(data => {
+        setActiveModels(data.models || []);
+        const m = data.models || [];
+        if (m.length > 0) {
+          setActiveQuickModel(prev => {
+            if (prev && m.some(x => x.id === prev)) return prev;
+            return m[0].id;
+          });
+          setActiveDeepModel(prev => {
+            if (prev && m.some(x => x.id === prev)) return prev;
+            return m.length > 1 ? m[1].id : m[0].id;
+          });
+        }
+      })
+      .catch(() => setActiveModels([]))
+      .finally(() => setActiveLoadingModels(false));
+  };
+
+  return (
+    <div className="space-y-5 animate-fade-in max-w-3xl mx-auto">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-white">Configure AI Engine</h1>
+        <button onClick={() => setMode('view')}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-background border border-border text-sm text-muted hover:text-white hover:border-gray-500 transition-all">
+          <X className="w-4 h-4" /> Cancel
+        </button>
+      </div>
+
+      <div className="bg-surface border border-border rounded-xl p-5">
+        {/* Target selector */}
+        <div className="flex items-center gap-2 mb-6 p-1 bg-background rounded-lg w-fit border border-border">
+          <button onClick={() => setEditTarget('main')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${editTarget === 'main' ? 'bg-accent/20 text-accent border border-accent/30' : 'text-muted hover:text-white'}`}>
+            <Sparkles className="w-4 h-4" /> Main AI Engine
+          </button>
+          <button onClick={() => setEditTarget('fallback')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${editTarget === 'fallback' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-muted hover:text-white'}`}>
+            <Brain className="w-4 h-4" /> Fallback AI Engine
+          </button>
+        </div>
+
+        <div className="mb-5">
+          <label className="block text-xs text-muted mb-2 font-medium">Provider</label>
+          <div className="flex gap-2 flex-wrap">
+            {llmProviders.map(p => (
+              <button key={p.id} onClick={() => handleActiveProviderChange(p.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${activeProvider === p.id ? (isMain ? 'border-accent bg-accent/10 text-white' : 'border-primary bg-primary/10 text-white') : 'border-border text-muted hover:text-white'}`}>
+                {p.name}
               </button>
-              {fallbackProviderChanged && (
-                <span className="text-[10px] text-[#F0B90B]">Provider changed — click Fetch Models</span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="p-3 rounded-lg bg-background/50 border border-border">
-                  <label className="text-xs text-muted flex items-center gap-1 mb-2"><Cpu className="w-3 h-3 text-primary" /> Fallback Quick Model</label>
-                  <select value={fallbackQuickModel} onChange={(e) => setFallbackQuickModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
-                    {fallbackQuickModel && !fallbackModels.some(m => m.id === fallbackQuickModel) && (
-                      <option value={fallbackQuickModel}>{fallbackQuickModel}</option>
-                    )}
-                    {fallbackModels.length === 0 && !fallbackQuickModel && <option value="">— fetch models first —</option>}
-                    {fallbackModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
-                <ModelDetails model={fallbackQuickModelDetails} />
-              </div>
-              <div>
-                <div className="p-3 rounded-lg bg-background/50 border border-border">
-                  <label className="text-xs text-muted flex items-center gap-1 mb-2"><Brain className="w-3 h-3 text-primary" /> Fallback Deep Model</label>
-                  <select value={fallbackDeepModel} onChange={(e) => setFallbackDeepModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
-                    {fallbackDeepModel && !fallbackModels.some(m => m.id === fallbackDeepModel) && (
-                      <option value={fallbackDeepModel}>{fallbackDeepModel}</option>
-                    )}
-                    {fallbackModels.length === 0 && !fallbackDeepModel && <option value="">— fetch models first —</option>}
-                    {fallbackModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
-                <ModelDetails model={fallbackDeepModelDetails} />
-              </div>
-            </div>
-
-            {fallbackConnectionStatus && (
-              <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${fallbackConnectionStatus.ok ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
-                {fallbackConnectionStatus.ok ? <><Wifi className="w-4 h-4" /> Connected — API key valid</> : <><WifiOff className="w-4 h-4" /> {fallbackConnectionStatus.error || 'Connection failed'}</>}
-              </div>
-            )}
+            ))}
           </div>
         </div>
 
-        <div className="space-y-5">
-          <div className="bg-surface border border-border rounded-xl p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                <Wallet className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-white">Paper Wallet</h3>
-                <p className="text-xs text-muted">Virtual trading balance</p>
-              </div>
-            </div>
-            <label className="block text-xs text-muted mb-1.5">Balance</label>
-            <input type="number" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-primary mb-4" />
-            <button onClick={handleSave} disabled={saving}
-              className="w-full py-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/80 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
-              {saving ? 'Saving...' : saved ? <><Check className="w-4 h-4" />Saved!</> : <><Save className="w-4 h-4" />Save</>}
+        <div className="mb-4">
+          <label className="block text-xs text-muted mb-1.5 font-medium">API Key</label>
+          <div className="relative">
+            <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input type={activeShowKey ? 'text' : 'password'} value={activeApiKey} onChange={(e) => setActiveApiKey(e.target.value)}
+              className="w-full bg-background border border-border rounded-lg pl-9 pr-10 py-2.5 text-white text-sm focus:outline-none focus:border-primary" placeholder={`Enter ${isMain ? '' : 'fallback '}API key`} />
+            <button type="button" onClick={() => setActiveShowKey(!activeShowKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors">
+              {activeShowKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
+        </div>
 
-          <div className="bg-surface border border-border rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-white mb-4">Current Config</h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-muted">Provider</span><span className="text-white">{llmProvider}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Quick</span><span className="text-white text-[10px]">{quickModel}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Deep</span><span className="text-white text-[10px]">{deepModel}</span></div>
-              <div className="flex justify-between"><span className="text-muted">API Key</span><span className="text-white">{apiKey ? '••••••' : 'Not set'}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Connection</span>
-                <span className={connectionStatus?.ok ? 'text-[#0ECB81]' : 'text-[#848E9C]'}>
-                  {connectionStatus === null ? 'Not tested' : connectionStatus.ok ? 'Connected' : 'Failed'}
-                </span>
-              </div>
-              <div className="h-px bg-border/40 my-1.5" />
-              <div className="flex justify-between"><span className="text-muted">Fallback Provider</span><span className="text-white">{fallbackProvider}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Fallback Quick</span><span className="text-white text-[10px]">{fallbackQuickModel}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Fallback Deep</span><span className="text-white text-[10px]">{fallbackDeepModel}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Fallback Key</span><span className="text-white">{fallbackApiKey ? '••••••' : 'Not set'}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Fallback Conn</span>
-                <span className={fallbackConnectionStatus?.ok ? 'text-[#0ECB81]' : 'text-[#848E9C]'}>
-                  {fallbackConnectionStatus === null ? 'Not tested' : fallbackConnectionStatus.ok ? 'Connected' : 'Failed'}
-                </span>
-              </div>
-              <div className="h-px bg-border/40 my-1.5" />
-              <div className="flex justify-between"><span className="text-muted">Wallet</span><span className="text-white">${walletBalance.toLocaleString()}</span></div>
+        <div className="flex items-center gap-2 mb-4">
+          <button onClick={fetchActiveModels} disabled={activeLoadingModels}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 text-accent text-xs font-medium border border-accent/30 hover:bg-accent/20 disabled:opacity-50 transition-all">
+            <RefreshCw className={`w-3 h-3 ${activeLoadingModels ? 'animate-spin' : ''}`} /> {activeLoadingModels ? 'Loading...' : 'Fetch Models'}
+          </button>
+          {activeProviderChanged && (
+            <span className="text-[10px] text-[#F0B90B]">Provider changed — click Fetch Models</span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mb-5">
+          <div>
+            <div className="p-3 rounded-lg bg-background/50 border border-border">
+              <label className="text-xs text-muted flex items-center gap-1 mb-2"><Cpu className="w-3 h-3 text-primary" /> Quick Model</label>
+              <select value={activeQuickModel} onChange={(e) => setActiveQuickModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
+                {activeQuickModel && !activeModels.some(m => m.id === activeQuickModel) && (
+                  <option value={activeQuickModel}>{activeQuickModel}</option>
+                )}
+                {activeModels.length === 0 && !activeQuickModel && <option value="">— fetch models first —</option>}
+                {activeModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+            <ModelDetails model={activeQuickModelDetails} />
+          </div>
+          <div>
+            <div className="p-3 rounded-lg bg-background/50 border border-border">
+              <label className="text-xs text-muted flex items-center gap-1 mb-2"><Brain className="w-3 h-3 text-accent" /> Deep Model</label>
+              <select value={activeDeepModel} onChange={(e) => setActiveDeepModel(e.target.value)} className="w-full bg-background border border-border rounded px-2 py-1.5 text-white text-xs">
+                {activeDeepModel && !activeModels.some(m => m.id === activeDeepModel) && (
+                  <option value={activeDeepModel}>{activeDeepModel}</option>
+                )}
+                {activeModels.length === 0 && !activeDeepModel && <option value="">— fetch models first —</option>}
+                {activeModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+            <ModelDetails model={activeDeepModelDetails} />
+          </div>
+        </div>
+
+        {activeConnectionStatus && (
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${activeConnectionStatus.ok ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
+            {activeConnectionStatus.ok ? <><Wifi className="w-4 h-4" /> Connected — API key valid</> : <><WifiOff className="w-4 h-4" /> {activeConnectionStatus.error || 'Connection failed'}</>}
+          </div>
+        )}
+
+        <div className="mt-6 pt-5 border-t border-border flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+              <Wallet className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-muted">Paper Wallet Balance</p>
+              <p className="text-sm text-white font-semibold">${walletBalance.toLocaleString()}</p>
             </div>
           </div>
+          <button onClick={handleSave} disabled={saving || !activeQuickModel || !activeDeepModel}
+            className="px-6 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/80 disabled:opacity-50 transition-all flex items-center gap-2">
+            {saving ? 'Saving...' : saved ? <><Check className="w-4 h-4" />Saved!</> : <><Save className="w-4 h-4" />Save All Changes</>}
+          </button>
         </div>
       </div>
     </div>
