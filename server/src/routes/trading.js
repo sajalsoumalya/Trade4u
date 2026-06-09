@@ -241,16 +241,10 @@ router.get('/config', optionalAuth, async (req, res) => {
     const uid = req.uid;
     const config = db.prepare('SELECT * FROM llm_config WHERE uid = ?').get(uid);
     if (!config) {
-      return res.json({
-        provider: 'opencode',
-        apiKey: '',
-        quickModel: 'minimax-m2.5-free',
-        deepModel: 'minimax-m2.5-free',
-        fallbackProvider: 'opencode',
-        fallbackApiKey: '',
-        fallbackQuickModel: 'minimax-m2.5-free',
-        fallbackDeepModel: 'minimax-m2.5-free',
-      });
+      // Return empty values — the client's Zustand persisted state
+      // (localStorage) holds the user's actual config, and we must not
+      // overwrite it with server-side defaults on a fresh/empty DB.
+      return res.json({});
     }
     res.json({
       provider: config.provider,
