@@ -26,9 +26,10 @@ const DEFAULT_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'A
 const STAGES = [
   { id: 1, name: 'Market Analyst', desc: 'Analyzing charts, order book liquidity, and technical trends...' },
   { id: 2, name: 'Sentiment Analyst', desc: 'Scanning social feeds, developer commits, and financial news...' },
-  { id: 3, name: 'Debate Panel', desc: 'Executing cooperative agent debate to challenge recommendations...' },
-  { id: 4, name: 'Risk Manager', desc: 'Evaluating volatility, drawdown probability, and position size limits...' },
-  { id: 5, name: 'Portfolio Manager', desc: 'Compiling final thesis and structuring entry/exit suggestions...' }
+  { id: 3, name: 'News Analyst', desc: 'Evaluating financial news and insider transactions...' },
+  { id: 4, name: 'Fundamentals Analyst', desc: 'Reviewing financial statements and fundamentals data...' },
+  { id: 5, name: 'Debate Panel', desc: 'Executing cooperative agent debate to challenge recommendations...' },
+  { id: 6, name: 'Risk Manager', desc: 'Evaluating volatility, drawdown probability, and position size limits...' },
 ];
 
 // Simple Custom Markdown Renderer
@@ -134,6 +135,7 @@ export default function Analysis() {
   const [report, setReport] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [timeElapsed, setTimeElapsed] = useState(0);
+  const [stageOutputs, setStageOutputs] = useState<Record<number, string>>({});
 
   const socketRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
@@ -163,23 +165,15 @@ export default function Analysis() {
     setTimeElapsed(0);
     setCurrentStage(1);
     setStatus('running');
+    setStageOutputs({});
 
     timerRef.current = setInterval(() => {
       setTimeElapsed(prev => prev + 1);
     }, 1000);
-
-    // Simulate stage progress over standard execution length (e.g. 45 seconds total)
-    stageIntervalRef.current = setInterval(() => {
-      setCurrentStage(prev => {
-        if (prev < 5) return prev + 1;
-        return prev;
-      });
-    }, 9000);
   };
 
   const stopTracking = () => {
     if (timerRef.current) clearInterval(timerRef.current);
-    if (stageIntervalRef.current) clearInterval(stageIntervalRef.current);
   };
 
   const handleRun = async () => {
@@ -206,12 +200,15 @@ export default function Analysis() {
       socketRef.current = socket;
 
       socket.on(`analysis:${id}`, (data: any) => {
-        if (data.status === 'completed') {
+        if (data.status === 'stage') {
+          setCurrentStage(data.stage);
+          setStageOutputs(prev => ({ ...prev, [data.stage]: data.output }));
+        } else if (data.status === 'completed') {
           stopTracking();
           setStatus('completed');
           setDecision(data.decision);
           setReport(data.result);
-          setCurrentStage(5);
+          setCurrentStage(7);
           addToast('success', `AI Analysis for ${symbol} finalized!`);
           loadHistory();
         } else if (data.status === 'failed') {
@@ -470,38 +467,44 @@ export default function Analysis() {
                 {STAGES.map(stage => {
                   const isActive = currentStage === stage.id;
                   const isDone = currentStage > stage.id;
+                  const stageOutput = stageOutputs[stage.id];
                   return (
                     <div
                       key={stage.id}
-                      className={`flex gap-3.5 p-3.5 rounded-xl border transition-all ${
+                      className={`rounded-xl border transition-all ${
                         isActive
                           ? 'bg-primary/5 border-primary shadow-glow-primary'
                           : isDone
-                          ? 'bg-white/5 border-border opacity-70'
+                          ? 'bg-white/5 border-border'
                           : 'bg-background border-border/40 opacity-40'
                       }`}
                     >
-                      <div className="flex-shrink-0">
-                        {isDone ? (
-                          <div className="w-5 h-5 rounded-full bg-primary text-black flex items-center justify-center text-[10px] font-bold">
-                            ✓
-                          </div>
-                        ) : isActive ? (
-                          <div className="w-5 h-5 rounded-full border border-primary text-primary flex items-center justify-center text-[10px] font-bold">
-                            <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
-                          </div>
-                        ) : (
-                          <div className="w-5 h-5 rounded-full bg-border text-muted flex items-center justify-center text-[10px] font-bold">
-                            {stage.id}
-                          </div>
-                        )}
+                      <div className="flex gap-3.5 p-3.5">
+                        <div className="flex-shrink-0">
+                          {isDone ? (
+                            <div className="w-5 h-5 rounded-full bg-primary text-black flex items-center justify-center text-[10px] font-bold">✓</div>
+                          ) : isActive ? (
+                            <div className="w-5 h-5 rounded-full border border-primary text-primary flex items-center justify-center text-[10px] font-bold">
+                              <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
+                            </div>
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-border text-muted flex items-center justify-center text-[10px] font-bold">{stage.id}</div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className={`text-xs font-bold ${isActive ? 'text-primary' : 'text-white'}`}>
+                            {stage.name}
+                          </h4>
+                          <p className="text-[10px] text-muted mt-0.5 leading-relaxed">{stage.desc}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className={`text-xs font-bold ${isActive ? 'text-primary' : 'text-white'}`}>
-                          {stage.name}
-                        </h4>
-                        <p className="text-[10px] text-muted mt-0.5 leading-relaxed">{stage.desc}</p>
-                      </div>
+                      {stageOutput && (
+                        <div className="mx-3.5 pb-3.5">
+                          <pre className="p-2 bg-black/40 border border-border rounded-lg text-[10px] text-muted font-mono whitespace-pre-wrap max-h-24 overflow-y-auto leading-relaxed">
+                            {stageOutput}
+                          </pre>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

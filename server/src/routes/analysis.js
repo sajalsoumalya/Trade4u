@@ -76,18 +76,38 @@ router.post('/run', optionalAuth, async (req, res) => {
 
     let output = '';
     let errorOutput = '';
+    let parsedDecision = null;
 
-    python.stdout.on('data', (data) => { output += data.toString(); });
+    // Parse JSON progress lines from stdout in real-time
+    python.stdout.on('data', (data) => {
+      const text = data.toString();
+      output += text;
+      const lines = text.split('\n').filter(l => l.trim());
+      for (const line of lines) {
+        try {
+          const msg = JSON.parse(line);
+          if (msg.type === 'stage') {
+            io.emit(`analysis:${id}`, { status: 'stage', stage: msg.stage, name: msg.name, output: msg.output });
+          } else if (msg.type === 'complete') {
+            parsedDecision = msg.decision;
+          }
+        } catch (_) { /* not JSON — regular stdout */ }
+      }
+    });
+
     python.stderr.on('data', (data) => { errorOutput += data.toString(); });
 
+    // Timeout: kill the process if it runs too long (5 minutes)
+    const analysisTimeout = setTimeout(() => {
+      python.kill('SIGTERM');
+      console.error(`Analysis ${id} timed out`);
+      errorOutput += '\n[TIMEOUT] Analysis exceeded 5 minutes and was terminated.';
+    }, 5 * 60 * 1000);
+
     python.on('close', async (code) => {
-      let decision = null;
-      const buyMatch = output.match(/\bBUY\b/);
-      const sellMatch = output.match(/\bSELL\b/);
-      const holdMatch = output.match(/\bHOLD\b/);
-      if (buyMatch) decision = 'BUY';
-      else if (sellMatch) decision = 'SELL';
-      else if (holdMatch) decision = 'HOLD';
+      clearTimeout(analysisTimeout);
+
+      const decision = parsedDecision || (output.match(/\bBUY\b/) ? 'BUY' : output.match(/\bSELL\b/) ? 'SELL' : output.match(/\bHOLD\b/) ? 'HOLD' : null);
 
       db.prepare(`
         UPDATE analyses
