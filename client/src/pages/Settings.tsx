@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
-import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff, Wifi, WifiOff, RotateCw, Pencil, X, AlertCircle, Settings2, Zap, Activity } from 'lucide-react';
+import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff, Wifi, WifiOff, RotateCw, Pencil, X, Zap, Activity } from 'lucide-react';
 import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider, testConnection } from '../lib/api';
 
 interface ModelEntry { id: string; name: string; cost: string; context: number; maxOutput: number; capabilities: string[] }
@@ -163,62 +163,6 @@ export default function Settings() {
 
     return () => clearTimeout(timer);
   }, [fallbackProvider, fallbackApiKey]);
-
-  const fetchModels = (provider: string, key: string) => {
-    setLoadingModels(true);
-    setProviderChanged(false);
-    setConnectionStatus(null);
-    fetchModelsFromProvider(provider, key || undefined)
-      .then(data => {
-        setModels(data.models || []);
-        const m = data.models || [];
-        if (m.length > 0) {
-          setQuickModel(prev => {
-            if (prev && m.some(x => x.id === prev)) return prev;
-            return m[0].id;
-          });
-          setDeepModel(prev => {
-            if (prev && m.some(x => x.id === prev)) return prev;
-            return m.length > 1 ? m[1].id : m[0].id;
-          });
-        }
-      })
-      .catch(() => setModels([]))
-      .finally(() => setLoadingModels(false));
-  };
-
-  const handleProviderChange = (providerId: string) => {
-    setLlmProvider(providerId);
-    setProviderChanged(true);
-    setModels([]);
-    setApiKey('');
-    setQuickModel('');
-    setDeepModel('');
-    setConnectionStatus(null);
-  };
-
-  const fetchFallbackModels = (provider: string, key: string) => {
-    setLoadingFallbackModels(true);
-    setFallbackProviderChanged(false);
-    setFallbackConnectionStatus(null);
-    fetchModelsFromProvider(provider, key || undefined)
-      .then(data => {
-        setFallbackModels(data.models || []);
-        const m = data.models || [];
-        if (m.length > 0) {
-          setFallbackQuickModel(prev => {
-            if (prev && m.some(x => x.id === prev)) return prev;
-            return m[0].id;
-          });
-          setFallbackDeepModel(prev => {
-            if (prev && m.some(x => x.id === prev)) return prev;
-            return m.length > 1 ? m[1].id : m[0].id;
-          });
-        }
-      })
-      .catch(() => setFallbackModels([]))
-      .finally(() => setLoadingFallbackModels(false));
-  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -565,14 +509,14 @@ export default function Settings() {
         </button>
       </div>
 
-      <div className="bg-surface border border-border rounded-xl p-5">
+      <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="bg-surface border border-border rounded-xl p-5">
         {/* Target selector */}
         <div className="flex items-center gap-2 mb-6 p-1 bg-background rounded-lg w-fit border border-border">
-          <button onClick={() => setEditTarget('main')}
+          <button type="button" onClick={() => setEditTarget('main')}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${editTarget === 'main' ? 'bg-accent/20 text-accent border border-accent/30' : 'text-muted hover:text-white'}`}>
             <Sparkles className="w-4 h-4" /> Main AI Engine
           </button>
-          <button onClick={() => setEditTarget('fallback')}
+          <button type="button" onClick={() => setEditTarget('fallback')}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${editTarget === 'fallback' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-muted hover:text-white'}`}>
             <Brain className="w-4 h-4" /> Fallback AI Engine
           </button>
@@ -582,7 +526,7 @@ export default function Settings() {
           <label className="block text-xs text-muted mb-2 font-medium">Provider</label>
           <div className="flex gap-2 flex-wrap">
             {llmProviders.map(p => (
-              <button key={p.id} onClick={() => handleActiveProviderChange(p.id)}
+              <button type="button" key={p.id} onClick={() => handleActiveProviderChange(p.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${activeProvider === p.id ? (isMain ? 'border-accent bg-accent/10 text-white' : 'border-primary bg-primary/10 text-white') : 'border-border text-muted hover:text-white'}`}>
                 {p.name}
               </button>
@@ -603,7 +547,7 @@ export default function Settings() {
         </div>
 
         <div className="flex items-center gap-2 mb-4">
-          <button onClick={fetchActiveModels} disabled={activeLoadingModels}
+          <button type="button" onClick={fetchActiveModels} disabled={activeLoadingModels}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 text-accent text-xs font-medium border border-accent/30 hover:bg-accent/20 disabled:opacity-50 transition-all">
             <RefreshCw className={`w-3 h-3 ${activeLoadingModels ? 'animate-spin' : ''}`} /> {activeLoadingModels ? 'Loading...' : 'Fetch Models'}
           </button>
@@ -657,12 +601,12 @@ export default function Settings() {
               <p className="text-sm text-white font-semibold">${walletBalance.toLocaleString()}</p>
             </div>
           </div>
-          <button onClick={handleSave} disabled={saving || !activeQuickModel || !activeDeepModel}
+          <button type="submit" disabled={saving || !activeQuickModel || !activeDeepModel}
             className="px-6 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/80 disabled:opacity-50 transition-all flex items-center gap-2">
             {saving ? 'Saving...' : saved ? <><Check className="w-4 h-4" />Saved!</> : <><Save className="w-4 h-4" />Save All Changes</>}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
