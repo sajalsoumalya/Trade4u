@@ -34,12 +34,19 @@ def yf_retry(func, max_retries=3, base_delay=2.0):
 
 def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     """Normalize a stock DataFrame for stockstats: parse dates, drop invalid rows, fill price gaps."""
+    # yfinance can return MultiIndex columns; flatten to simple strings.
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = [' '.join(c).strip() if isinstance(c, tuple) else c for c in data.columns.values]
+
+    logger.info(f"_clean_dataframe input: shape={data.shape}, columns={list(data.columns)}")
+
     date_col = next((c for c in data.columns if str(c).lower() in ("date", "datetime", "timestamp", "time")), None)
     if date_col is None:
         data = data.reset_index()
         date_col = next((c for c in data.columns if str(c).lower() in ("date", "datetime", "timestamp", "time")), None)
     if date_col is None or date_col not in data.columns:
-        raise KeyError("'Date' — no date column found in downloaded data")
+        logger.error(f"no date column found. columns={list(data.columns)} shape={data.shape}")
+        return data  # return as-is; caller will handle gracefully
     data["Date"] = pd.to_datetime(data[date_col], errors="coerce")
     data = data.dropna(subset=["Date"])
 
@@ -88,13 +95,20 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
             progress=False,
             auto_adjust=True,
         ))
+        # Flatten MultiIndex columns if yfinance returned them despite
+        # multi_level_index=False (older yfinance versions ignore the param).
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = [' '.join(c).strip() for c in data.columns.values]
         data = data.reset_index()
-        data.to_csv(data_file, index=False, encoding="utf-8")
+        # Don't cache empty data — next run will re-fetch.
+        if not data.empty:
+            data.to_csv(data_file, index=False, encoding="utf-8")
 
     data = _clean_dataframe(data)
 
     # Filter to curr_date to prevent look-ahead bias in backtesting
-    data = data[data["Date"] <= curr_date_dt]
+    if "Date" in data.columns:
+        data = data[data["Date"] <= curr_date_dt]
 
     return data
 
