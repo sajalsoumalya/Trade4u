@@ -58,6 +58,26 @@ def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
+def _normalize_yfinance_symbol(symbol: str) -> str:
+    """Convert crypto/forex symbols to yfinance format.
+
+    Examples: BTCUSDT -> BTC-USD, ETH/USDT -> ETH-USD, BTC-USD -> BTC-USD
+    """
+    s = symbol.upper().strip()
+    if "/" in s:
+        base, quote = s.split("/", 1)
+        return f"{base}-USD" if quote in ("USDT", "USD", "USDC") else s
+    for quote in ("USDT", "USDC"):
+        if s.endswith(quote):
+            return f"{s[:-len(quote)]}-USD"
+    if s.endswith("USD") and len(s) > 6:
+        return f"{s[:-3]}-USD"
+    if "-" in s:
+        base, quote = s.split("-", 1)
+        return f"{base}-USD" if quote in ("USDT", "USDC", "USD") else s
+    return s
+
+
 def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     """Fetch OHLCV data with caching, filtered to prevent look-ahead bias.
 
@@ -67,6 +87,7 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     """
     # Reject ticker values that would escape the cache directory when
     # interpolated into the cache filename (e.g. ``../../tmp/x``).
+    symbol = _normalize_yfinance_symbol(symbol)
     safe_symbol = safe_ticker_component(symbol)
 
     config = get_config()
