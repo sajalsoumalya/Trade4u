@@ -120,11 +120,19 @@ class StockstatsUtils:
     ):
         data = load_ohlcv(symbol, curr_date)
         df = wrap(data)
-        df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
-        curr_date_str = pd.to_datetime(curr_date).strftime("%Y-%m-%d")
 
         df[indicator]  # trigger stockstats to calculate the indicator
-        matching_rows = df[df["Date"].str.startswith(curr_date_str)]
+
+        # stockstats' wrap() lowercases every column name, so the original
+        # "Date" column is now "date" — reading df["Date"] here raised
+        # KeyError: 'Date' and broke every indicator. Resolve the date column
+        # case-insensitively, falling back to the index if absent.
+        date_col = next((c for c in df.columns if str(c).lower() == "date"), None)
+        raw_dates = df[date_col] if date_col is not None else df.index.to_series()
+        date_str = pd.to_datetime(raw_dates, errors="coerce").dt.strftime("%Y-%m-%d")
+        curr_date_str = pd.to_datetime(curr_date).strftime("%Y-%m-%d")
+
+        matching_rows = df[date_str.values == curr_date_str]
 
         if not matching_rows.empty:
             indicator_value = matching_rows[indicator].values[0]
