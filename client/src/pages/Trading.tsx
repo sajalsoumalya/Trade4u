@@ -246,38 +246,31 @@ export default function Trading() {
     takeProfit?: number;
     interval: number;
   }) => {
-    // Inject current default model settings into new bot config
     const provider = llmProvider || 'opencode';
     const qModel = quickModel || 'minimax-m2.5-free';
     const dModel = deepModel || 'minimax-m2.5-free';
 
     createBot({
       ...config,
+      botProvider: provider,
+      botQuickModel: qModel,
+      botDeepModel: dModel,
     });
 
-    // Wait short timeout for Zustands state update then trigger start
-    setTimeout(() => {
-      // Find the newly created bot (usually the last in the array)
-      const state = useAppStore.getState();
-      const newBot = state.bots[state.bots.length - 1];
-      if (newBot) {
-        updateBot(newBot.id, {
-          botProvider: provider,
-          botQuickModel: qModel,
-          botDeepModel: dModel,
-        });
-        startBotEngine(
-          newBot.id,
-          newBot.symbols,
-          newBot.stopLoss,
-          newBot.takeProfit,
-          newBot.interval,
-          provider,
-          qModel,
-          dModel
-        );
-      }
-    }, 100);
+    const state = useAppStore.getState();
+    const newBot = state.bots[state.bots.length - 1];
+    if (newBot) {
+      startBotEngine(
+        newBot.id,
+        newBot.symbols,
+        newBot.stopLoss,
+        newBot.takeProfit,
+        newBot.interval,
+        provider,
+        qModel,
+        dModel
+      );
+    }
 
     addToast('success', `Bot "${config.name}" successfully created.`);
     setView('list');

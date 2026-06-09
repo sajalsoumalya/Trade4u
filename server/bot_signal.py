@@ -32,13 +32,29 @@ _PROVIDER_ENV_VARS = {
 }
 
 
+# Default model per provider (used when the configured model doesn't match the provider)
+_PROVIDER_DEFAULT_MODELS = {
+    "opencode": "minimax-m2.5-free",
+    "nvidia_nim": "nvidia/llama-3.1-nemotron-70b-instruct",
+    "openai": "gpt-4.1-mini",
+    "anthropic": "claude-sonnet-4-6",
+    "google": "gemini-2.5-flash",
+    "deepseek": "deepseek-chat",
+    "openrouter": "openai/gpt-4.1-mini",
+}
+
+
 class SignalEmitter:
     def __init__(self, config):
-        self.config = config
+        provider = config.get('provider', 'opencode')
+        default_model = _PROVIDER_DEFAULT_MODELS.get(provider, 'minimax-m2.5-free')
+        q_model = config.get('quick_model') or default_model
+        d_model = config.get('deep_model') or default_model
+        self.config = {**config, 'quick_model': q_model, 'deep_model': d_model}
         agent_config = DEFAULT_CONFIG.copy()
-        agent_config["llm_provider"] = config.get('provider', 'opencode')
-        agent_config["deep_think_llm"] = config.get('deep_model', 'deepseek/deepseek-chat')
-        agent_config["quick_think_llm"] = config.get('quick_model', 'deepseek/deepseek-chat')
+        agent_config["llm_provider"] = provider
+        agent_config["deep_think_llm"] = d_model
+        agent_config["quick_think_llm"] = q_model
         agent_config["max_debate_rounds"] = 1
         agent_config["data_vendors"] = {
             "core_stock_apis": "yfinance",
@@ -84,7 +100,8 @@ class SignalEmitter:
 
             return signal_action, reasoning_log
         except Exception as e:
-            return 'hold', [{"role": "error", "content": str(e)}]
+            err = str(e)
+            return 'hold', [{"role": "error", "content": f"Analysis failed: {err} (provider={self.config.get('provider')}, model={self.config.get('quick_model')})"}]
 
     def get_sltp_suggestion(self, symbol, action, price, reasoning):
         """Ask the LLM for take-profit and stop-loss percentages via a quick API call."""
@@ -118,8 +135,10 @@ class SignalEmitter:
                 tp = float(parts[0].strip())
                 sl = float(parts[1].strip()) if len(parts) > 1 else None
                 return (tp, sl) if tp and sl else (None, None)
-        except Exception:
-            pass
+            else:
+                print(json.dumps({"type": "log", "symbol": symbol, "action": "sl_tp_error", "price": price, "reasoning": [{"role": "error", "content": f"SL/TP API {resp.status_code}: model={self.config.get('quick_model')} provider={provider}"}], "timestamp": datetime.now().isoformat()}), flush=True)
+        except Exception as e:
+            print(json.dumps({"type": "log", "symbol": symbol, "action": "sl_tp_error", "price": price, "reasoning": [{"role": "error", "content": f"SL/TP call failed: {e}"}], "timestamp": datetime.now().isoformat()}), flush=True)
         return None, None
 
     async def run_cycle(self, symbols):
