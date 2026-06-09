@@ -168,18 +168,31 @@ export default function Settings() {
     setConnectionStatus(null);
     setFallbackConnectionStatus(null);
 
-    try {
-      const result = await testConnection(llmProvider, apiKey, false);
-      setConnectionStatus(result);
-    } catch (e: any) {
-      setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
+    // The fallback engine is optional: only test an engine that's actually
+    // configured (a no-key provider like opencode, or one that has a key). This
+    // way updating just the Main engine never forces you to set up the Fallback
+    // or shows a spurious "fallback key required" error.
+    const isConfigured = (provider: string, key: string) =>
+      provider === 'opencode' || (!!key && key.trim() !== '' && key !== 'Not set');
+
+    if (isConfigured(llmProvider, apiKey)) {
+      try {
+        setConnectionStatus(await testConnection(llmProvider, apiKey, false));
+      } catch (e: any) {
+        setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
+      }
+    } else {
+      setConnectionStatus(null);
     }
 
-    try {
-      const result = await testConnection(fallbackProvider, fallbackApiKey, true);
-      setFallbackConnectionStatus(result);
-    } catch (e: any) {
-      setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
+    if (isConfigured(fallbackProvider, fallbackApiKey)) {
+      try {
+        setFallbackConnectionStatus(await testConnection(fallbackProvider, fallbackApiKey, true));
+      } catch (e: any) {
+        setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
+      }
+    } else {
+      setFallbackConnectionStatus(null);
     }
 
     const nb = parseInt(balanceInput);
