@@ -478,6 +478,9 @@ export default function Settings() {
   const setActiveLoadingModels = isMain ? setLoadingModels : setLoadingFallbackModels;
 
   const handleActiveProviderChange = (id: string) => {
+    // Re-clicking the already-selected provider must NOT wipe the saved API key
+    // / models — only reset when actually switching to a different provider.
+    if (id === activeProvider) return;
     setActiveProvider(id);
     setActiveProviderChanged(true);
     setActiveModels([]);
