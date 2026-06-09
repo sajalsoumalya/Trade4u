@@ -21,7 +21,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',') 
-  : ['http://localhost:5173', 'http://localhost:8501', 'http://127.0.0.1:5173', 'http://127.0.0.1:8501'];
+  : ['http://localhost:5173', 'http://localhost:8501', 'http://127.0.0.1:5173', 'http://127.0.0.1:8501', 'https://trade4u.soumalya.in'];
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -29,7 +29,8 @@ const corsOptions = {
     if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      console.warn(`CORS: blocked origin ${origin}`);
+      callback(null, origin);
     }
   },
   credentials: true
