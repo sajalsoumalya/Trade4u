@@ -47,7 +47,11 @@ RUN pip install --no-cache-dir -e .
 # Copy server directory and install deps
 COPY server/ ./server/
 WORKDIR /app/server
-RUN npm install --production
+RUN apt-get update && apt-get install -y build-essential && \
+    npm install --production && \
+    apt-get purge -y build-essential && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

@@ -5,7 +5,11 @@ WORKDIR /app
 
 # Install dependencies
 COPY server/package*.json ./
-RUN npm install --production
+RUN apt-get update && apt-get install -y build-essential && \
+    npm install --production && \
+    apt-get purge -y build-essential && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy server code
 COPY server/src ./src
