@@ -87,13 +87,21 @@ export default function Settings() {
     setConnectionStatus(null);
     setTesting(true);
 
-    const result = await testConnection(llmProvider, apiKey);
-    setConnectionStatus(result);
+    try {
+      const result = await testConnection(llmProvider, apiKey);
+      setConnectionStatus(result);
+    } catch (e: any) {
+      setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
+    }
     setTesting(false);
 
     const nb = parseInt(balanceInput);
     if (!isNaN(nb) && nb > 0) setWalletBalance(nb);
-    await saveLlmConfig({ provider: llmProvider, apiKey, quickModel, deepModel });
+    try {
+      await saveLlmConfig({ provider: llmProvider, apiKey, quickModel, deepModel });
+    } catch (e: any) {
+      setConnectionStatus({ ok: false, error: 'Config save failed: ' + (e.message || 'Server unreachable') });
+    }
 
     setSaving(false);
     setSaved(true);

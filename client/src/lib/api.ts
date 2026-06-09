@@ -169,7 +169,8 @@ export const saveLlmConfig = async (config: { provider: string; apiKey: string; 
     headers: getAuthHeaders(),
     body: JSON.stringify(config)
   });
-  return res.json();
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return { success: false, error: `HTTP ${res.status}: ${text.slice(0, 100)}` }; }
 };
 
 export const loadLlmConfig = async () => {
@@ -177,7 +178,8 @@ export const loadLlmConfig = async () => {
     headers: getAuthHeaders()
   });
   if (!res.ok) return {};
-  return res.json();
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return {}; }
 };
 
 export const testConnection = async (provider: string, apiKey?: string) => {
@@ -186,7 +188,8 @@ export const testConnection = async (provider: string, apiKey?: string) => {
     headers: getAuthHeaders(),
     body: JSON.stringify({ provider, apiKey })
   });
-  return res.json();
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 100)}` }; }
 };
 
 export const fetchModelsFromProvider = async (provider: string, apiKey?: string) => {
