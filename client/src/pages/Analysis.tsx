@@ -98,7 +98,7 @@ function parseInlineFormatting(text: string) {
 }
 
 export default function Analysis() {
-  const { llmProvider, quickModel } = useAppStore();
+  const { llmProvider, apiKey, quickModel, deepModel, fallbackProvider, fallbackApiKey, fallbackQuickModel, fallbackDeepModel } = useAppStore();
   const { addToast } = useToast();
 
   const [symbol, setSymbol] = useState('BTCUSDT');
@@ -186,7 +186,16 @@ export default function Analysis() {
     try {
       startTracking();
 
-      const res = await runAnalysis(symbol);
+      const res = await runAnalysis(symbol, undefined, {
+        provider: llmProvider,
+        quickModel,
+        deepModel,
+        apiKey,
+        fallbackProvider,
+        fallbackQuickModel,
+        fallbackDeepModel,
+        fallbackApiKey,
+      });
       if (res.error) {
         throw new Error(res.error);
       }
