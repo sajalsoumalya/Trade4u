@@ -49,7 +49,7 @@ export function ClosedPositionsTab({
                     <td className="p-4 text-xs text-muted font-mono">{new Date(cp.closedAt).toLocaleString()}</td>
                     <td className="p-4">
                       <div className="flex items-center gap-1">
-                        <span className="text-sm font-semibold text-white">{pairNames[cp.symbol] || cp.symbol.replace('USDT', '')}</span>
+                        <span className="text-sm font-semibold text-white">{pairNames[cp.symbol] || cp.symbol.replace('USDT', '/USDT')}</span>
                         <span className="text-xs text-muted">/USDT</span>
                       </div>
                     </td>
@@ -112,7 +112,7 @@ export function ClosedPositionsTab({
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-white">
-                      {pairNames[cp.symbol] || cp.symbol.replace('USDT', '')}/USDT
+                      {pairNames[cp.symbol] || cp.symbol.replace('USDT', '/USDT')}
                     </span>
                     <span
                       className={`text-xs font-bold px-2 py-0.5 rounded-full ${

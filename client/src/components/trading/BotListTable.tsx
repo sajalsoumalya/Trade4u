@@ -121,7 +121,7 @@ export function BotListTable({
                         <div>
                           <p className="text-sm font-medium text-white">{bot.name}</p>
                           <p className="text-xs text-muted">
-                            {bot.symbols.map(s => pairNames[s] || s.replace('USDT', '')).join(' / ')}
+                            {bot.symbols.map(s => pairNames[s] || s.replace('USDT', '/USDT')).join(' / ')}
                           </p>
                         </div>
                       </td>
@@ -200,7 +200,7 @@ export function BotListTable({
                     <div>
                       <p className="text-sm font-medium text-white">{bot.name}</p>
                       <p className="text-xs text-muted">
-                        {bot.symbols.map(s => pairNames[s] || s.replace('USDT', '')).join(' / ')}
+                        {bot.symbols.map(s => pairNames[s] || s.replace('USDT', '/USDT')).join(' / ')}
                       </p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted" />

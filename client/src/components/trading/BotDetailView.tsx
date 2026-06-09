@@ -128,7 +128,7 @@ export function BotDetailView({
           <div>
             <h1 className="text-base font-bold text-white">{bot.name}</h1>
             <p className="text-xs text-muted">
-              {bot.symbols.map(s => pairNames[s] || s.replace('USDT', '')).join(' / ')}
+              {bot.symbols.map(s => pairNames[s] || s.replace('USDT', '/USDT')).join(' / ')}
             </p>
           </div>
         </div>

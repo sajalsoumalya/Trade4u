@@ -85,7 +85,7 @@ export function PositionsTab({
                     <tr key={pos.id} className="border-b border-border/50 hover:bg-white/5 transition-colors">
                       <td className="p-4">
                         <div className="flex items-center gap-1">
-                          <span className="text-sm font-semibold text-white">{pairNames[pos.symbol] || pos.symbol.replace('USDT', '')}</span>
+                          <span className="text-sm font-semibold text-white">{pairNames[pos.symbol] || pos.symbol.replace('USDT', '/USDT')}</span>
                           <span className="text-xs text-muted">/USDT</span>
                         </div>
                       </td>
@@ -196,7 +196,7 @@ export function PositionsTab({
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-white">
-                        {pairNames[pos.symbol] || pos.symbol.replace('USDT', '')}/USDT
+                        {pairNames[pos.symbol] || pos.symbol.replace('USDT', '/USDT')}
                       </span>
                       <span
                         className={`text-xs font-bold px-2 py-0.5 rounded-full ${

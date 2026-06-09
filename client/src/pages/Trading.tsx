@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAppStore, Bot } from '../store/appStore';
 import { fetchCryptoPrices, startBotEngine, stopBotEngine, fetchBinanceSymbols } from '../lib/api';
 import { io } from 'socket.io-client';
@@ -12,15 +12,20 @@ import { CreateBotForm } from '../components/trading/CreateBotForm';
 import { BotDetailView } from '../components/trading/BotDetailView';
 
 const DEFAULT_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
-const PAIR_NAMES: Record<string, string> = {
-  BTCUSDT: 'BTC',
-  ETHUSDT: 'ETH',
-  SOLUSDT: 'SOL',
-  BNBUSDT: 'BNB',
-  XRPUSDT: 'XRP',
-  ADAUSDT: 'ADA',
-  DOGEUSDT: 'DOGE',
-};
+const QUOTE_CURRENCIES = ['USDT', 'USDC', 'BUSD', 'DAI'];
+
+function symbolToPair(s: string): string {
+  for (const q of QUOTE_CURRENCIES) {
+    if (s.endsWith(q) && s.length > q.length) return `${s.slice(0, -q.length)}/${q}`;
+  }
+  return s;
+}
+
+function buildPairNames(symbols: string[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const s of symbols) map[s] = symbolToPair(s);
+  return map;
+}
 
 export default function Trading() {
   const {
@@ -56,6 +61,8 @@ export default function Trading() {
     queryFn: fetchBinanceSymbols,
     staleTime: 24 * 60 * 60 * 1000,
   });
+
+  const pairNames = useMemo(() => buildPairNames(allPairs), [allPairs]);
 
   const selectedBot = bots.find(b => b.id === selectedBotId) || null;
 
@@ -282,7 +289,7 @@ export default function Trading() {
     return (
       <CreateBotForm
         allPairs={allPairs}
-        pairNames={PAIR_NAMES}
+        pairNames={pairNames}
         walletBalance={walletBalance}
         prices={prices}
         onCreateBot={handleCreateBot}
@@ -296,7 +303,7 @@ export default function Trading() {
       <BotDetailView
         bot={selectedBot}
         prices={prices}
-        pairNames={PAIR_NAMES}
+        pairNames={pairNames}
         allPairs={allPairs}
         logs={botLogs[selectedBot.id] || []}
         walletBalance={walletBalance}
@@ -344,7 +351,7 @@ export default function Trading() {
         winRate={winRate}
         totalTrades={totalTrades}
         prices={prices}
-        pairNames={PAIR_NAMES}
+        pairNames={pairNames}
         onSelectBot={id => {
           setSelectedBotId(id);
           setView('detail');

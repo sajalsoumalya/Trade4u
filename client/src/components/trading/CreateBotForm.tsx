@@ -100,7 +100,7 @@ export function CreateBotForm({
                     key={s}
                     className="inline-flex items-center gap-1 bg-primary/10 border border-primary/30 text-primary px-2.5 py-1 rounded-md text-xs font-semibold"
                   >
-                    {pairNames[s] || s.replace('USDT', '')}
+                    {pairNames[s] || s.replace('USDT', '/USDT')}
                     <button
                       type="button"
                       onClick={() => setFormSymbols(formSymbols.filter(x => x !== s))}
@@ -143,7 +143,7 @@ export function CreateBotForm({
                         : 'border-border text-muted hover:text-white hover:border-gray-500'
                     }`}
                   >
-                    {pairNames[s] || s.replace('USDT', '')}
+                    {pairNames[s] || s.replace('USDT', '/USDT')}
                   </button>
                 );
               })}
@@ -345,7 +345,7 @@ export function CreateBotForm({
                   const p = prices[s];
                   return (
                     <div key={s} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-background border border-border">
-                      <span className="text-sm font-semibold text-white">{pairNames[s] || s.replace('USDT', '')}</span>
+                      <span className="text-sm font-semibold text-white">{pairNames[s] || s.replace('USDT', '/USDT')}</span>
                       {p && <span className="text-xs font-mono text-muted">${formatPrice(p.price)}</span>}
                     </div>
                   );

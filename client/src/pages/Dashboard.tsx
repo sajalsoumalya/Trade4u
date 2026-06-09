@@ -159,7 +159,7 @@ export default function Dashboard() {
                 {cryptoList.map(c => (
                   <button key={c.symbol} onClick={() => setSymbol(c.symbol)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${symbol === c.symbol ? 'bg-primary text-white' : 'bg-background text-muted hover:text-white'}`}>
-                    {c.symbol.replace('USDT', '')}
+                    {c.symbol.replace('USDT', '/USDT')}
                   </button>
                 ))}
               </div>
@@ -202,7 +202,7 @@ export default function Dashboard() {
                 return (
                   <button key={c.symbol} onClick={() => setSymbol(c.symbol)}
                     className={`p-3 rounded-lg border transition-all text-left ${symbol === c.symbol ? 'border-primary bg-primary/5' : 'border-border hover:border-gray-600'}`}>
-                    <p className="text-xs text-muted">{c.symbol.replace('USDT', '')}</p>
+                    <p className="text-xs text-muted">{c.symbol.replace('USDT', '/USDT')}</p>
                     <p className="text-sm font-semibold text-white">${p.price > 1 ? p.price.toFixed(2) : p.price.toFixed(6)}</p>
                     <p className={`text-xs font-medium ${p.priceChangePercent >= 0 ? 'text-primary' : 'text-secondary'}`}>
                       {p.priceChangePercent >= 0 ? '+' : ''}{p.priceChangePercent.toFixed(2)}%
