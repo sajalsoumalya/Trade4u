@@ -33,19 +33,6 @@ cd Trade4u
 pip install .
 ```
 
-## Web Interface
-
-Run the Streamlit web interface:
-
-```bash
-streamlit run tradingagents_web/app.py
-```
-
-Or with Docker:
-```bash
-docker compose -f docker-compose.web.yml up --build
-```
-
 ## Configuration
 
 Set your API keys in `.env`:

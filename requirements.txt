@@ -24,6 +24,3 @@ yfinance>=0.2.63
 # WebSocket & Networking
 websockets>=12.0
 aiohttp>=3.9.0
-
-# Web interface
-streamlit>=1.28.0
