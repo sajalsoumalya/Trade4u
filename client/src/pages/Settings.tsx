@@ -12,6 +12,7 @@ const llmProviders = [
   { id: 'google', name: 'Google' },
   { id: 'deepseek', name: 'DeepSeek' },
   { id: 'nvidia_nim', name: 'NVIDIA NIM' },
+  { id: 'openrouter', name: 'OpenRouter' },
 ];
 
 function ModelDetails({ model }: { model: ModelEntry | undefined }) {

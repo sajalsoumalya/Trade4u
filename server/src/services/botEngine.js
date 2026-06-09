@@ -29,8 +29,8 @@ export function startAIEngine(bot, io) {
     '--symbols', ...bot.symbols,
     '--interval', String(bot.interval || 5),
     '--provider', bot.provider || config.provider || 'opencode',
-    '--deep-model', bot.deepModel || config.deepModel || 'deepseek-chat',
-    '--quick-model', bot.quickModel || config.quickModel || 'deepseek-chat',
+    '--deep-model', bot.deepModel || config.deepModel || 'deepseek/deepseek-chat',
+    '--quick-model', bot.quickModel || config.quickModel || 'deepseek/deepseek-chat',
     '--stop-loss', String(bot.stopLoss || 2),
     '--take-profit', String(bot.takeProfit || 5),
   ];
@@ -47,6 +47,7 @@ export function startAIEngine(bot, io) {
     anthropic: 'ANTHROPIC_API_KEY',
     google: 'GOOGLE_API_KEY',
     deepseek: 'DEEPSEEK_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
   };
   const providerEnvVar = providerEnvMap[bot.provider || config.provider] || 'OPENAI_API_KEY';
 

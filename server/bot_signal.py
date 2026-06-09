@@ -37,8 +37,8 @@ class SignalEmitter:
         self.config = config
         agent_config = DEFAULT_CONFIG.copy()
         agent_config["llm_provider"] = config.get('provider', 'opencode')
-        agent_config["deep_think_llm"] = config.get('deep_model', 'deepseek-chat')
-        agent_config["quick_think_llm"] = config.get('quick_model', 'deepseek-chat')
+        agent_config["deep_think_llm"] = config.get('deep_model', 'deepseek/deepseek-chat')
+        agent_config["quick_think_llm"] = config.get('quick_model', 'deepseek/deepseek-chat')
         agent_config["max_debate_rounds"] = 1
         agent_config["data_vendors"] = {
             "core_stock_apis": "yfinance",
@@ -128,8 +128,8 @@ def main():
     parser.add_argument('--symbols', nargs='+', required=True)
     parser.add_argument('--interval', type=int, default=15)
     parser.add_argument('--provider', default='opencode')
-    parser.add_argument('--deep-model', default='deepseek-chat')
-    parser.add_argument('--quick-model', default='deepseek-chat')
+    parser.add_argument('--deep-model', default='deepseek/deepseek-chat')
+    parser.add_argument('--quick-model', default='deepseek/deepseek-chat')
     parser.add_argument('--stop-loss', type=float, default=2)
     parser.add_argument('--take-profit', type=float, default=5)
     parser.add_argument('--api-key', default=None)

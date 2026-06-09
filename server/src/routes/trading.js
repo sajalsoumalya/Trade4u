@@ -242,6 +242,17 @@ router.post('/test-connection', optionalAuth, async (req, res) => {
           error = 'API key required';
         }
         break;
+      case 'openrouter':
+        if (apiKey) {
+          const r = await fetch('https://openrouter.ai/api/v1/models', {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+          ok = r.ok;
+          if (!ok) error = `HTTP ${r.status}`;
+        } else {
+          error = 'API key required';
+        }
+        break;
       default:
         error = 'Unknown provider';
     }
@@ -392,6 +403,32 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
             { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'code'] },
           ];
         }
+      case 'openrouter':
+        if (apiKey) {
+          try {
+            const resp = await fetch('https://openrouter.ai/api/v1/models', {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              models = (data.data || []).map(m => ({
+                id: m.id, name: m.name || m.id, cost: 'Paid',
+                context: m.context_length || 128000, maxOutput: m.top_provider?.max_completion_tokens || 8192,
+                capabilities: ['reasoning', 'tools'],
+              }));
+            }
+          } catch (_) {}
+        }
+        if (models.length === 0) {
+          models = [
+            { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
+            { id: 'openai/gpt-5.4-mini', name: 'GPT-5.4 Mini', cost: 'Paid', context: 128000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'fast'] },
+            { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: 'Paid', context: 1048576, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'fast'] },
+            { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
+            { id: 'qwen/qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'tools'] },
+          ];
+        }
+        break;
       case 'nvidia':
       case 'nvidia_nim':
         if (apiKey) {
