@@ -41,9 +41,29 @@ function normalizePrivateKey(key) {
   return normalized;
 }
 
-if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+// Resolve the private key from FIREBASE_PRIVATE_KEY_BASE64 (bulletproof: base64
+// contains no quotes, backslashes, or newlines for env tooling to mangle) when
+// present, otherwise the plain FIREBASE_PRIVATE_KEY. Either way it's normalized,
+// so the base64 may encode a PEM with real newlines or with literal \n.
+function resolvePrivateKey() {
+  const b64 = process.env.FIREBASE_PRIVATE_KEY_BASE64;
+  if (b64 && b64.trim()) {
+    try {
+      return normalizePrivateKey(Buffer.from(b64.trim(), 'base64').toString('utf8'));
+    } catch (err) {
+      console.error('Failed to decode FIREBASE_PRIVATE_KEY_BASE64, falling back to FIREBASE_PRIVATE_KEY:', err.message);
+    }
+  }
+  return normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+}
+
+if (
+  process.env.FIREBASE_PROJECT_ID &&
+  process.env.FIREBASE_CLIENT_EMAIL &&
+  (process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY_BASE64)
+) {
   try {
-    const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+    const privateKey = resolvePrivateKey();
     firebaseAdmin = initializeApp({
       credential: cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
