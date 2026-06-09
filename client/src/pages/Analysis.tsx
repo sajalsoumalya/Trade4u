@@ -203,6 +203,8 @@ export default function Analysis() {
         if (data.status === 'stage') {
           setCurrentStage(data.stage);
           setStageOutputs(prev => ({ ...prev, [data.stage]: data.output }));
+        } else if (data.status === 'error_log') {
+          setErrorText(prev => (prev || '') + data.error + '\n');
         } else if (data.status === 'completed') {
           stopTracking();
           setStatus('completed');

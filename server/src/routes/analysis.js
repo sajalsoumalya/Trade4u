@@ -90,12 +90,29 @@ router.post('/run', optionalAuth, async (req, res) => {
             io.emit(`analysis:${id}`, { status: 'stage', stage: msg.stage, name: msg.name, output: msg.output });
           } else if (msg.type === 'complete') {
             parsedDecision = msg.decision;
+          } else if (msg.type === 'error') {
+            errorOutput += msg.message + '\n';
+            io.emit(`analysis:${id}`, { status: 'error_log', error: msg.message });
           }
         } catch (_) { /* not JSON — regular stdout */ }
       }
     });
 
-    python.stderr.on('data', (data) => { errorOutput += data.toString(); });
+    python.stderr.on('data', (data) => {
+      const text = data.toString();
+      errorOutput += text;
+      const lines = text.split('\n').filter(l => l.trim());
+      for (const line of lines) {
+        try {
+          const msg = JSON.parse(line);
+          if (msg.type === 'error') {
+            io.emit(`analysis:${id}`, { status: 'error_log', error: msg.message });
+          }
+        } catch (_) {
+          io.emit(`analysis:${id}`, { status: 'error_log', error: line });
+        }
+      }
+    });
 
     // Timeout: kill the process if it runs too long (5 minutes)
     const analysisTimeout = setTimeout(() => {
@@ -124,7 +141,8 @@ router.post('/run', optionalAuth, async (req, res) => {
       io.emit(`analysis:${id}`, {
         status: code === 0 ? 'completed' : 'failed',
         decision,
-        result: output.substring(0, 10000)
+        result: output.substring(0, 10000),
+        error: code !== 0 ? errorOutput.substring(0, 5000) : undefined
       });
     });
 
