@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
 import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff, Wifi, WifiOff, RotateCw, Pencil, X, Zap, Activity } from 'lucide-react';
-import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider, testConnection } from '../lib/api';
+import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider, testConnection, startBotEngine, stopBotEngine } from '../lib/api';
 
 interface ModelEntry { id: string; name: string; cost: string; context: number; maxOutput: number; capabilities: string[] }
 
@@ -49,13 +49,19 @@ export default function Settings() {
     fallbackProvider, fallbackApiKey, fallbackDeepModel, fallbackQuickModel,
     setLlmProvider, setApiKey, setDeepModel, setQuickModel, setWalletBalance,
     setFallbackProvider, setFallbackApiKey, setFallbackDeepModel, setFallbackQuickModel,
+    bots, applyGlobalLlmToAllBots,
   } = useAppStore();
 
   const [mode, setMode] = useState<'view' | 'edit'>('view');
+  // Must be declared with the other hooks (before the view-mode early return) —
+  // declaring it after that return changes the hook count between renders and
+  // crashes the page when toggling view <-> edit (React hooks violation).
+  const [editTarget, setEditTarget] = useState<'main' | 'fallback'>('main');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [balanceInput, setBalanceInput] = useState(String(walletBalance));
   const [models, setModels] = useState<ModelEntry[]>([]);
+  const [modelsSource, setModelsSource] = useState<string>('');
   const [loadingModels, setLoadingModels] = useState(false);
   const [providerChanged, setProviderChanged] = useState(false);
   const [showKey, setShowKey] = useState(false);
@@ -64,6 +70,7 @@ export default function Settings() {
   const initialConfigLoaded = useRef(false);
 
   const [fallbackModels, setFallbackModels] = useState<ModelEntry[]>([]);
+  const [fallbackModelsSource, setFallbackModelsSource] = useState<string>('');
   const [loadingFallbackModels, setLoadingFallbackModels] = useState(false);
   const [fallbackProviderChanged, setFallbackProviderChanged] = useState(false);
   const [showFallbackKey, setShowFallbackKey] = useState(false);
@@ -112,6 +119,7 @@ export default function Settings() {
       fetchModelsFromProvider(llmProvider, apiKey || undefined)
         .then(data => {
           setModels(data.models || []);
+          setModelsSource(data.source || '');
           const m = data.models || [];
           if (m.length > 0 && initialConfigLoaded.current) {
             const { quickModel: qm, deepModel: dm } = useAppStore.getState();
@@ -140,6 +148,7 @@ export default function Settings() {
       fetchModelsFromProvider(fallbackProvider, fallbackApiKey || undefined)
         .then(data => {
           setFallbackModels(data.models || []);
+          setFallbackModelsSource(data.source || '');
           const m = data.models || [];
           if (m.length > 0 && initialConfigLoaded.current) {
             const { fallbackQuickModel: fqm, fallbackDeepModel: fdm } = useAppStore.getState();
@@ -186,6 +195,19 @@ export default function Settings() {
         fallbackQuickModel,
         fallbackDeepModel,
       });
+
+      // Apply the new config to every bot and restart the running ones so the
+      // change takes effect at runtime. The engine reloads the key from the DB
+      // (just saved) and uses the new provider/models on the next cycle.
+      applyGlobalLlmToAllBots(llmProvider, quickModel, deepModel);
+      for (const b of bots) {
+        if (b.status === 'running') {
+          try {
+            await stopBotEngine(b.id);
+            await startBotEngine(b.id, b.symbols, b.stopLoss, b.takeProfit, b.interval, llmProvider, quickModel, deepModel);
+          } catch (_) { /* best-effort; engine status surfaces on the Trading page */ }
+        }
+      }
     } catch (e: any) {
       setConnectionStatus({ ok: false, error: 'Config save failed: ' + (e.message || 'Server unreachable') });
     }
@@ -430,8 +452,6 @@ export default function Settings() {
     );
   }
 
-  const [editTarget, setEditTarget] = useState<'main' | 'fallback'>('main');
-
   // ============ EDIT MODE ============
   const isMain = editTarget === 'main';
   const activeProvider = isMain ? llmProvider : fallbackProvider;
@@ -439,6 +459,7 @@ export default function Settings() {
   const activeQuickModel = isMain ? quickModel : fallbackQuickModel;
   const activeDeepModel = isMain ? deepModel : fallbackDeepModel;
   const activeModels = isMain ? models : fallbackModels;
+  const activeModelsSource = isMain ? modelsSource : fallbackModelsSource;
   const activeLoadingModels = isMain ? loadingModels : loadingFallbackModels;
   const activeProviderChanged = isMain ? providerChanged : fallbackProviderChanged;
   const activeConnectionStatus = isMain ? connectionStatus : fallbackConnectionStatus;
@@ -542,6 +563,12 @@ export default function Settings() {
             <span className="text-[10px] text-[#F0B90B]">Provider changed — click Fetch Models</span>
           )}
         </div>
+
+        {activeModelsSource === 'fallback' && activeProvider !== 'opencode' && activeProvider !== 'openrouter' && (
+          <p className="text-[10px] text-[#F0B90B] mb-4 -mt-1">
+            Showing suggested models — enter a valid {providerLabel(activeProvider)} API key, then click Fetch Models to load live ones.
+          </p>
+        )}
 
         <div className="grid grid-cols-2 gap-4 mb-5">
           <div>
