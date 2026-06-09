@@ -163,7 +163,10 @@ export const stopBotEngine = async (botId: string) => {
 };
 
 // LLM Config API
-export const saveLlmConfig = async (config: { provider: string; apiKey: string; quickModel: string; deepModel: string }) => {
+export const saveLlmConfig = async (config: {
+  provider: string; apiKey: string; quickModel: string; deepModel: string;
+  fallbackProvider?: string; fallbackApiKey?: string; fallbackQuickModel?: string; fallbackDeepModel?: string;
+}) => {
   const res = await fetch(`${API_BASE}/trading/config`, {
     method: 'POST',
     headers: getAuthHeaders(),

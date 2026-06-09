@@ -30,7 +30,8 @@ class AutoTradeBot:
         agent_config["llm_provider"] = self.config.get('provider', 'opencode')
         agent_config["deep_think_llm"] = self.config.get('deep_model', 'minimax-m2.5-free')
         agent_config["quick_think_llm"] = self.config.get('quick_model', 'minimax-m2.5-free')
-        agent_config["backend_url"] = "https://opencode.ai/zen/v1"
+        # Leave backend_url unset (None) so each provider resolves its own
+        # endpoint. Hardcoding OpenCode's URL forced every provider to opencode.ai.
         agent_config["max_debate_rounds"] = 1
         agent_config["data_vendors"] = {
             "core_stock_apis": "yfinance",

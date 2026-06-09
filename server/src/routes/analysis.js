@@ -147,7 +147,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { limit = 20 } = req.query;
-    const analyses = db.prepare('SELECT * FROM analyses WHERE uid = ? ORDER BY created_at DESC LIMIT ?').all(req.uid, parseInt(limit));
+    const analyses = db.prepare('SELECT * FROM analyses WHERE uid = ? ORDER BY created_at DESC LIMIT ?').all(req.uid, parseInt(limit, 10));
     const mapped = analyses.map(a => ({
       id: a.id,
       uid: a.uid,

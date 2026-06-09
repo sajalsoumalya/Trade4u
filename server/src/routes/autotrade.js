@@ -156,7 +156,7 @@ router.get('/history', optionalAuth, async (req, res) => {
   try {
     const uid = req.uid;
     const { limit = 50 } = req.query;
-    const trades = db.prepare('SELECT * FROM trade_history WHERE uid = ? ORDER BY created_at DESC LIMIT ?').all(uid, parseInt(limit));
+    const trades = db.prepare('SELECT * FROM trade_history WHERE uid = ? ORDER BY created_at DESC LIMIT ?').all(uid, parseInt(limit, 10));
     const mapped = trades.map(t => ({
       id: t.id,
       uid: t.uid,
@@ -236,7 +236,7 @@ router.post('/trade', optionalAuth, async (req, res) => {
     })();
 
     const io = req.app.get('io');
-    io.to(uid).emit('trade-executed', { id, symbol, type, amount, price });
+    io.emit('trade-executed', { uid, id, symbol, type, amount, price });
 
     res.json({ success: true, id });
   } catch (error) {
@@ -262,10 +262,13 @@ router.post('/close-position', optionalAuth, async (req, res) => {
       }
       db.prepare('DELETE FROM positions WHERE id = ?').run(positionId);
 
+      const pnlPct = pos.entry_price > 0
+        ? (pnl / (pos.entry_price * pos.quantity)) * 100
+        : 0.0;
       db.prepare(`
-        INSERT INTO closed_positions (id, uid, symbol, type, quantity, entry_price, exit_price, pnl, pnl_pct, status, opened_at, closed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(positionId, uid, pos.symbol, pos.type, pos.quantity, pos.entry_price, currentPrice, pnl, ((currentPrice - pos.entry_price) / pos.entry_price) * 100, 'closed', pos.opened_at);
+        INSERT INTO closed_positions (id, bot_id, uid, symbol, type, quantity, entry_price, exit_price, pnl, pnl_pct, fee, status, opened_at, closed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(positionId, pos.bot_id, uid, pos.symbol, pos.type, pos.quantity, pos.entry_price, currentPrice, pnl, pnlPct, 0.0, 'closed', pos.opened_at);
 
       db.prepare(`
         INSERT INTO trade_history (id, uid, symbol, type, quantity, price, amount, pnl, status, created_at)
@@ -274,7 +277,7 @@ router.post('/close-position', optionalAuth, async (req, res) => {
     })();
 
     const io = req.app.get('io');
-    io.to(uid).emit('position-closed', { id: positionId, pnl, exitPrice: currentPrice });
+    io.emit('position-closed', { uid, id: positionId, pnl, exitPrice: currentPrice });
 
     res.json({ success: true, pnl });
   } catch (error) {

@@ -24,7 +24,7 @@ export default function Dashboard() {
   const totalWins = bots.reduce((s, b) => s + b.winningTrades, 0);
   const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100) : 0;
   const totalPositions = bots.reduce((s, b) => s + b.positions.length, 0);
-  const available = walletBalance - totalFrozen;
+  const available = walletBalance;
   const bestBot = [...bots].sort((a, b) => b.totalPnl - a.totalPnl)[0];
 
   const [prices, setPrices] = useState<Record<string, any>>({});

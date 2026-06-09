@@ -104,7 +104,8 @@ export default function Trading() {
           });
           addToast('success', `${bot.name}: Bought ${signal.symbol} @ $${signal.price.toFixed(2)}`);
         } else if (signal.action === 'sell') {
-          const pos = bot.positions.find(p => p.symbol === signal.symbol);
+          const liveBot = useAppStore.getState().bots.find(b => b.id === bot.id);
+          const pos = liveBot?.positions.find(p => p.symbol === signal.symbol);
           if (pos) {
             closePosition(bot.id, pos.id, signal.price);
             addToast('info', `${bot.name}: Sold ${signal.symbol} @ $${signal.price.toFixed(2)}`);
@@ -114,7 +115,8 @@ export default function Trading() {
 
       // AI can dynamically update SL/TP per position
       socket.on(`bot:${bot.id}:update_sltp`, (data: any) => {
-        const pos = bot.positions.find(p => p.symbol === data.symbol);
+        const liveBot = useAppStore.getState().bots.find(b => b.id === bot.id);
+        const pos = liveBot?.positions.find(p => p.symbol === data.symbol);
         if (pos && (data.stopLoss !== undefined || data.takeProfit !== undefined)) {
           updatePositionSLTP(bot.id, pos.id, data.stopLoss, data.takeProfit);
           addToast('info', `${bot.name}: SL/TP updated for ${data.symbol}`);

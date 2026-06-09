@@ -13,6 +13,7 @@ import {
   Terminal,
   PencilLine,
   Save,
+  Play,
 } from 'lucide-react';
 import { PositionsTab } from './PositionsTab';
 import { ClosedPositionsTab } from './ClosedPositionsTab';

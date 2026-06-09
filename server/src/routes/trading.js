@@ -22,6 +22,23 @@ const readJsonData = (name) => {
 };
 const writeData = (name, data) => fs.writeFileSync(getFile(name), JSON.stringify(data, null, 2));
 
+// Resolve the real (decrypted) stored key for a provider. When the client sends
+// a masked/empty key we look it up here, matching the requested provider to the
+// primary or fallback slot so we never test/use the wrong provider's key.
+const MASKED_KEYS = ['●●●●●●●●', '******'];
+const isMaskedKey = (k) => !k || MASKED_KEYS.includes(k) || k.includes('●');
+function resolveStoredKey(uid, provider, isFallback = false) {
+  const config = db.prepare(
+    'SELECT provider, api_key, fallback_provider, fallback_api_key FROM llm_config WHERE uid = ?'
+  ).get(uid);
+  if (!config) return '';
+  if (provider && provider === config.provider && config.api_key) return decrypt(config.api_key);
+  if (provider && provider === config.fallback_provider && config.fallback_api_key) return decrypt(config.fallback_api_key);
+  // Provider didn't disambiguate (e.g. same provider in both slots): use the hint.
+  if (isFallback) return config.fallback_api_key ? decrypt(config.fallback_api_key) : '';
+  return config.api_key ? decrypt(config.api_key) : '';
+}
+
 const router = Router();
 
 router.post('/order', optionalAuth, async (req, res) => {
@@ -104,9 +121,9 @@ router.delete('/order/:id', optionalAuth, async (req, res) => {
       db.prepare('DELETE FROM positions WHERE id = ?').run(id);
 
       db.prepare(`
-        INSERT INTO closed_positions (id, uid, symbol, type, quantity, entry_price, exit_price, pnl, pnl_pct, status, opened_at, closed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(id, uid, pos.symbol, pos.type, pos.quantity, pos.entry_price, closePrice, pnl, pos.entry_price > 0 ? (pnl / (pos.entry_price * pos.quantity)) * 100 : 0.0, 'closed', pos.opened_at);
+        INSERT INTO closed_positions (id, bot_id, uid, symbol, type, quantity, entry_price, exit_price, pnl, pnl_pct, fee, status, opened_at, closed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(id, pos.bot_id, uid, pos.symbol, pos.type, pos.quantity, pos.entry_price, closePrice, pnl, pos.entry_price > 0 ? (pnl / (pos.entry_price * pos.quantity)) * 100 : 0.0, 0.0, 'closed', pos.opened_at);
 
       db.prepare('UPDATE trade_history SET status = "closed", pnl = ? WHERE id = ?').run(pnl, id);
     })();
@@ -145,7 +162,7 @@ router.get('/history', optionalAuth, async (req, res) => {
     const uid = req.uid;
     const { limit = 50 } = req.query;
     
-    const trades = db.prepare('SELECT * FROM trade_history WHERE uid = ? ORDER BY created_at DESC LIMIT ?').all(uid, parseInt(limit));
+    const trades = db.prepare('SELECT * FROM trade_history WHERE uid = ? ORDER BY created_at DESC LIMIT ?').all(uid, parseInt(limit, 10));
     const mapped = trades.map(t => ({
       id: t.id,
       uid: t.uid,
@@ -324,13 +341,8 @@ router.post('/test-connection', optionalAuth, async (req, res) => {
     if (!provider) return res.status(400).json({ ok: false, error: 'provider required' });
 
     const uid = req.uid;
-    if (apiKey === '●●●●●●●●' || apiKey === '******' || !apiKey) {
-      const config = db.prepare('SELECT api_key, fallback_api_key FROM llm_config WHERE uid = ?').get(uid);
-      if (config) {
-        apiKey = isFallback
-          ? (config.fallback_api_key ? decrypt(config.fallback_api_key) : '')
-          : (config.api_key ? decrypt(config.api_key) : '');
-      }
+    if (isMaskedKey(apiKey)) {
+      apiKey = resolveStoredKey(uid, provider, isFallback);
     }
 
     let ok = false;
@@ -430,11 +442,8 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
     if (!provider) return res.status(400).json({ error: 'provider required' });
 
     const uid = req.uid;
-    if (apiKey === '●●●●●●●●' || apiKey === '******' || !apiKey) {
-      const config = db.prepare('SELECT api_key FROM llm_config WHERE uid = ?').get(uid);
-      if (config && config.api_key) {
-        apiKey = decrypt(config.api_key);
-      }
+    if (isMaskedKey(apiKey)) {
+      apiKey = resolveStoredKey(uid, provider);
     }
 
     let models = [];

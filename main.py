@@ -31,7 +31,10 @@ config["llm_provider"] = args.provider
 config["deep_think_llm"] = args.deep_model
 config["quick_think_llm"] = args.quick_model
 config["max_debate_rounds"] = 1
-config["backend_url"] = "https://opencode.ai/zen/v1"
+# Leave backend_url unset (None): each provider's client resolves its own
+# default endpoint. Hardcoding OpenCode's URL here routed every provider
+# (OpenAI/Anthropic/Google/DeepSeek) to opencode.ai, so a saved key for any
+# non-OpenCode provider would fail to authenticate. See default_config.py.
 
 # Configure data vendors (default uses yfinance, no extra API keys needed)
 config["data_vendors"] = {

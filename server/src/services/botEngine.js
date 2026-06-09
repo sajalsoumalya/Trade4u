@@ -35,18 +35,17 @@ export function startAIEngine(bot, io) {
 
   const config = loadLlmConfig(bot.uid);
 
-  // Determine LLM provider and models based on bot config -> user settings config -> system fallback config
-  let provider = bot.provider || config.provider;
-  let qModel = bot.quickModel || config.quickModel;
-  let dModel = bot.deepModel || config.deepModel;
-  let apiKey = config.apiKey || '';
+  // Determine LLM provider/models: bot-specific -> primary config -> system fallback config
+  const provider = bot.provider || config.provider || config.fallbackProvider || 'opencode';
+  const qModel = bot.quickModel || config.quickModel || config.fallbackQuickModel || 'minimax-m2.5-free';
+  const dModel = bot.deepModel || config.deepModel || config.fallbackDeepModel || 'minimax-m2.5-free';
 
-  if (!provider) {
-    provider = config.fallbackProvider || 'opencode';
-    qModel = config.fallbackQuickModel || 'minimax-m2.5-free';
-    dModel = config.fallbackDeepModel || 'minimax-m2.5-free';
-    apiKey = config.fallbackApiKey || '';
-  }
+  // Resolve the API key for the *chosen* provider. Matching the provider to the
+  // primary or fallback slot avoids handing e.g. the OpenAI key to a DeepSeek
+  // run (which then fails auth). Mirrors the resolution in routes/analysis.js.
+  let apiKey = '';
+  if (provider === config.provider) apiKey = config.apiKey || '';
+  else if (provider === config.fallbackProvider) apiKey = config.fallbackApiKey || '';
 
   const scriptPath = path.join(PROJECT_ROOT, 'server', 'bot_signal.py');
   const args = [
@@ -76,12 +75,16 @@ export function startAIEngine(bot, io) {
   };
   const providerEnvVar = providerEnvMap[provider] || 'OPENAI_API_KEY';
 
+  const childEnv = {
+    ...process.env,
+    PYTHONPATH: `${PROJECT_ROOT}:${process.env.PYTHONPATH || ''}`,
+  };
+  // Only set the provider key env var when we actually have one, so an empty
+  // value doesn't clobber a real key already present in the server environment.
+  if (apiKey) childEnv[providerEnvVar] = apiKey;
+
   const proc = spawn('python3', args, {
-    env: {
-      ...process.env,
-      PYTHONPATH: `${PROJECT_ROOT}:${process.env.PYTHONPATH || ''}`,
-      [providerEnvVar]: apiKey,
-    },
+    env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 

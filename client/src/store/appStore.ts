@@ -224,23 +224,24 @@ export const useAppStore = create<AppState>()(
         const pnl = pos.type === 'sell' ? (pos.entryPrice - closePrice) * pos.quantity : (closePrice - pos.entryPrice) * pos.quantity;
         const pnlPct = ((closePrice - pos.entryPrice) / pos.entryPrice) * 100 * (pos.type === 'sell' ? -1 : 1);
         const fee = Math.round(pos.quantity * pos.entryPrice * 0.001 * 100) / 100;
+        const netPnl = pnl - fee;
         const closedPos: ClosedPosition = {
           id: genId(),
           symbol: pos.symbol, type: pos.type, quantity: pos.quantity,
           entryPrice: pos.entryPrice, exitPrice: closePrice,
           stopLoss: pos.stopLoss, takeProfit: pos.takeProfit,
           openedAt: pos.openedAt, closedAt: new Date().toISOString(),
-          pnl, pnlPct, fee, status,
+          pnl: netPnl, pnlPct, fee, status,
         };
         set({
-          walletBalance: state.walletBalance + pnl - fee,
+          walletBalance: state.walletBalance + netPnl,
           bots: state.bots.map(b => b.id === botId ? {
             ...b,
             positions: b.positions.filter(p => p.id !== posId),
             closedPositions: [...b.closedPositions, closedPos],
-            totalPnl: b.totalPnl + pnl - fee,
+            totalPnl: b.totalPnl + netPnl,
             closedTrades: b.closedTrades + 1,
-            winningTrades: b.winningTrades + (pnl - fee > 0 ? 1 : 0),
+            winningTrades: b.winningTrades + (netPnl > 0 ? 1 : 0),
             frozenAmount: b.frozenAmount,
           } : b),
         });

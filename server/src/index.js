@@ -30,7 +30,7 @@ const corsOptions = {
       callback(null, true);
     } else {
       console.warn(`CORS: blocked origin ${origin}`);
-      callback(null, origin);
+      callback(null, false);
     }
   },
   credentials: true
