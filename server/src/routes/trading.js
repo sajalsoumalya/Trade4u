@@ -231,6 +231,7 @@ router.post('/test-connection', optionalAuth, async (req, res) => {
         }
         break;
       case 'nvidia':
+      case 'nvidia_nim':
         if (apiKey) {
           const r = await fetch('https://integrate.api.nvidia.com/v1/models', {
             headers: { Authorization: `Bearer ${apiKey}` },
@@ -392,6 +393,7 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
           ];
         }
       case 'nvidia':
+      case 'nvidia_nim':
         if (apiKey) {
           const resp = await fetch('https://integrate.api.nvidia.com/v1/models', {
             headers: { Authorization: `Bearer ${apiKey}` },

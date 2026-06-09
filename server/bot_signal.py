@@ -17,14 +17,28 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
 
+# Provider to API key env var mapping (matching tradingagents/llm_clients/openai_client.py)
+_PROVIDER_ENV_VARS = {
+    "opencode": "OPENCODE_API_KEY",
+    "nvidia_nim": "NVIDIA_NIM_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "xai": "XAI_API_KEY",
+    "qwen": "DASHSCOPE_API_KEY",
+    "glm": "ZHIPU_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+}
+
+
 class SignalEmitter:
     def __init__(self, config):
         self.config = config
         agent_config = DEFAULT_CONFIG.copy()
         agent_config["llm_provider"] = config.get('provider', 'opencode')
-        agent_config["deep_think_llm"] = config.get('deep_model', 'minimax-m2.5-free')
-        agent_config["quick_think_llm"] = config.get('quick_model', 'minimax-m2.5-free')
-        agent_config["backend_url"] = "https://opencode.ai/zen/v1"
+        agent_config["deep_think_llm"] = config.get('deep_model', 'deepseek-chat')
+        agent_config["quick_think_llm"] = config.get('quick_model', 'deepseek-chat')
         agent_config["max_debate_rounds"] = 1
         agent_config["data_vendors"] = {
             "core_stock_apis": "yfinance",
@@ -114,15 +128,20 @@ def main():
     parser.add_argument('--symbols', nargs='+', required=True)
     parser.add_argument('--interval', type=int, default=15)
     parser.add_argument('--provider', default='opencode')
-    parser.add_argument('--deep-model', default='minimax-m2.5-free')
-    parser.add_argument('--quick-model', default='minimax-m2.5-free')
+    parser.add_argument('--deep-model', default='deepseek-chat')
+    parser.add_argument('--quick-model', default='deepseek-chat')
     parser.add_argument('--stop-loss', type=float, default=2)
     parser.add_argument('--take-profit', type=float, default=5)
     parser.add_argument('--api-key', default=None)
 
     args = parser.parse_args()
     if args.api_key:
-        os.environ[f"{args.provider.upper()}_API_KEY"] = args.api_key
+        env_var = _PROVIDER_ENV_VARS.get(args.provider)
+        if env_var:
+            os.environ[env_var] = args.api_key
+        # Fallback: also set OPENAI_API_KEY for any OpenAI-compatible provider
+        if args.provider in ("opencode", "nvidia_nim", "deepseek", "openai", "xai", "qwen", "glm", "openrouter"):
+            os.environ["OPENAI_API_KEY"] = args.api_key
 
     config = {
         'provider': args.provider,

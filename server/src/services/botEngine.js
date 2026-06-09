@@ -39,11 +39,22 @@ export function startAIEngine(bot, io) {
     args.push('--api-key', config.apiKey);
   }
 
+  // Map provider to its expected API key env var
+  const providerEnvMap = {
+    opencode: 'OPENCODE_API_KEY',
+    nvidia_nim: 'NVIDIA_NIM_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    google: 'GOOGLE_API_KEY',
+    deepseek: 'DEEPSEEK_API_KEY',
+  };
+  const providerEnvVar = providerEnvMap[bot.provider || config.provider] || 'OPENAI_API_KEY';
+
   const proc = spawn('python3', args, {
     env: {
       ...process.env,
       PYTHONPATH: `${PROJECT_ROOT}:${process.env.PYTHONPATH || ''}`,
-      OPENCODE_API_KEY: process.env.OPENCODE_API_KEY || config.apiKey || '',
+      [providerEnvVar]: config.apiKey || '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
