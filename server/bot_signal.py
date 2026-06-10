@@ -17,21 +17,6 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
 
-# Provider to API key env var mapping (matching tradingagents/llm_clients/openai_client.py)
-_PROVIDER_ENV_VARS = {
-    "opencode": "OPENCODE_API_KEY",
-    "nvidia_nim": "NVIDIA_NIM_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "google": "GOOGLE_API_KEY",
-    "deepseek": "DEEPSEEK_API_KEY",
-    "xai": "XAI_API_KEY",
-    "qwen": "DASHSCOPE_API_KEY",
-    "glm": "ZHIPU_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-}
-
-
 # Default model per provider (used when the configured model doesn't match the provider)
 _PROVIDER_DEFAULT_MODELS = {
     "opencode": "minimax-m2.5-free",
@@ -108,7 +93,7 @@ class SignalEmitter:
         """Ask the LLM for take-profit and stop-loss percentages via a quick API call."""
         try:
             provider = self.config.get('provider', 'opencode')
-            api_key = self.config.get('api_key') or os.environ.get(_PROVIDER_ENV_VARS.get(provider, 'OPENAI_API_KEY'))
+            api_key = self.config.get('api_key')
             if not api_key:
                 return None, None
             from tradingagents.llm_clients.openai_client import _PROVIDER_CONFIG
@@ -212,13 +197,6 @@ def main():
     parser.add_argument('--api-key', default=None)
 
     args = parser.parse_args()
-    if args.api_key:
-        env_var = _PROVIDER_ENV_VARS.get(args.provider)
-        if env_var:
-            os.environ[env_var] = args.api_key
-        # Fallback: also set OPENAI_API_KEY for any OpenAI-compatible provider
-        if args.provider in ("opencode", "nvidia_nim", "deepseek", "openai", "xai", "qwen", "glm", "openrouter"):
-            os.environ["OPENAI_API_KEY"] = args.api_key
 
     config = {
         'provider': args.provider,

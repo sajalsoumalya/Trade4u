@@ -18,12 +18,8 @@ args = parser.parse_args()
 from dotenv import load_dotenv
 load_dotenv()
 
-# Use provided API key or fall back to environment variable
-api_key = args.api_key or os.environ.get(f"{args.provider.upper()}_API_KEY", '')
-
-# Set the API key in environment for the LLM client
-if api_key:
-    os.environ[f"{args.provider.upper()}_API_KEY"] = api_key
+# Use API key from args (passed from DB config via analysis.js)
+api_key = args.api_key or ''
 
 # Create a custom config
 config = DEFAULT_CONFIG.copy()

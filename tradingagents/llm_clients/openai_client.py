@@ -151,16 +151,14 @@ class OpenAIClient(BaseLLMClient):
         # client (e.g. a corporate proxy) takes precedence over the
         # provider default so users can route through their own gateway.
         if self.provider in _PROVIDER_CONFIG:
-            default_base, api_key_env = _PROVIDER_CONFIG[self.provider]
+            default_base, _ = _PROVIDER_CONFIG[self.provider]
             llm_kwargs["base_url"] = self.base_url or default_base
-            # Prefer api_key passed as kwarg, then env var, then none
-            if "api_key" in self.kwargs and self.kwargs["api_key"]:
+            # Use api_key from stored config (passed as kwarg) exclusively.
+            # Env var fallback is intentionally removed — all callers must
+            # pass the key explicitly via the config -> kwargs chain.
+            if self.kwargs.get("api_key"):
                 llm_kwargs["api_key"] = self.kwargs["api_key"]
-            elif api_key_env:
-                api_key = os.environ.get(api_key_env)
-                if api_key:
-                    llm_kwargs["api_key"] = api_key
-            else:
+            elif self.provider == "ollama":
                 llm_kwargs["api_key"] = "ollama"
         elif self.base_url:
             llm_kwargs["base_url"] = self.base_url
