@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '../../data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
 
 export function runMigration() {
   const usersExist = db.prepare('SELECT count(*) as count FROM users').get().count > 0;

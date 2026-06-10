@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '../../data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -142,6 +142,25 @@ db.exec(`
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
+  );
+
+  -- Bot Decision Logs Table
+  CREATE TABLE IF NOT EXISTS decision_logs (
+    id TEXT PRIMARY KEY,
+    bot_id TEXT NOT NULL,
+    uid TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    action TEXT NOT NULL, -- 'buy', 'sell', 'hold', 'error'
+    price REAL,
+    stop_loss REAL,
+    take_profit REAL,
+    status TEXT NOT NULL DEFAULT 'completed', -- 'running', 'completed', 'failed', 'error'
+    reasoning TEXT, -- JSON-serialized reasoning log
+    error TEXT,
+    run_cycle INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
+    FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
   );
 
   -- Autotrade settings Table

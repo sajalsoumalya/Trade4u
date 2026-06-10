@@ -219,3 +219,11 @@ export const fetchBinanceSymbols = async (): Promise<string[]> => {
   }
   return ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
 };
+
+export const fetchBotLogs = async (botId: string, limit = 50) => {
+  const res = await fetch(`${API_BASE}/trading/bots/${botId}/logs?limit=${limit}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+};

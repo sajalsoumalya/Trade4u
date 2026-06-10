@@ -9,6 +9,8 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../../');
 
 const processes = new Map();
 
+const newId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
+
 function loadLlmConfig(uid) {
   try {
     const config = db.prepare('SELECT * FROM llm_config WHERE uid = ?').get(uid || 'demo');
@@ -90,6 +92,8 @@ export function startAIEngine(bot, io) {
 
   let buffer = '';
   const MAX_BUFFER = 1024 * 64;
+  const entry = processes.get(bot.id);
+  let pendingLogIds = [];
   proc.stdout.on('data', (data) => {
     buffer += data.toString();
     if (buffer.length > MAX_BUFFER) buffer = buffer.slice(-MAX_BUFFER);
@@ -114,6 +118,35 @@ export function startAIEngine(bot, io) {
         if (signal.type === 'update_sltp' && signal.symbol) {
           io.emit(`bot:${bot.id}:update_sltp`, signal);
         }
+
+        // Persist each cycle decision to decision_logs
+        if (signal.type === 'log' && signal.symbol) {
+          const logId = newId();
+          const reasonStr = signal.reasoning ? JSON.stringify(signal.reasoning).substring(0, 10000) : null;
+          try {
+            db.prepare(`
+              INSERT INTO decision_logs (id, bot_id, uid, symbol, action, price, stop_loss, take_profit, status, reasoning, error, run_cycle, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, NULL, ?, ?)
+            `).run(logId, bot.id, bot.uid, signal.symbol, signal.action || 'hold', signal.price || null, signal.stopLoss || null, signal.takeProfit || null, reasonStr, entry?.cycleCount || 0, signal.timestamp || new Date().toISOString());
+          } catch (_) {}
+          pendingLogIds.push(logId);
+        }
+        if (signal.type === 'signal' && signal.symbol && pendingLogIds.length > 0) {
+          const logId = pendingLogIds.shift();
+          try {
+            db.prepare(`
+              UPDATE decision_logs SET action = ?, price = ?, stop_loss = ?, take_profit = ?, status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+            `).run(signal.action || 'hold', signal.price || null, signal.stopLoss || null, signal.takeProfit || null, logId);
+          } catch (_) {}
+        }
+        if (signal.type === 'cycle_complete') {
+          if (entry) entry.cycleCount = (entry.cycleCount || 0) + 1;
+          // Mark any remaining pending logs as completed
+          for (const pid of pendingLogIds) {
+            try { db.prepare(`UPDATE decision_logs SET status = 'completed' WHERE id = ?`).run(pid); } catch (_) {}
+          }
+          pendingLogIds = [];
+        }
       } catch {
         console.log(`[AI:${bot.id}] ${trimmed}`);
       }
@@ -122,11 +155,20 @@ export function startAIEngine(bot, io) {
 
   proc.stderr.on('data', (data) => {
     const msg = data.toString().trim();
+    if (!msg) return;
     console.error(`[AI:${bot.id} Error] ${msg}`);
     // Forward engine errors to the client so they appear in the UI
     if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('401') || msg.toLowerCase().includes('fail') || msg.toLowerCase().includes('traceback')) {
       io.emit(`bot:${bot.id}:engineError`, msg.slice(0, 300));
     }
+    // Log error to decision_logs
+    try {
+      const errId = newId();
+      db.prepare(`
+        INSERT INTO decision_logs (id, bot_id, uid, symbol, action, price, status, error, run_cycle, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'error', ?, ?, ?)
+      `).run(errId, bot.id, bot.uid, 'SYSTEM', 'error', null, msg.slice(0, 2000), entry?.cycleCount || 0, new Date().toISOString());
+    } catch (_) {}
   });
 
   proc.on('close', (code) => {
@@ -147,7 +189,7 @@ export function startAIEngine(bot, io) {
     }
   });
 
-  processes.set(bot.id, { process: proc, io });
+  processes.set(bot.id, { process: proc, io, botUid: bot.uid, cycleCount: 0 });
   io.emit(`bot:${bot.id}:status`, { running: true });
   return true;
 }

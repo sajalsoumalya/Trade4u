@@ -15,6 +15,7 @@ services:
       - NODE_ENV=production
       - PORT=8501
       - LLM_PROVIDER=opencode
+      - DATA_DIR=/app/data
     volumes:
       - trade4u_data:/app/data
 

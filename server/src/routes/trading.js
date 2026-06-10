@@ -8,7 +8,7 @@ import db from '../services/db.js';
 import { encrypt, decrypt } from '../services/cryptoHelper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '../../data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const getFile = (name) => path.join(DATA_DIR, `${name}.json`);
@@ -701,5 +701,19 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
 });
 
 
+
+// Get bot decision logs (per-cycle results)
+router.get('/bots/:id/logs', optionalAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { limit = 50 } = req.query;
+    const logs = db.prepare(`
+      SELECT * FROM decision_logs WHERE bot_id = ? AND uid = ? ORDER BY created_at DESC LIMIT ?
+    `).all(id, req.uid, parseInt(limit, 10));
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 export default router;
