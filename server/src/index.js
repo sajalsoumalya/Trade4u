@@ -212,6 +212,28 @@ httpServer.listen(PORT, () => {
   } catch (err) {
     console.error('Auto-restart bots error:', err.message);
   }
+
+  // Mark in-flight analyses as failed (they died when the container stopped)
+  try {
+    const affected = db.prepare(`
+      UPDATE analyses SET status = 'failed', error = 'Server redeployed — analysis was interrupted.', updated_at = datetime('now')
+      WHERE status IN ('running', 'pending')
+    `).run();
+    if (affected.changes > 0) console.log(`Marked ${affected.changes} interrupted analysis(es) as failed`);
+  } catch (err) {
+    console.error('Cleanup analyses error:', err.message);
+  }
+
+  // Mark in-progress decision logs as interrupted
+  try {
+    const affected = db.prepare(`
+      UPDATE decision_logs SET status = 'error', error = 'Bot engine restarted — cycle was interrupted.'
+      WHERE status = 'running'
+    `).run();
+    if (affected.changes > 0) console.log(`Marked ${affected.changes} interrupted decision log(s) as errored`);
+  } catch (err) {
+    console.error('Cleanup decision logs error:', err.message);
+  }
 });
 
 process.on('SIGTERM', () => {
