@@ -210,6 +210,8 @@ router.post('/bots/:id/start', optionalAuth, async (req, res) => {
     const io = req.app.get('io');
     const uid = req.uid;
 
+    db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
+
     // Persist bot to SQLite so it can be auto-restarted on server boot
     db.prepare(`
       INSERT INTO bots (id, uid, name, symbols, allocation_type, allocation_value, frozen_amount, status, stop_loss, take_profit, interval, bot_provider, bot_quick_model, bot_deep_model)
