@@ -172,8 +172,11 @@ export const saveLlmConfig = async (config: {
     headers: getAuthHeaders(),
     body: JSON.stringify(config)
   });
-  const text = await res.text();
-  try { return JSON.parse(text); } catch { return { success: false, error: `HTTP ${res.status}: ${text.slice(0, 100)}` }; }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text.slice(0, 200));
+  }
+  return res.json();
 };
 
 export const loadLlmConfig = async () => {

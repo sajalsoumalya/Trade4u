@@ -265,10 +265,10 @@ router.get('/config', optionalAuth, async (req, res) => {
       apiKey: config.api_key ? '●●●●●●●●' : '',
       quickModel: config.quick_model,
       deepModel: config.deep_model,
-      fallbackProvider: config.fallback_provider || 'opencode',
+      fallbackProvider: config.fallback_provider || '',
       fallbackApiKey: config.fallback_api_key ? '●●●●●●●●' : '',
-      fallbackQuickModel: config.fallback_quick_model || 'minimax-m2.5-free',
-      fallbackDeepModel: config.fallback_deep_model || 'minimax-m2.5-free',
+      fallbackQuickModel: config.fallback_quick_model || '',
+      fallbackDeepModel: config.fallback_deep_model || '',
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

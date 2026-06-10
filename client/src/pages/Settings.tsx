@@ -82,27 +82,29 @@ export default function Settings() {
 
   useEffect(() => {
     loadLlmConfig().then(config => {
-      if (config.provider) setLlmProvider(config.provider);
-      if (config.apiKey) {
+      if (config.provider && config.provider !== 'opencode') setLlmProvider(config.provider);
+      if (config.apiKey && config.apiKey !== '●●●●●●●●') {
         setApiKey(config.apiKey);
         const model = config.quickModel || config.deepModel || undefined;
         testConnection(config.provider, config.apiKey, false, model)
           .then(result => setConnectionStatus(result))
           .catch(e => setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' }));
       }
-      if (config.quickModel) setQuickModel(config.quickModel);
-      if (config.deepModel) setDeepModel(config.deepModel);
+      if (config.quickModel && config.quickModel !== 'minimax-m2.5-free') setQuickModel(config.quickModel);
+      if (config.deepModel && config.deepModel !== 'minimax-m2.5-free') setDeepModel(config.deepModel);
 
-      if (config.fallbackProvider) setFallbackProvider(config.fallbackProvider);
-      if (config.fallbackApiKey) {
+      if (config.fallbackProvider && config.fallbackProvider !== 'opencode') setFallbackProvider(config.fallbackProvider);
+      if (config.fallbackApiKey && config.fallbackApiKey !== '●●●●●●●●') {
         setFallbackApiKey(config.fallbackApiKey);
         const model = config.fallbackQuickModel || config.fallbackDeepModel || undefined;
         testConnection(config.fallbackProvider, config.fallbackApiKey, true, model)
           .then(result => setFallbackConnectionStatus(result))
           .catch(e => setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' }));
       }
-      if (config.fallbackQuickModel) setFallbackQuickModel(config.fallbackQuickModel);
-      if (config.fallbackDeepModel) setFallbackDeepModel(config.fallbackDeepModel);
+      if (config.fallbackQuickModel && config.fallbackQuickModel !== 'minimax-m2.5-free') setFallbackQuickModel(config.fallbackQuickModel);
+      if (config.fallbackDeepModel && config.fallbackDeepModel !== 'minimax-m2.5-free') setFallbackDeepModel(config.fallbackDeepModel);
+    }).catch(() => {
+      // Server unreachable — keep Zustand persisted state as-is
     }).finally(() => {
       initialConfigLoaded.current = true;
     });
