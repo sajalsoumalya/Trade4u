@@ -142,11 +142,12 @@ router.post('/run', optionalAuth, async (req, res) => {
         id
       );
 
+      const errorMsg = errorOutput.trim() ? errorOutput.substring(0, 5000) : null;
       io.emit(`analysis:${id}`, {
         status: code === 0 ? 'completed' : 'failed',
         decision,
         result: output.substring(0, 10000),
-        error: code !== 0 ? errorOutput.substring(0, 5000) : undefined
+        error: errorMsg
       });
     });
 
