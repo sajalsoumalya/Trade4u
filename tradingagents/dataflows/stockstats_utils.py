@@ -70,11 +70,15 @@ def _normalize_yfinance_symbol(symbol: str) -> str:
     for quote in ("USDT", "USDC"):
         if s.endswith(quote):
             return f"{s[:-len(quote)]}-USD"
-    if s.endswith("USD") and len(s) > 6:
-        return f"{s[:-3]}-USD"
     if "-" in s:
         base, quote = s.split("-", 1)
-        return f"{base}-USD" if quote in ("USDT", "USDC", "USD") else s
+        if quote == "USD":
+            return s
+        if quote in ("USDT", "USDC"):
+            return f"{base}-USD"
+        return s
+    if s.endswith("USD") and len(s) > 6:
+        return f"{s[:-3]}-USD"
     return s
 
 

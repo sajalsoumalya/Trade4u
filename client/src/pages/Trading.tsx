@@ -211,24 +211,18 @@ export default function Trading() {
       ? ((bots.reduce((s, b) => s + b.winningTrades, 0) / totalTrades) * 100).toFixed(1)
       : '0.0';
 
-  const handleStartBotEngine = (id: string) => {
+  const handleStartBotEngine = async (id: string) => {
     startBot(id);
     const target = bots.find(b => b.id === id);
-    if (target) {
+    if (!target) { stopBot(id); return; }
+    try {
       const provider = target.botProvider || llmProvider || 'opencode';
       const qModel = target.botQuickModel || quickModel || 'minimax-m2.5-free';
       const dModel = target.botDeepModel || deepModel || 'minimax-m2.5-free';
-      startBotEngine(
-        target.id,
-        target.symbols,
-        target.stopLoss,
-        target.takeProfit,
-        target.interval,
-        provider,
-        qModel,
-        dModel,
-        target.name
-      );
+      await startBotEngine(target.id, target.symbols, target.stopLoss, target.takeProfit, target.interval, provider, qModel, dModel, target.name);
+    } catch {
+      stopBot(id);
+      addToast('error', 'Failed to start bot engine. Check server logs.');
     }
   };
 

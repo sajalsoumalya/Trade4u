@@ -33,16 +33,18 @@ def _normalize_crypto_symbol(symbol: str) -> str:
             base = symbol[:-len(quote)]
             return f"{base}-USD"
 
+    # Already in valid yfinance format (e.g. BTC-USD, ETH-USD)
+    if "-" in symbol:
+        base, quote = symbol.split("-", 1)
+        if quote == "USD":
+            return symbol
+        if quote in ("USDT", "USDC"):
+            return f"{base}-USD"
+
     # Handle crypto symbols ending with USD that are longer than 6 characters (e.g., BTCUSD)
     if symbol.endswith("USD") and len(symbol) > 6:
         base = symbol[:-3]
         return f"{base}-USD"
-
-    # Handle hyphenated crypto symbols (e.g., BTC-USDT)
-    if "-" in symbol:
-        base, quote = symbol.split("-", 1)
-        if quote in ("USDT", "USDC", "USD"):
-            return f"{base}-USD"
 
     # Handle forex pairs (3-6 char symbols without slash)
     # yfinance uses =X suffix for forex
