@@ -12,6 +12,10 @@ if (!fs.existsSync(DATA_DIR)) {
 const dbPath = path.join(DATA_DIR, 'app.db');
 const db = new Database(dbPath);
 
+// WAL mode prevents write conflicts from concurrent readers/writers
+db.pragma('journal_mode = WAL');
+db.pragma('busy_timeout = 5000');
+
 // Enable foreign keys
 db.pragma('foreign_keys = ON');
 

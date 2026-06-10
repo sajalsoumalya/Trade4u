@@ -89,8 +89,10 @@ export function startAIEngine(bot, io) {
   });
 
   let buffer = '';
+  const MAX_BUFFER = 1024 * 64;
   proc.stdout.on('data', (data) => {
     buffer += data.toString();
+    if (buffer.length > MAX_BUFFER) buffer = buffer.slice(-MAX_BUFFER);
     const lines = buffer.split('\n');
     buffer = lines.pop() || '';
     for (const line of lines) {
@@ -168,4 +170,13 @@ export function stopAIEngine(botId) {
 
 export function isEngineRunning(botId) {
   return processes.has(botId);
+}
+
+export function shutdownAllEngines() {
+  for (const [id, entry] of processes) {
+    const proc = entry.process;
+    proc.kill('SIGTERM');
+    setTimeout(() => { try { proc.kill('SIGKILL'); } catch (_) {} }, 3000);
+  }
+  processes.clear();
 }

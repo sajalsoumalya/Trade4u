@@ -13,7 +13,8 @@ import tradingRoutes from './routes/trading.js';
 import autotradeRoutes from './routes/autotrade.js';
 import db from './services/db.js';
 import { runMigration } from './services/migrate.js';
-import { startAIEngine } from './services/botEngine.js';
+import { startAIEngine, stopAIEngine, shutdownAllEngines } from './services/botEngine.js';
+import { shutdownAnalyses } from './routes/analysis.js';
 
 dotenv.config();
 runMigration();
@@ -148,7 +149,10 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
 });
 
+let fetchingPrices = false;
 async function fetchAndBroadcastPrices() {
+  if (fetchingPrices) return;
+  fetchingPrices = true;
   try {
     const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
     const response = await fetch('https://api.binance.com/api/v3/ticker/24hr');
@@ -169,6 +173,8 @@ async function fetchAndBroadcastPrices() {
     }
   } catch (e) {
     console.error('Price broadcast error:', e);
+  } finally {
+    fetchingPrices = false;
   }
 }
 
@@ -206,6 +212,25 @@ httpServer.listen(PORT, () => {
   } catch (err) {
     console.error('Auto-restart bots error:', err.message);
   }
+});
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received — shutting down gracefully...');
+  shutdownAllEngines();
+  shutdownAnalyses();
+  httpServer.close(() => {
+    console.log('HTTP server closed.');
+    process.exit(0);
+  });
+  setTimeout(() => {
+    console.error('Forced exit after timeout.');
+    process.exit(1);
+  }, 8000);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received — shutting down...');
+  process.exit(0);
 });
 
 export { io };

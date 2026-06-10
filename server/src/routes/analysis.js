@@ -3,6 +3,8 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { optionalAuth } from '../middleware/auth.js';
+
+const runningAnalyses = new Set();
 import db from '../services/db.js';
 import { decrypt } from '../services/cryptoHelper.js';
 
@@ -73,6 +75,7 @@ router.post('/run', optionalAuth, async (req, res) => {
     if (apiKey) args.push('--api-key', apiKey);
 
     const python = spawn(process.env.PYTHON || 'python3', args, { env: { ...process.env } });
+    runningAnalyses.add(python);
 
     let output = '';
     let errorOutput = '';
@@ -122,6 +125,7 @@ router.post('/run', optionalAuth, async (req, res) => {
     }, 5 * 60 * 1000);
 
     python.on('close', async (code) => {
+      runningAnalyses.delete(python);
       clearTimeout(analysisTimeout);
 
       const decision = parsedDecision || (output.match(/\bBUY\b/) ? 'BUY' : output.match(/\bSELL\b/) ? 'SELL' : output.match(/\bHOLD\b/) ? 'HOLD' : null);
@@ -203,5 +207,12 @@ router.get('/', optionalAuth, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+export function shutdownAnalyses() {
+  for (const proc of runningAnalyses) {
+    try { proc.kill('SIGTERM'); } catch (_) {}
+  }
+  runningAnalyses.clear();
+}
 
 export default router;
