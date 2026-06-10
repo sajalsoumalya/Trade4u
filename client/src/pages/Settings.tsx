@@ -65,7 +65,8 @@ export default function Settings() {
   const [loadingModels, setLoadingModels] = useState(false);
   const [providerChanged, setProviderChanged] = useState(false);
   const [showKey, setShowKey] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<{ ok: boolean; error?: string } | null>(null);
+  interface ConnStatus { ok: boolean; error?: string; endpointUrl?: string; llmResponse?: string; keyOk?: boolean }
+  const [connectionStatus, setConnectionStatus] = useState<ConnStatus | null>(null);
   const [testingConn, setTestingConn] = useState(false);
   const initialConfigLoaded = useRef(false);
 
@@ -74,7 +75,7 @@ export default function Settings() {
   const [loadingFallbackModels, setLoadingFallbackModels] = useState(false);
   const [fallbackProviderChanged, setFallbackProviderChanged] = useState(false);
   const [showFallbackKey, setShowFallbackKey] = useState(false);
-  const [fallbackConnectionStatus, setFallbackConnectionStatus] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [fallbackConnectionStatus, setFallbackConnectionStatus] = useState<ConnStatus | null>(null);
   const [testingFallbackConn, setTestingFallbackConn] = useState(false);
 
   const hasConfig = llmProvider && quickModel && deepModel;
@@ -84,7 +85,8 @@ export default function Settings() {
       if (config.provider) setLlmProvider(config.provider);
       if (config.apiKey) {
         setApiKey(config.apiKey);
-        testConnection(config.provider, config.apiKey, false)
+        const model = config.quickModel || config.deepModel || undefined;
+        testConnection(config.provider, config.apiKey, false, model)
           .then(result => setConnectionStatus(result))
           .catch(e => setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' }));
       }
@@ -94,7 +96,8 @@ export default function Settings() {
       if (config.fallbackProvider) setFallbackProvider(config.fallbackProvider);
       if (config.fallbackApiKey) {
         setFallbackApiKey(config.fallbackApiKey);
-        testConnection(config.fallbackProvider, config.fallbackApiKey, true)
+        const model = config.fallbackQuickModel || config.fallbackDeepModel || undefined;
+        testConnection(config.fallbackProvider, config.fallbackApiKey, true, model)
           .then(result => setFallbackConnectionStatus(result))
           .catch(e => setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' }));
       }
@@ -177,7 +180,7 @@ export default function Settings() {
 
     if (isConfigured(llmProvider, apiKey)) {
       try {
-        setConnectionStatus(await testConnection(llmProvider, apiKey, false));
+        setConnectionStatus(await testConnection(llmProvider, apiKey, false, quickModel || deepModel || undefined));
       } catch (e: any) {
         setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
       }
@@ -187,7 +190,7 @@ export default function Settings() {
 
     if (isConfigured(fallbackProvider, fallbackApiKey)) {
       try {
-        setFallbackConnectionStatus(await testConnection(fallbackProvider, fallbackApiKey, true));
+        setFallbackConnectionStatus(await testConnection(fallbackProvider, fallbackApiKey, true, fallbackQuickModel || fallbackDeepModel || undefined));
       } catch (e: any) {
         setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
       }
@@ -235,7 +238,7 @@ export default function Settings() {
     setTestingConn(true);
     setConnectionStatus(null);
     try {
-      const result = await testConnection(llmProvider, apiKey, false);
+      const result = await testConnection(llmProvider, apiKey, false, quickModel || deepModel || undefined);
       setConnectionStatus(result);
     } catch (e: any) {
       setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
@@ -247,7 +250,7 @@ export default function Settings() {
     setTestingFallbackConn(true);
     setFallbackConnectionStatus(null);
     try {
-      const result = await testConnection(fallbackProvider, fallbackApiKey, true);
+      const result = await testConnection(fallbackProvider, fallbackApiKey, true, fallbackQuickModel || fallbackDeepModel || undefined);
       setFallbackConnectionStatus(result);
     } catch (e: any) {
       setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
@@ -361,8 +364,22 @@ export default function Settings() {
                 </div>
 
                 {connectionStatus && (
-                  <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${connectionStatus.ok ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
-                    {connectionStatus.ok ? <><Wifi className="w-4 h-4" /> Connected</> : <><WifiOff className="w-4 h-4" /> {connectionStatus.error || 'Connection failed'}</>}
+                  <div className="mt-3 space-y-2">
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${connectionStatus.ok ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
+                      {connectionStatus.ok ? <><Wifi className="w-4 h-4" /> Connected</> : <><WifiOff className="w-4 h-4" /> {connectionStatus.error || 'Connection failed'}</>}
+                    </div>
+                    {connectionStatus.endpointUrl && (
+                      <div className="px-3 py-2 rounded-lg bg-background/50 border border-border text-xs text-muted">
+                        <span className="text-[10px] uppercase tracking-wider font-medium text-gray-500">Endpoint</span>
+                        <p className="text-white font-mono mt-0.5 break-all">{connectionStatus.endpointUrl}</p>
+                      </div>
+                    )}
+                    {connectionStatus.llmResponse && (
+                      <div className="px-3 py-2 rounded-lg bg-background/50 border border-border text-xs text-muted">
+                        <span className="text-[10px] uppercase tracking-wider font-medium text-gray-500">LLM Response</span>
+                        <p className="text-white font-mono mt-0.5 break-all">{connectionStatus.llmResponse}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -407,8 +424,22 @@ export default function Settings() {
                 </div>
 
                 {fallbackConnectionStatus && (
-                  <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${fallbackConnectionStatus.ok ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
-                    {fallbackConnectionStatus.ok ? <><Wifi className="w-4 h-4" /> Connected</> : <><WifiOff className="w-4 h-4" /> {fallbackConnectionStatus.error || 'Connection failed'}</>}
+                  <div className="mt-3 space-y-2">
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${fallbackConnectionStatus.ok ? 'bg-[#0ECB81]/10 text-[#0ECB81]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
+                      {fallbackConnectionStatus.ok ? <><Wifi className="w-4 h-4" /> Connected</> : <><WifiOff className="w-4 h-4" /> {fallbackConnectionStatus.error || 'Connection failed'}</>}
+                    </div>
+                    {fallbackConnectionStatus.endpointUrl && (
+                      <div className="px-3 py-2 rounded-lg bg-background/50 border border-border text-xs text-muted">
+                        <span className="text-[10px] uppercase tracking-wider font-medium text-gray-500">Endpoint</span>
+                        <p className="text-white font-mono mt-0.5 break-all">{fallbackConnectionStatus.endpointUrl}</p>
+                      </div>
+                    )}
+                    {fallbackConnectionStatus.llmResponse && (
+                      <div className="px-3 py-2 rounded-lg bg-background/50 border border-border text-xs text-muted">
+                        <span className="text-[10px] uppercase tracking-wider font-medium text-gray-500">LLM Response</span>
+                        <p className="text-white font-mono mt-0.5 break-all">{fallbackConnectionStatus.llmResponse}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

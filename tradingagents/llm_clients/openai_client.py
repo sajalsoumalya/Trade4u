@@ -153,7 +153,10 @@ class OpenAIClient(BaseLLMClient):
         if self.provider in _PROVIDER_CONFIG:
             default_base, api_key_env = _PROVIDER_CONFIG[self.provider]
             llm_kwargs["base_url"] = self.base_url or default_base
-            if api_key_env:
+            # Prefer api_key passed as kwarg, then env var, then none
+            if "api_key" in self.kwargs and self.kwargs["api_key"]:
+                llm_kwargs["api_key"] = self.kwargs["api_key"]
+            elif api_key_env:
                 api_key = os.environ.get(api_key_env)
                 if api_key:
                     llm_kwargs["api_key"] = api_key
@@ -162,9 +165,9 @@ class OpenAIClient(BaseLLMClient):
         elif self.base_url:
             llm_kwargs["base_url"] = self.base_url
 
-        # Forward user-provided kwargs
+        # Forward user-provided kwargs (except api_key already handled)
         for key in _PASSTHROUGH_KWARGS:
-            if key in self.kwargs:
+            if key != "api_key" and key in self.kwargs:
                 llm_kwargs[key] = self.kwargs[key]
 
         # Native OpenAI: use Responses API for consistent behavior across

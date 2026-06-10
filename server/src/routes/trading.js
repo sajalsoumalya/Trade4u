@@ -343,9 +343,23 @@ router.post('/config', optionalAuth, async (req, res) => {
 });
 
 // --- Test API connection ---
+const PROVIDER_ENDPOINTS = {
+  opencode:     { base: 'https://opencode.ai/zen/v1',             chatUrl: 'https://opencode.ai/zen/v1/chat/completions' },
+  openai:       { base: 'https://api.openai.com/v1',              chatUrl: 'https://api.openai.com/v1/chat/completions' },
+  anthropic:    { base: 'https://api.anthropic.com',              chatUrl: 'https://api.anthropic.com/v1/messages' },
+  google:       { base: 'https://generativelanguage.googleapis.com', chatUrl: null },
+  deepseek:     { base: 'https://api.deepseek.com',              chatUrl: 'https://api.deepseek.com/chat/completions' },
+  nvidia:       { base: 'https://integrate.api.nvidia.com/v1',   chatUrl: 'https://integrate.api.nvidia.com/v1/chat/completions' },
+  nvidia_nim:   { base: 'https://integrate.api.nvidia.com/v1',   chatUrl: 'https://integrate.api.nvidia.com/v1/chat/completions' },
+  openrouter:   { base: 'https://openrouter.ai/api/v1',          chatUrl: 'https://openrouter.ai/api/v1/chat/completions' },
+  xai:          { base: 'https://api.x.ai/v1',                   chatUrl: 'https://api.x.ai/v1/chat/completions' },
+  qwen:         { base: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', chatUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions' },
+  glm:          { base: 'https://api.z.ai/api/paas/v4/',         chatUrl: 'https://api.z.ai/api/paas/v4/chat/completions' },
+};
+
 router.post('/test-connection', optionalAuth, async (req, res) => {
   try {
-    let { provider, apiKey, isFallback } = req.body;
+    let { provider, apiKey, model, isFallback } = req.body;
     if (!provider) return res.status(400).json({ ok: false, error: 'provider required' });
 
     const uid = req.uid;
@@ -353,91 +367,104 @@ router.post('/test-connection', optionalAuth, async (req, res) => {
       apiKey = resolveStoredKey(uid, provider, isFallback);
     }
 
+    const ep = PROVIDER_ENDPOINTS[provider] || PROVIDER_ENDPOINTS.openai;
     let ok = false;
     let error = null;
+    let endpointUrl = ep.base;
 
-    switch (provider) {
-      case 'opencode':
-        if (apiKey) {
-          const r = await fetch('https://opencode.ai/zen/v1/models', {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
-          ok = r.ok;
-          if (!ok) error = `HTTP ${r.status}`;
-        } else {
-          ok = true;
-        }
-        break;
-      case 'openai':
-        if (apiKey) {
-          const r = await fetch('https://api.openai.com/v1/models', {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
-          ok = r.ok;
-          if (!ok) error = `HTTP ${r.status}`;
-        } else {
-          error = 'API key required';
-        }
-        break;
-      case 'anthropic':
-        if (apiKey) {
-          const r = await fetch('https://api.anthropic.com/v1/models', {
-            headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          });
-          ok = r.ok;
-          if (!ok) error = `HTTP ${r.status}`;
-        } else {
-          error = 'API key required';
-        }
-        break;
-      case 'google':
-        if (apiKey) {
-          const r = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
-          ok = r.ok;
-          if (!ok) error = `HTTP ${r.status}`;
-        } else {
-          error = 'API key required';
-        }
-        break;
-      case 'deepseek':
-        if (apiKey) {
-          const r = await fetch('https://api.deepseek.com/v1/models', {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
-          ok = r.ok;
-          if (!ok) error = `HTTP ${r.status}`;
-        } else {
-          error = 'API key required';
-        }
-        break;
-      case 'nvidia':
-      case 'nvidia_nim':
-        if (apiKey) {
-          const r = await fetch('https://integrate.api.nvidia.com/v1/models', {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
-          ok = r.ok;
-          if (!ok) error = `HTTP ${r.status}`;
-        } else {
-          error = 'API key required';
-        }
-        break;
-      case 'openrouter':
-        if (apiKey) {
-          const r = await fetch('https://openrouter.ai/api/v1/models', {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
-          ok = r.ok;
-          if (!ok) error = `HTTP ${r.status}`;
-        } else {
-          error = 'API key required';
-        }
-        break;
-      default:
-        error = 'Unknown provider';
+    // Step 1: validate API key
+    let keyOk = false;
+    if (!apiKey) {
+      if (provider === 'opencode') { keyOk = true; }
+      else { error = 'API key required'; }
+    } else {
+      let validateUrl;
+      let validateHeaders;
+      switch (provider) {
+        case 'opencode':
+          validateUrl = `${ep.base}/models`;
+          validateHeaders = { Authorization: `Bearer ${apiKey}` };
+          break;
+        case 'anthropic':
+          validateUrl = `${ep.base}/v1/models`;
+          validateHeaders = { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
+          break;
+        case 'google':
+          validateUrl = `${ep.base}/v1/models?key=${apiKey}`;
+          validateHeaders = {};
+          break;
+        default:
+          validateUrl = `${ep.base}/models`;
+          validateHeaders = { Authorization: `Bearer ${apiKey}` };
+      }
+      const vr = await fetch(validateUrl, { headers: validateHeaders });
+      keyOk = vr.ok;
+      if (!vr.ok) error = `Key validation: HTTP ${vr.status}`;
     }
 
-    res.json({ ok, error });
+    // Step 2: attempt actual LLM chat call
+    let llmResponse = null;
+    const testModel = model || 'gpt-4.1-mini';
+
+    if (keyOk && apiKey) {
+      try {
+        if (provider === 'anthropic') {
+          const r = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: testModel,
+              max_tokens: 50,
+              messages: [{ role: 'user', content: 'Reply with just: OK' }],
+            }),
+          });
+          if (r.ok) {
+            const data = await r.json();
+            llmResponse = data.content?.[0]?.text || JSON.stringify(data);
+          } else {
+            const text = await r.text().catch(() => '');
+            llmResponse = `HTTP ${r.status}: ${text.slice(0, 200)}`;
+          }
+        } else if (provider === 'google') {
+          const r = await fetch(`${ep.base}/v1/models/${testModel}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: 'Reply with just: OK' }] }] }),
+          });
+          if (r.ok) {
+            const data = await r.json();
+            llmResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(data);
+          } else {
+            const text = await r.text().catch(() => '');
+            llmResponse = `HTTP ${r.status}: ${text.slice(0, 200)}`;
+          }
+        } else {
+          const r = await fetch(ep.chatUrl, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: testModel,
+              messages: [{ role: 'user', content: 'Reply with just: OK' }],
+              max_tokens: 20,
+              temperature: 0,
+            }),
+          });
+          if (r.ok) {
+            const data = await r.json();
+            llmResponse = data.choices?.[0]?.message?.content || JSON.stringify(data);
+          } else {
+            const text = await r.text().catch(() => '');
+            llmResponse = `HTTP ${r.status}: ${text.slice(0, 200)}`;
+          }
+        }
+      } catch (e) {
+        llmResponse = `Request failed: ${e.message}`;
+      }
+    }
+
+    ok = keyOk && (!llmResponse || !llmResponse.startsWith('HTTP')) && !error;
+
+    res.json({ ok, error: error || (llmResponse?.startsWith('HTTP') ? llmResponse : null), endpointUrl, llmResponse, keyOk });
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }

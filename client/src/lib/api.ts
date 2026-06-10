@@ -185,11 +185,11 @@ export const loadLlmConfig = async () => {
   try { return JSON.parse(text); } catch { return {}; }
 };
 
-export const testConnection = async (provider: string, apiKey?: string, isFallback = false) => {
+export const testConnection = async (provider: string, apiKey?: string, isFallback = false, model?: string) => {
   const res = await fetch(`${API_BASE}/trading/test-connection`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ provider, apiKey, isFallback })
+    body: JSON.stringify({ provider, apiKey, isFallback, model })
   });
   const text = await res.text();
   try { return JSON.parse(text); } catch { return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 100)}` }; }

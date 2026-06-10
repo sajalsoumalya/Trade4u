@@ -55,6 +55,7 @@ class SignalEmitter:
         agent_config["llm_provider"] = provider
         agent_config["deep_think_llm"] = d_model
         agent_config["quick_think_llm"] = q_model
+        agent_config["api_key"] = config.get('api_key', '')
         agent_config["max_debate_rounds"] = 1
         agent_config["data_vendors"] = {
             "core_stock_apis": "yfinance",
@@ -107,7 +108,7 @@ class SignalEmitter:
         """Ask the LLM for take-profit and stop-loss percentages via a quick API call."""
         try:
             provider = self.config.get('provider', 'opencode')
-            api_key = os.environ.get(_PROVIDER_ENV_VARS.get(provider, 'OPENAI_API_KEY'))
+            api_key = self.config.get('api_key') or os.environ.get(_PROVIDER_ENV_VARS.get(provider, 'OPENAI_API_KEY'))
             if not api_key:
                 return None, None
             from tradingagents.llm_clients.openai_client import _PROVIDER_CONFIG
@@ -225,6 +226,7 @@ def main():
         'quick_model': args.quick_model,
         'stop_loss': args.stop_loss,
         'take_profit': args.take_profit,
+        'api_key': args.api_key or '',
     }
 
     emitter = SignalEmitter(config)

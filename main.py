@@ -31,6 +31,8 @@ config["llm_provider"] = args.provider
 config["deep_think_llm"] = args.deep_model
 config["quick_think_llm"] = args.quick_model
 config["max_debate_rounds"] = 1
+if args.api_key:
+    config["api_key"] = args.api_key
 # Leave backend_url unset (None): each provider's client resolves its own
 # default endpoint. Hardcoding OpenCode's URL here routed every provider
 # (OpenAI/Anthropic/Google/DeepSeek) to opencode.ai, so a saved key for any
