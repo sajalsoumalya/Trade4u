@@ -155,6 +155,9 @@ export default function Analysis() {
       if (latest && (latest.status === 'running' || latest.status === 'pending') && latest.id !== currentAnalysisId) {
         setCurrentAnalysisId(latest.id);
         if (latest.symbol) { setSymbol(latest.symbol); setSearchQuery(latest.symbol); }
+        // Start timer from the analysis creation time so it doesn't jump to 0
+        const elapsed = latest.createdAt ? Math.floor((Date.now() - new Date(latest.createdAt).getTime()) / 1000) : 0;
+        startTracking(Math.max(0, elapsed));
       }
     } catch (e) {
       console.error('Failed to load history:', e);
@@ -163,11 +166,10 @@ export default function Analysis() {
     }
   };
 
-  const startTracking = () => {
-    setTimeElapsed(0);
+  const startTracking = (elapsed = 0) => {
+    setTimeElapsed(elapsed);
     setCurrentStage(1);
     setStatus('running');
-    setStageOutputs({});
 
     timerRef.current = setInterval(() => {
       setTimeElapsed(prev => prev + 1);
@@ -263,9 +265,10 @@ export default function Analysis() {
         setStatus('failed');
         setErrorText(res.error || 'This task failed to complete execution.');
       } else {
-        // running/pending — connect socket for live updates
+        // running/pending — connect socket for live updates without resetting timer
         setCurrentAnalysisId(id);
-        startTracking();
+        const elapsed = res.createdAt ? Math.floor((Date.now() - new Date(res.createdAt).getTime()) / 1000) : 0;
+        startTracking(Math.max(0, elapsed));
       }
       if (res.symbol) {
         setSymbol(res.symbol);
