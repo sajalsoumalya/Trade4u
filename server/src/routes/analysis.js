@@ -117,12 +117,12 @@ router.post('/run', optionalAuth, async (req, res) => {
       }
     });
 
-    // Timeout: kill the process if it runs too long (5 minutes)
+    const ANALYSIS_TIMEOUT_MS = 15 * 60 * 1000;
     const analysisTimeout = setTimeout(() => {
       python.kill('SIGTERM');
       console.error(`Analysis ${id} timed out`);
-      errorOutput += '\n[TIMEOUT] Analysis exceeded 5 minutes and was terminated.';
-    }, 15 * 60 * 1000);
+      errorOutput += `\n[TIMEOUT] Analysis exceeded ${ANALYSIS_TIMEOUT_MS / 60000} minutes and was terminated.`;
+    }, ANALYSIS_TIMEOUT_MS);
 
     python.on('close', async (code) => {
       runningAnalyses.delete(python);
