@@ -6,11 +6,13 @@ import { fetchBotLogs } from '../../lib/api';
 interface LogTerminalTabProps {
   bot: Bot;
   logs: any[];
+  onLogCountChange?: (count: number) => void;
 }
 
 export function LogTerminalTab({
   bot,
   logs,
+  onLogCountChange,
 }: LogTerminalTabProps) {
   const [dbLogs, setDbLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -27,12 +29,16 @@ export function LogTerminalTab({
   const seen = new Set<string>();
   const merged: any[] = [];
   for (const log of [...dbLogs, ...logs]) {
-    const key = log.id || (log.symbol + log.timestamp + log.action);
+    const key = (log.symbol||'') + '|' + (log.created_at||log.timestamp||'') + '|' + (log.action||'');
     if (!seen.has(key)) {
       seen.add(key);
       merged.push(log);
     }
   }
+  useEffect(() => {
+    if (onLogCountChange) onLogCountChange(merged.length);
+  }, [merged.length, onLogCountChange]);
+
   const reversedLogs = merged.sort(
     (a, b) => new Date(b.created_at || b.timestamp || 0).getTime() - new Date(a.created_at || a.timestamp || 0).getTime()
   );

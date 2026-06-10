@@ -186,19 +186,36 @@ export function CreateBotForm({
             <label className="block text-xs text-muted mb-1.5 font-medium uppercase tracking-wider">
               {formAllocType === 'percentage' ? `Allocation Percentage: ${formAllocValue}%` : `Fixed Amount: $${formAllocValue}`}
             </label>
-            <input
-              type="range"
-              min={formAllocType === 'percentage' ? 1 : 10}
-              max={formAllocType === 'percentage' ? 100 : walletBalance}
-              value={formAllocValue}
-              onChange={e => setFormAllocValue(parseInt(e.target.value))}
-              className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
-            />
-            <div className="flex justify-between text-xs text-muted mt-2">
-              <span>{formAllocType === 'percentage' ? '1%' : '$10'}</span>
-              <span className="text-primary font-medium">${frozen.toLocaleString()} will be reserved</span>
-              <span>{formAllocType === 'percentage' ? '100%' : `$${walletBalance.toLocaleString()}`}</span>
-            </div>
+            {formAllocType === 'percentage' ? (
+              <>
+                <input
+                  type="range"
+                  min={1}
+                  max={100}
+                  value={formAllocValue}
+                  onChange={e => setFormAllocValue(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+                <div className="flex justify-between text-xs text-muted mt-2">
+                  <span>1%</span>
+                  <span className="text-primary font-medium">${frozen.toLocaleString()} will be reserved</span>
+                  <span>100%</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted font-mono">$</span>
+                <input
+                  type="number"
+                  min={10}
+                  max={walletBalance}
+                  value={formAllocValue}
+                  onChange={e => setFormAllocValue(Math.min(walletBalance, Math.max(10, parseInt(e.target.value) || 10)))}
+                  className="flex-1 bg-background border border-border rounded-lg px-3.5 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-primary"
+                />
+                <span className="text-xs text-primary font-medium">${frozen.toLocaleString()} reserved</span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-6">

@@ -59,7 +59,7 @@ router.post('/run', optionalAuth, async (req, res) => {
 
     db.prepare(`
       INSERT INTO analyses (id, uid, symbol, date, status, decision, result, error, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%S.000Z','now'), strftime('%Y-%m-%dT%H:%M:%S.000Z','now'))
     `).run(id, uid, symbol.toUpperCase(), analysisDate, 'pending', null, null, null);
 
     const io = req.app.get('io');
@@ -122,7 +122,7 @@ router.post('/run', optionalAuth, async (req, res) => {
       python.kill('SIGTERM');
       console.error(`Analysis ${id} timed out`);
       errorOutput += '\n[TIMEOUT] Analysis exceeded 5 minutes and was terminated.';
-    }, 5 * 60 * 1000);
+    }, 15 * 60 * 1000);
 
     python.on('close', async (code) => {
       runningAnalyses.delete(python);
@@ -132,7 +132,7 @@ router.post('/run', optionalAuth, async (req, res) => {
 
       db.prepare(`
         UPDATE analyses
-        SET status = ?, decision = ?, result = ?, error = ?, updated_at = datetime('now')
+        SET status = ?, decision = ?, result = ?, error = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%S.000Z','now')
         WHERE id = ?
       `).run(
         code === 0 ? 'completed' : 'failed',

@@ -26,14 +26,14 @@ db.exec(`
     uid TEXT PRIMARY KEY,
     email TEXT,
     display_name TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now'))
   );
 
   -- Virtual Balances Table
   CREATE TABLE IF NOT EXISTS balances (
     uid TEXT PRIMARY KEY,
     balance REAL NOT NULL DEFAULT 100000.0,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
   );
 
@@ -48,7 +48,7 @@ db.exec(`
     fallback_api_key TEXT,
     fallback_quick_model TEXT DEFAULT 'minimax-m2.5-free',
     fallback_deep_model TEXT DEFAULT 'minimax-m2.5-free',
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
   );
 
@@ -68,7 +68,7 @@ db.exec(`
     bot_provider TEXT,
     bot_quick_model TEXT,
     bot_deep_model TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
   );
 
@@ -84,7 +84,7 @@ db.exec(`
     stop_loss REAL,
     take_profit REAL,
     status TEXT NOT NULL DEFAULT 'open',
-    opened_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    opened_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
     FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE SET NULL
   );
@@ -106,7 +106,7 @@ db.exec(`
     fee REAL NOT NULL DEFAULT 0.0,
     status TEXT NOT NULL, -- 'closed', 'sl', 'tp', 'stopped'
     opened_at TEXT NOT NULL,
-    closed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    closed_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
     FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE SET NULL
   );
@@ -124,7 +124,7 @@ db.exec(`
     pnl REAL DEFAULT 0.0,
     status TEXT NOT NULL, -- 'open', 'closed', 'executed'
     trading_mode TEXT NOT NULL DEFAULT 'paper',
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
     FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE SET NULL
   );
@@ -139,8 +139,8 @@ db.exec(`
     decision TEXT, -- 'BUY', 'SELL', 'HOLD'
     result TEXT, -- Raw text output
     error TEXT, -- Stderr output
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
   );
 
@@ -158,7 +158,7 @@ db.exec(`
     reasoning TEXT, -- JSON-serialized reasoning log
     error TEXT,
     run_cycle INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
     FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
   );
@@ -174,7 +174,7 @@ db.exec(`
     take_profit REAL NOT NULL DEFAULT 5.0,
     analysis_interval INTEGER NOT NULL DEFAULT 15,
     risk_per_trade REAL NOT NULL DEFAULT 1.0,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
   );
 `);

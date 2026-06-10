@@ -7,6 +7,7 @@ Node.js reads stdout and forwards to frontend via WebSocket.
 import os
 import sys
 import json
+import re
 import asyncio
 import argparse
 import requests
@@ -84,10 +85,23 @@ class SignalEmitter:
             elif 'SELL' in d or 'SHORT' in d:
                 signal_action = 'sell'
 
-            return signal_action, reasoning_log
+            # Parse structured fields from the AI's final_trade_decision text
+            parsed = {}
+            if state and isinstance(state, dict) and 'final_trade_decision' in state:
+                text = state['final_trade_decision']
+                m = re.search(r'(?:\*\*)?Entry\s*Price(?:\*\*)?[:\s]*\$?([\d,.]+)', text, re.IGNORECASE)
+                if m: parsed['entry_price'] = float(m.group(1).replace(',', ''))
+                m = re.search(r'(?:\*\*)?Stop\s*Loss(?:\*\*)?[:\s]*\$?([\d,.]+)', text, re.IGNORECASE)
+                if m: parsed['stop_loss'] = float(m.group(1).replace(',', ''))
+                m = re.search(r'(?:\*\*)?Position\s*Sizing(?:\*\*)?[:\s]*(.+?)(?:\n|$)', text, re.IGNORECASE)
+                if m: parsed['position_sizing'] = m.group(1).strip()
+                m = re.search(r'(?:\*\*)?Reasoning(?:\*\*)?[:\s]*(.+?)(?:\n(?:\*\*)?\w|$)', text, re.IGNORECASE | re.DOTALL)
+                if m: parsed['reasoning_text'] = m.group(1).strip()
+
+            return signal_action, reasoning_log, parsed
         except Exception as e:
             err = str(e)
-            return 'hold', [{"role": "error", "content": f"Analysis failed: {err} (provider={self.config.get('provider')}, model={self.config.get('quick_model')})"}]
+            return 'hold', [{"role": "error", "content": f"Analysis failed: {err} (provider={self.config.get('provider')}, model={self.config.get('quick_model')})"}], {}
 
     def get_sltp_suggestion(self, symbol, action, price, reasoning):
         """Ask the LLM for take-profit and stop-loss percentages via a quick API call."""
@@ -122,35 +136,42 @@ class SignalEmitter:
                 sl = float(parts[1].strip()) if len(parts) > 1 else None
                 return (tp, sl) if tp and sl else (None, None)
             else:
-                print(json.dumps({"type": "log", "symbol": symbol, "action": "sl_tp_error", "price": price, "reasoning": [{"role": "error", "content": f"SL/TP API {resp.status_code}: model={self.config.get('quick_model')} provider={provider}"}], "timestamp": datetime.now().isoformat()}), flush=True)
+                print(json.dumps({"type": "sl_tp_error", "symbol": symbol, "action": "sl_tp_error", "price": price, "reasoning": [{"role": "error", "content": f"SL/TP API {resp.status_code}: model={self.config.get('quick_model')} provider={provider}"}], "timestamp": datetime.now().isoformat()}), flush=True)
         except Exception as e:
-            print(json.dumps({"type": "log", "symbol": symbol, "action": "sl_tp_error", "price": price, "reasoning": [{"role": "error", "content": f"SL/TP call failed: {e}"}], "timestamp": datetime.now().isoformat()}), flush=True)
+            print(json.dumps({"type": "sl_tp_error", "symbol": symbol, "action": "sl_tp_error", "price": price, "reasoning": [{"role": "error", "content": f"SL/TP call failed: {e}"}], "timestamp": datetime.now().isoformat()}), flush=True)
         return None, None
 
     async def run_cycle(self, symbols):
         for symbol in symbols:
             price = self.get_price(symbol)
-            action, logs = await self.analyze(symbol)
+            action, logs, parsed = await self.analyze(symbol)
 
-            # Determine SL/TP from AI suggestion or fall back to configured defaults
-            stop_loss = self.stop_loss_pct
+            # Use AI-parsed values when available, otherwise fall back
+            ai_entry = parsed.get('entry_price')
+            ai_sl = parsed.get('stop_loss')
+            ai_pos_sizing = parsed.get('position_sizing')
+            ai_reasoning = parsed.get('reasoning_text')
+
+            entry_price = ai_entry or price
+            stop_loss = ai_sl if ai_sl is not None else self.stop_loss_pct
             take_profit = self.take_profit_pct
             if action in ('buy', 'sell') and price:
-                ai_tp, ai_sl = self.get_sltp_suggestion(symbol, action, price, logs)
+                ai_tp, _ = self.get_sltp_suggestion(symbol, action, price, logs)
                 if ai_tp is not None:
                     take_profit = ai_tp
-                if ai_sl is not None:
-                    stop_loss = ai_sl
 
-            # Emit analysis log
+            # Emit analysis log with full AI-parsed fields
             log_entry = {
                 "type": "log",
                 "symbol": symbol,
                 "action": action,
-                "price": price,
+                "price": entry_price,
+                "aiEntryPrice": ai_entry,
                 "stopLoss": stop_loss,
                 "takeProfit": take_profit,
+                "positionSizing": ai_pos_sizing,
                 "reasoning": logs,
+                "aiReasoningText": ai_reasoning,
                 "timestamp": datetime.now().isoformat(),
             }
             print(json.dumps(log_entry), flush=True)
@@ -160,9 +181,12 @@ class SignalEmitter:
                 "type": "signal",
                 "symbol": symbol,
                 "action": action,
-                "price": price,
+                "price": entry_price,
+                "aiEntryPrice": ai_entry,
                 "stopLoss": stop_loss,
                 "takeProfit": take_profit,
+                "positionSizing": ai_pos_sizing,
+                "aiReasoningText": ai_reasoning,
                 "timestamp": datetime.now().isoformat(),
             }
             print(json.dumps(signal), flush=True)

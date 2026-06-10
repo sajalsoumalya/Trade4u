@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bot, Position } from '../../store/appStore';
 import {
   ArrowLeft,
@@ -18,6 +18,7 @@ import {
 import { PositionsTab } from './PositionsTab';
 import { ClosedPositionsTab } from './ClosedPositionsTab';
 import { LogTerminalTab } from './LogTerminalTab';
+import { fetchBotLogs } from '../../lib/api';
 
 interface BotDetailViewProps {
   bot: Bot;
@@ -58,6 +59,19 @@ export function BotDetailView({
   const [isEditingBot, setIsEditingBot] = useState(false);
   const [editingBotSL, setEditingBotSL] = useState(false);
   const [editingBotTP, setEditingBotTP] = useState(false);
+
+  // Fetch full deduped log count from DB + socket logs
+  const [logCount, setLogCount] = useState(logs.length);
+  useEffect(() => {
+    fetchBotLogs(bot.id, 100).then(fetched => {
+      const seen = new Set<string>();
+      for (const log of [...fetched, ...logs]) {
+        const key = (log.symbol||'') + '|' + (log.created_at||log.timestamp||'') + '|' + (log.action||'');
+        if (!seen.has(key)) seen.add(key);
+      }
+      setLogCount(seen.size);
+    }).catch(() => setLogCount(logs.length));
+  }, [bot.id, logs]);
 
   // Edit bot config states
   const [editName, setEditName] = useState(bot.name);
@@ -447,7 +461,7 @@ export function BotDetailView({
                   : 'text-muted border-transparent hover:text-white'
               }`}
             >
-              <Terminal className="w-4 h-4" /> Decision Logs ({logs.length})
+              <Terminal className="w-4 h-4" /> Decision Logs ({logCount})
             </button>
           </div>
         </div>
@@ -466,7 +480,7 @@ export function BotDetailView({
           <ClosedPositionsTab bot={bot} pairNames={pairNames} />
         )}
         {detailTab === 'logs' && (
-          <LogTerminalTab bot={bot} logs={logs} />
+          <LogTerminalTab bot={bot} logs={logs} onLogCountChange={setLogCount} />
         )}
       </div>
 

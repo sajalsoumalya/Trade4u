@@ -209,7 +209,9 @@ class TradingAgentsGraph:
             end = start + timedelta(days=holding_days + 7)  # buffer for weekends/holidays
             end_str = end.strftime("%Y-%m-%d")
 
-            stock = yf.Ticker(ticker).history(start=trade_date, end=end_str)
+            from tradingagents.dataflows.y_finance import _normalize_crypto_symbol
+            norm_ticker = _normalize_crypto_symbol(ticker.upper())
+            stock = yf.Ticker(norm_ticker).history(start=trade_date, end=end_str)
             spy = yf.Ticker("SPY").history(start=trade_date, end=end_str)
 
             if len(stock) < 2 or len(spy) < 2:

@@ -32,6 +32,48 @@ function loadLlmConfig(uid) {
   return {};
 }
 
+async function executeTrade(bot, signal) {
+  const symbol = signal.symbol;
+  const action = signal.action;
+  const price = signal.price || signal.aiEntryPrice;
+  if (!price || price <= 0) return;
+
+  // Don't double-up: skip if there's already an open position for this bot+symbol
+  const existing = db.prepare('SELECT id FROM positions WHERE bot_id = ? AND symbol = ? AND status = "open"').get(bot.id, symbol);
+  if (existing) return;
+
+  const balanceRow = db.prepare('SELECT balance FROM balances WHERE uid = ?').get(bot.uid);
+  if (!balanceRow) return;
+  const balance = balanceRow.balance;
+
+  let tradeAmount;
+  if (bot.allocationType === 'percentage') {
+    tradeAmount = balance * (bot.allocationValue / 100);
+  } else {
+    tradeAmount = Math.min(bot.allocationValue, balance);
+  }
+  if (tradeAmount <= 0 || balance < tradeAmount) return;
+
+  const quantity = tradeAmount / price;
+  const posId = newId();
+
+  db.transaction(() => {
+    if (action === 'buy') {
+      db.prepare('UPDATE balances SET balance = balance - ? WHERE uid = ?').run(tradeAmount, bot.uid);
+    } else {
+      db.prepare('UPDATE balances SET balance = balance + ? WHERE uid = ?').run(tradeAmount, bot.uid);
+    }
+    db.prepare(`INSERT INTO positions (id, bot_id, uid, symbol, type, quantity, entry_price, stop_loss, take_profit, status, opened_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', strftime('%Y-%m-%dT%H:%M:%S.000Z','now'))`)
+      .run(posId, bot.id, bot.uid, symbol, action, quantity, price, signal.stopLoss || null, signal.takeProfit || null);
+    db.prepare(`INSERT INTO trade_history (id, uid, bot_id, symbol, type, quantity, price, amount, status, trading_mode, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', 'paper', strftime('%Y-%m-%dT%H:%M:%S.000Z','now'))`)
+      .run(posId, bot.uid, bot.id, symbol, action, quantity, price, tradeAmount);
+  })();
+
+  console.log(`[AI:${bot.id}] Auto-executed ${action.toUpperCase()} ${symbol}: ${quantity.toFixed(6)} @ $${price}`);
+}
+
 export function startAIEngine(bot, io) {
   if (processes.has(bot.id)) return false;
 
@@ -103,7 +145,9 @@ export function startAIEngine(bot, io) {
       const trimmed = line.trim();
       if (!trimmed) continue;
       try {
-        const signal = JSON.parse(trimmed);
+          const signal = JSON.parse(trimmed);
+        // Skip SL/TP error events — not a real analysis log
+        if (signal.type === 'sl_tp_error') continue;
         // Forward every JSON line as a signal
         io.emit(`bot:${bot.id}:signal`, signal);
         // Emit log events for analysis logs
@@ -113,6 +157,8 @@ export function startAIEngine(bot, io) {
         // Emit trade events for buy/sell actions
         if (signal.type === 'signal' && (signal.action === 'buy' || signal.action === 'sell') && signal.symbol) {
           io.emit(`bot:${bot.id}:trade`, signal);
+          // Auto-execute the position on the server
+          executeTrade(bot, signal).catch(err => console.error(`[AI:${bot.id}] Trade execution error:`, err.message));
         }
         // Emit SL/TP updates from AI
         if (signal.type === 'update_sltp' && signal.symbol) {
@@ -135,7 +181,7 @@ export function startAIEngine(bot, io) {
           const logId = pendingLogIds.shift();
           try {
             db.prepare(`
-              UPDATE decision_logs SET action = ?, price = ?, stop_loss = ?, take_profit = ?, status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+              UPDATE decision_logs SET action = ?, price = ?, stop_loss = ?, take_profit = ?, status = 'completed', updated_at = strftime('%Y-%m-%dT%H:%M:%S.000Z','now') WHERE id = ?
             `).run(signal.action || 'hold', signal.price || null, signal.stopLoss || null, signal.takeProfit || null, logId);
           } catch (_) {}
         }

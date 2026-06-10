@@ -156,7 +156,8 @@ export default function Analysis() {
         setCurrentAnalysisId(latest.id);
         if (latest.symbol) { setSymbol(latest.symbol); setSearchQuery(latest.symbol); }
         // Start timer from the analysis creation time so it doesn't jump to 0
-        const elapsed = latest.createdAt ? Math.floor((Date.now() - new Date(latest.createdAt).getTime()) / 1000) : 0;
+        const createdAt = latest.createdAt ? latest.createdAt + 'Z' : null;
+        const elapsed = createdAt ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000) : 0;
         startTracking(Math.max(0, elapsed));
       }
     } catch (e) {
@@ -267,7 +268,8 @@ export default function Analysis() {
       } else {
         // running/pending — connect socket for live updates without resetting timer
         setCurrentAnalysisId(id);
-        const elapsed = res.createdAt ? Math.floor((Date.now() - new Date(res.createdAt).getTime()) / 1000) : 0;
+        const createdAt = res.createdAt ? res.createdAt + 'Z' : null;
+        const elapsed = createdAt ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000) : 0;
         startTracking(Math.max(0, elapsed));
       }
       if (res.symbol) {
