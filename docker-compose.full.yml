@@ -17,4 +17,4 @@ services:
       - LLM_PROVIDER=opencode
       - DATA_DIR=/app/data
     volumes:
-      - /mnt/trade4u-storage:/app/data
+      - /mnt/trade4u-storage/trade4u:/app/data
