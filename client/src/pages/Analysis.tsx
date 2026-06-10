@@ -37,48 +37,106 @@ function MarkdownRenderer({ content }: { content: string }) {
   if (!content) return null;
 
   const lines = content.split('\n');
-  const rendered = lines.map((line, idx) => {
+  const rendered: React.ReactNode[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Table: consecutive lines starting with |
+    if (line.trim().startsWith('|')) {
+      const tableRows: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        tableRows.push(lines[i]);
+        i++;
+      }
+      // Skip separator row (| --- | --- |)
+      const dataRows = tableRows.filter((r, idx) => idx !== 1 && !/^\|[\s\-:]+\|$/.test(r.trim()));
+      if (dataRows.length > 0) {
+        const headerCells = dataRows[0].split('|').filter(c => c.trim()).map(c => c.trim());
+        rendered.push(
+          <div key={`t-${i}`} className="overflow-x-auto my-3">
+            <table className="w-full text-[10px] border-collapse">
+              <thead>
+                <tr>
+                  {headerCells.map((h, j) => (
+                    <th key={j} className="text-left text-primary font-semibold px-2 py-1.5 border border-border/40 bg-background/60">{parseInlineFormatting(h)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {dataRows.slice(1).map((row, ri) => (
+                  <tr key={ri}>
+                    {row.split('|').filter(c => c.trim()).map((c, j) => (
+                      <td key={j} className="text-muted px-2 py-1 border border-border/40 whitespace-nowrap">{parseInlineFormatting(c.trim())}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      continue;
+    }
+
     // Headings
     if (line.startsWith('### ')) {
-      return <h4 key={idx} className="text-sm font-bold text-white mt-4 mb-2 border-b border-border/30 pb-1">{line.replace('### ', '')}</h4>;
+      rendered.push(<h4 key={i} className="text-sm font-bold text-white mt-4 mb-2 border-b border-border/30 pb-1">{line.replace('### ', '')}</h4>);
+      i++;
+      continue;
     }
     if (line.startsWith('## ')) {
-      return <h3 key={idx} className="text-base font-bold text-primary mt-5 mb-3 border-b border-border/50 pb-1.5">{line.replace('## ', '')}</h3>;
+      rendered.push(<h3 key={i} className="text-base font-bold text-primary mt-5 mb-3 border-b border-border/50 pb-1.5">{line.replace('## ', '')}</h3>);
+      i++;
+      continue;
     }
     if (line.startsWith('# ')) {
-      return <h2 key={idx} className="text-lg font-extrabold text-white mt-6 mb-4">{line.replace('# ', '')}</h2>;
+      rendered.push(<h2 key={i} className="text-lg font-extrabold text-white mt-6 mb-4">{line.replace('# ', '')}</h2>);
+      i++;
+      continue;
     }
 
     // Bullet points
     if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
       const text = line.replace(/^[\s-*]+/, '');
-      return (
-        <li key={idx} className="text-xs text-muted list-disc ml-5 mb-1.5 leading-relaxed">
+      rendered.push(
+        <li key={i} className="text-xs text-muted list-disc ml-5 mb-1.5 leading-relaxed">
           {parseInlineFormatting(text)}
         </li>
       );
+      i++;
+      continue;
     }
 
     // Numbered lists
     if (/^\d+\.\s/.test(line.trim())) {
       const text = line.replace(/^\s*\d+\.\s/, '');
-      return (
-        <li key={idx} className="text-xs text-muted list-decimal ml-5 mb-1.5 leading-relaxed">
+      rendered.push(
+        <li key={i} className="text-xs text-muted list-decimal ml-5 mb-1.5 leading-relaxed">
           {parseInlineFormatting(text)}
         </li>
       );
+      i++;
+      continue;
     }
 
     // Horizontal Rule
     if (line.trim() === '---') {
-      return <hr key={idx} className="my-4 border-border/40" />;
+      rendered.push(<hr key={i} className="my-4 border-border/40" />);
+      i++;
+      continue;
     }
 
     // Standard paragraph
-    if (line.trim() === '') return <div key={idx} className="h-2" />;
+    if (line.trim() === '') {
+      rendered.push(<div key={i} className="h-2" />);
+      i++;
+      continue;
+    }
 
-    return <p key={idx} className="text-xs text-muted leading-relaxed mb-2">{parseInlineFormatting(line)}</p>;
-  });
+    rendered.push(<p key={i} className="text-xs text-muted leading-relaxed mb-2">{parseInlineFormatting(line)}</p>);
+    i++;
+  }
 
   return <div className="space-y-1">{rendered}</div>;
 }
@@ -525,9 +583,9 @@ export default function Analysis() {
                       </div>
                       {stageOutput && (
                         <div className="mx-3.5 pb-3.5">
-                          <pre className="p-2 bg-black/40 border border-border rounded-lg text-[10px] text-muted font-mono whitespace-pre-wrap max-h-24 overflow-y-auto leading-relaxed">
-                            {stageOutput}
-                          </pre>
+                          <div className="p-2 bg-black/40 border border-border rounded-lg text-[10px] text-muted whitespace-pre-wrap max-h-40 overflow-y-auto leading-relaxed">
+                            <MarkdownRenderer content={stageOutput} />
+                          </div>
                         </div>
                       )}
                     </div>
