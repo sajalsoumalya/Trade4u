@@ -143,10 +143,6 @@ export default function Analysis() {
 
   useEffect(() => {
     loadHistory();
-    return () => {
-      stopTracking();
-      if (socketRef.current) socketRef.current.disconnect();
-    };
   }, []);
 
   const loadHistory = async () => {
@@ -154,6 +150,12 @@ export default function Analysis() {
     try {
       const data = await getAnalysisHistory(15);
       setHistory(data);
+      // If there's a running/pending analysis from a previous session, resume watching it
+      const latest = data[0];
+      if (latest && (latest.status === 'running' || latest.status === 'pending') && latest.id !== currentAnalysisId) {
+        setCurrentAnalysisId(latest.id);
+        if (latest.symbol) { setSymbol(latest.symbol); setSearchQuery(latest.symbol); }
+      }
     } catch (e) {
       console.error('Failed to load history:', e);
     } finally {
@@ -175,6 +177,39 @@ export default function Analysis() {
   const stopTracking = () => {
     if (timerRef.current) clearInterval(timerRef.current);
   };
+
+  // Connect/reconnect Socket.IO whenever currentAnalysisId changes
+  useEffect(() => {
+    if (!currentAnalysisId) return;
+    if (socketRef.current) socketRef.current.disconnect();
+    const socket = io({ path: '/api/socket.io' });
+    socketRef.current = socket;
+
+    socket.on(`analysis:${currentAnalysisId}`, (data: any) => {
+      if (data.status === 'stage') {
+        setCurrentStage(data.stage);
+        setStageOutputs(prev => ({ ...prev, [data.stage]: data.output }));
+      } else if (data.status === 'error_log') {
+        setErrorText(prev => (prev || '') + data.error + '\n');
+      } else if (data.status === 'completed') {
+        stopTracking();
+        setStatus('completed');
+        setDecision(data.decision);
+        setReport(data.result);
+        setCurrentStage(7);
+        addToast('success', `AI Analysis for ${symbol} finalized!`);
+        loadHistory();
+      } else if (data.status === 'failed') {
+        stopTracking();
+        setStatus('failed');
+        setErrorText(data.error || 'Execution encountered an unrecoverable failure.');
+        addToast('error', `AI Analysis for ${symbol} failed.`);
+        loadHistory();
+      }
+    });
+
+    // No cleanup on unmount — socket persists in background
+  }, [currentAnalysisId]);
 
   const handleRun = async () => {
     if (!symbol) return;
@@ -202,34 +237,6 @@ export default function Analysis() {
 
       const id = res.id;
       setCurrentAnalysisId(id);
-
-      // Connect socket IO to stream updates
-      if (socketRef.current) socketRef.current.disconnect();
-      const socket = io({ path: '/api/socket.io' });
-      socketRef.current = socket;
-
-      socket.on(`analysis:${id}`, (data: any) => {
-        if (data.status === 'stage') {
-          setCurrentStage(data.stage);
-          setStageOutputs(prev => ({ ...prev, [data.stage]: data.output }));
-        } else if (data.status === 'error_log') {
-          setErrorText(prev => (prev || '') + data.error + '\n');
-        } else if (data.status === 'completed') {
-          stopTracking();
-          setStatus('completed');
-          setDecision(data.decision);
-          setReport(data.result);
-          setCurrentStage(7);
-          addToast('success', `AI Analysis for ${symbol} finalized!`);
-          loadHistory();
-        } else if (data.status === 'failed') {
-          stopTracking();
-          setStatus('failed');
-          setErrorText(data.error || 'Execution encountered an unrecoverable failure.');
-          addToast('error', `AI Analysis for ${symbol} failed.`);
-          loadHistory();
-        }
-      });
     } catch (err: any) {
       stopTracking();
       setStatus('failed');
@@ -243,19 +250,21 @@ export default function Analysis() {
     setDecision(null);
     setReport(null);
     setErrorText(null);
-    setCurrentAnalysisId(id);
 
     try {
       const res = await getAnalysis(id);
       if (res.status === 'completed') {
+        setCurrentAnalysisId(id);
         setStatus('completed');
         setDecision(res.decision);
         setReport(res.result);
       } else if (res.status === 'failed') {
+        setCurrentAnalysisId(id);
         setStatus('failed');
         setErrorText(res.error || 'This task failed to complete execution.');
       } else {
-        setStatus('running');
+        // running/pending — connect socket for live updates
+        setCurrentAnalysisId(id);
         startTracking();
       }
       if (res.symbol) {
