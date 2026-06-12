@@ -57,6 +57,8 @@ router.post('/run', optionalAuth, async (req, res) => {
     deepModel = targetDeepModel;
     apiKey = targetApiKey;
 
+    console.log(`[Analysis:${id}] Starting — provider=${provider} qModel=${quickModel} dModel=${deepModel} hasKey=${!!apiKey} uid=${uid} cfgFound=${!!config}`);
+
     db.prepare(`
       INSERT INTO analyses (id, uid, symbol, date, status, decision, result, error, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%S.000Z','now'), strftime('%Y-%m-%dT%H:%M:%S.000Z','now'))

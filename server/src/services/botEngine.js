@@ -78,6 +78,7 @@ export function startAIEngine(bot, io) {
   if (processes.has(bot.id)) return false;
 
   const config = loadLlmConfig(bot.uid);
+  console.log(`[AI:${bot.id}] Config lookup — uid=${bot.uid} cfgProvider=${config.provider} cfgApiKey=${!!config.apiKey} fbProvider=${config.fallbackProvider} fbApiKey=${!!config.fallbackApiKey} botProvider=${bot.provider}`);
 
   // Determine LLM provider/models: bot-specific -> primary config -> system fallback config
   const provider = bot.provider || config.provider || config.fallbackProvider || 'opencode';
