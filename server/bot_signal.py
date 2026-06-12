@@ -29,13 +29,33 @@ _PROVIDER_DEFAULT_MODELS = {
     "openrouter": "openai/gpt-4.1-mini",
 }
 
+# Known model prefixes per provider — used to detect provider/model mismatches
+_PROVIDER_MODEL_PREFIXES = {
+    "nvidia_nim": ["nvidia/", "meta/", "mistralai/", "google/"],
+    "openrouter": ["openai/", "anthropic/", "google/", "deepseek/", "mistral/", "qwen/", "meta/"],
+    "openai": ["gpt-", "o", "chatgpt-"],
+    "anthropic": ["claude-"],
+    "google": ["gemini-"],
+    "deepseek": ["deepseek-"],
+}
+
+
+def _resolve_model(provider: str, model: str | None, default: str) -> str:
+    """Return the model if it looks compatible with the provider, else the default."""
+    if not model:
+        return default
+    prefixes = _PROVIDER_MODEL_PREFIXES.get(provider)
+    if prefixes and not any(model.startswith(p) for p in prefixes):
+        return default
+    return model
+
 
 class SignalEmitter:
     def __init__(self, config):
         provider = config.get('provider', 'opencode')
         default_model = _PROVIDER_DEFAULT_MODELS.get(provider, 'minimax-m2.5-free')
-        q_model = config.get('quick_model') or default_model
-        d_model = config.get('deep_model') or default_model
+        q_model = _resolve_model(provider, config.get('quick_model'), default_model)
+        d_model = _resolve_model(provider, config.get('deep_model'), default_model)
         self.config = {**config, 'quick_model': q_model, 'deep_model': d_model}
         agent_config = DEFAULT_CONFIG.copy()
         agent_config["llm_provider"] = provider

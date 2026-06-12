@@ -150,6 +150,12 @@ export default function Trading() {
       socket.on(`bot:${bot.id}:engineError`, (msg: string) => {
         updateBot(bot.id, { engineError: msg });
         addToast('error', `${bot.name}: ${msg}`);
+        // Stop the bot on auth failures so it doesn't stay "Running" while
+        // every cycle is doomed to 401.  The user can fix config and restart.
+        if (msg.includes('401') || msg.includes('Authentication failed') || msg.includes('Unauthorized')) {
+          stopBot(bot.id);
+          stopBotEngine(bot.id);
+        }
       });
     });
 
