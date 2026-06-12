@@ -18,44 +18,24 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
 
-# Default model per provider (used when the configured model doesn't match the provider)
+# Default model per provider (used only when the configured model is empty)
 _PROVIDER_DEFAULT_MODELS = {
     "opencode": "minimax-m2.5-free",
-    "nvidia_nim": "nvidia/llama-3.1-nemotron-70b-instruct",
     "openai": "gpt-4.1-mini",
     "anthropic": "claude-sonnet-4-6",
     "google": "gemini-2.5-flash",
     "deepseek": "deepseek-chat",
     "openrouter": "openai/gpt-4.1-mini",
+    "nvidia_nim": "nvidia/llama-3.1-nemotron-70b-instruct",
 }
-
-# Known model prefixes per provider — used to detect provider/model mismatches
-_PROVIDER_MODEL_PREFIXES = {
-    "nvidia_nim": ["nvidia/", "meta/", "mistralai/", "google/"],
-    "openrouter": ["openai/", "anthropic/", "google/", "deepseek/", "mistral/", "qwen/", "meta/"],
-    "openai": ["gpt-", "o", "chatgpt-"],
-    "anthropic": ["claude-"],
-    "google": ["gemini-"],
-    "deepseek": ["deepseek-"],
-}
-
-
-def _resolve_model(provider: str, model: str | None, default: str) -> str:
-    """Return the model if it looks compatible with the provider, else the default."""
-    if not model:
-        return default
-    prefixes = _PROVIDER_MODEL_PREFIXES.get(provider)
-    if prefixes and not any(model.startswith(p) for p in prefixes):
-        return default
-    return model
 
 
 class SignalEmitter:
     def __init__(self, config):
         provider = config.get('provider', 'opencode')
         default_model = _PROVIDER_DEFAULT_MODELS.get(provider, 'minimax-m2.5-free')
-        q_model = _resolve_model(provider, config.get('quick_model'), default_model)
-        d_model = _resolve_model(provider, config.get('deep_model'), default_model)
+        q_model = config.get('quick_model') or default_model
+        d_model = config.get('deep_model') or default_model
         self.config = {**config, 'quick_model': q_model, 'deep_model': d_model}
         agent_config = DEFAULT_CONFIG.copy()
         agent_config["llm_provider"] = provider

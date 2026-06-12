@@ -110,6 +110,8 @@ export function startAIEngine(bot, io) {
     '--take-profit', String(bot.takeProfit || 5),
   ];
 
+  console.log(`[AI:${bot.id}] Starting — provider=${provider} qModel=${qModel} dModel=${dModel} hasKey=${!!apiKey}`);
+
   if (apiKey) {
     args.push('--api-key', apiKey);
   }
