@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../services/logger.js';
 
 const router = Router();
 
@@ -47,7 +48,7 @@ router.get('/price/:symbol', async (req, res) => {
       askPrice: parseFloat(data.askPrice),
     });
   } catch (error) {
-    console.error('Price fetch error:', error);
+    logger.error('crypto', `Price fetch error — ${error.message}`, error);
     res.status(500).json({ error: 'Failed to fetch price' });
   }
 });
@@ -78,7 +79,7 @@ router.post('/prices', async (req, res) => {
 
     res.json(prices);
   } catch (error) {
-    console.error('Prices fetch error:', error);
+    logger.error('crypto', `Batch price fetch error — ${error.message}`, error);
     res.status(500).json({ error: 'Failed to fetch prices' });
   }
 });
@@ -110,7 +111,7 @@ router.get('/klines/:symbol', async (req, res) => {
 
     res.json(klines);
   } catch (error) {
-    console.error('Klines fetch error:', error);
+    logger.error('crypto', `Klines fetch error — ${error.message}`, error);
     res.status(500).json({ error: 'Failed to fetch klines' });
   }
 });
@@ -136,7 +137,7 @@ router.get('/depth/:symbol', async (req, res) => {
       asks: data.asks.map(([price, qty]) => ({ price: parseFloat(price), qty: parseFloat(qty) })),
     });
   } catch (error) {
-    console.error('Depth fetch error:', error);
+    logger.error('crypto', `Depth fetch error — ${error.message}`, error);
     res.status(500).json({ error: 'Failed to fetch order book' });
   }
 });
@@ -167,7 +168,7 @@ router.get('/trades/:symbol', async (req, res) => {
 
     res.json(trades);
   } catch (error) {
-    console.error('Trades fetch error:', error);
+    logger.error('crypto', `Trades fetch error — ${error.message}`, error);
     res.status(500).json({ error: 'Failed to fetch trades' });
   }
 });
@@ -200,7 +201,7 @@ router.get('/tickers', async (req, res) => {
 
     res.json(filtered);
   } catch (error) {
-    console.error('Tickers fetch error:', error);
+    logger.error('crypto', `Tickers fetch error — ${error.message}`, error);
     res.status(500).json({ error: 'Failed to fetch tickers' });
   }
 });

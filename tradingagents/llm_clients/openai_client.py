@@ -95,13 +95,11 @@ class DeepSeekChatOpenAI(NormalizedChatOpenAI):
         return chat_result
 
     def with_structured_output(self, schema, *, method=None, **kwargs):
-        if self.model_name == "deepseek-reasoner":
-            raise NotImplementedError(
-                "deepseek-reasoner does not support tool_choice; structured "
-                "output is unavailable. Agent factories fall back to "
-                "free-text generation automatically."
-            )
-        return super().with_structured_output(schema, method=method, **kwargs)
+        raise NotImplementedError(
+            "DeepSeek models do not support tool_choice with thinking mode; "
+            "structured output is unavailable. Agent factories fall back to "
+            "free-text generation automatically."
+        )
 
 # Kwargs forwarded from user config to ChatOpenAI
 _PASSTHROUGH_KWARGS = (

@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { logger } from './logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
@@ -193,6 +194,11 @@ try {
   db.exec("ALTER TABLE llm_config ADD COLUMN fallback_deep_model TEXT DEFAULT 'minimax-m2.5-free';");
 } catch (_) {}
 
-console.log('SQLite database schema initialized at:', dbPath);
+// Add stages column to analyses table if it doesn't exist
+try {
+  db.exec("ALTER TABLE analyses ADD COLUMN stages TEXT;");
+} catch (_) {}
+
+logger.info('db', `Schema initialized — path=${dbPath}`);
 
 export default db;

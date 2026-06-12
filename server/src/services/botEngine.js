@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import db from './db.js';
 import { decrypt } from './cryptoHelper.js';
+import { logger } from './logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../../');
@@ -27,7 +28,7 @@ function loadLlmConfig(uid) {
       };
     }
   } catch (err) {
-    console.error('Failed to load LLM config from DB:', err.message);
+    logger.error('botEngine', `loadLlmConfig failed — ${err.message}`);
   }
   return {};
 }
@@ -71,14 +72,14 @@ async function executeTrade(bot, signal) {
       .run(posId, bot.uid, bot.id, symbol, action, quantity, price, tradeAmount);
   })();
 
-  console.log(`[AI:${bot.id}] Auto-executed ${action.toUpperCase()} ${symbol}: ${quantity.toFixed(6)} @ $${price}`);
+  logger.info('botEngine', `[${bot.id}] Auto-executed ${action.toUpperCase()} ${symbol} qty=${quantity.toFixed(6)} price=$${price}`);
 }
 
 export function startAIEngine(bot, io) {
   if (processes.has(bot.id)) return false;
 
   const config = loadLlmConfig(bot.uid);
-  console.log(`[AI:${bot.id}] Config lookup — uid=${bot.uid} cfgProvider=${config.provider} cfgApiKey=${!!config.apiKey} fbProvider=${config.fallbackProvider} fbApiKey=${!!config.fallbackApiKey} botProvider=${bot.provider}`);
+  logger.info('botEngine', `[${bot.id}] Config lookup — uid=${bot.uid} cfgProvider=${config.provider} cfgApiKey=${!!config.apiKey} fbProvider=${config.fallbackProvider} fbApiKey=${!!config.fallbackApiKey} botProvider=${bot.provider}`);
 
   // Determine LLM provider/models: bot-specific -> primary config -> system fallback config
   const provider = bot.provider || config.provider || config.fallbackProvider || 'opencode';
@@ -111,7 +112,7 @@ export function startAIEngine(bot, io) {
     '--take-profit', String(bot.takeProfit || 5),
   ];
 
-  console.log(`[AI:${bot.id}] Starting — provider=${provider} qModel=${qModel} dModel=${dModel} hasKey=${!!apiKey}`);
+  logger.info('botEngine', `[${bot.id}] Starting — provider=${provider} qModel=${qModel} dModel=${dModel} hasKey=${!!apiKey}`);
 
   if (apiKey) {
     args.push('--api-key', apiKey);
@@ -168,7 +169,7 @@ export function startAIEngine(bot, io) {
         if (signal.type === 'signal' && (signal.action === 'buy' || signal.action === 'sell') && signal.symbol) {
           io.emit(`bot:${bot.id}:trade`, signal);
           // Auto-execute the position on the server
-          executeTrade(bot, signal).catch(err => console.error(`[AI:${bot.id}] Trade execution error:`, err.message));
+          executeTrade(bot, signal).catch(err => logger.error('botEngine', `[${bot.id}] Trade execution error — ${err.message}`, err));
         }
         // Emit SL/TP updates from AI
         if (signal.type === 'update_sltp' && signal.symbol) {
@@ -204,7 +205,7 @@ export function startAIEngine(bot, io) {
           pendingLogIds = [];
         }
       } catch {
-        console.log(`[AI:${bot.id}] ${trimmed}`);
+        logger.info('botEngine', `[${bot.id}] stdout — ${trimmed}`);
       }
     }
   });
@@ -212,7 +213,7 @@ export function startAIEngine(bot, io) {
   proc.stderr.on('data', (data) => {
     const msg = data.toString().trim();
     if (!msg) return;
-    console.error(`[AI:${bot.id} Error] ${msg}`);
+    logger.error('botEngine', `[${bot.id}] stderr — ${msg}`);
     // Forward engine errors to the client so they appear in the UI
     if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('401') || msg.toLowerCase().includes('fail') || msg.toLowerCase().includes('traceback')) {
       io.emit(`bot:${bot.id}:engineError`, msg.slice(0, 300));
@@ -228,7 +229,7 @@ export function startAIEngine(bot, io) {
   });
 
   proc.on('close', (code) => {
-    console.log(`[AI:${bot.id}] Process exited with code ${code}`);
+    logger.info('botEngine', `[${bot.id}] Process exited — code=${code}`);
     // Only clear state if the map still points to THIS process — a restart may
     // have already replaced it with a new process under the same bot id.
     if (processes.get(bot.id)?.process === proc) {
@@ -238,7 +239,7 @@ export function startAIEngine(bot, io) {
   });
 
   proc.on('error', (err) => {
-    console.error(`[AI:${bot.id}] Failed to start: ${err.message}`);
+    logger.error('botEngine', `[${bot.id}] Failed to start — ${err.message}`, err);
     if (processes.get(bot.id)?.process === proc) {
       processes.delete(bot.id);
       io.emit(`bot:${bot.id}:status`, { running: false, error: err.message });

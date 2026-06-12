@@ -7,6 +7,7 @@ import { optionalAuth } from '../middleware/auth.js';
 const runningAnalyses = new Set();
 import db from '../services/db.js';
 import { decrypt } from '../services/cryptoHelper.js';
+import { logger } from '../services/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../../');
@@ -57,7 +58,7 @@ router.post('/run', optionalAuth, async (req, res) => {
     deepModel = targetDeepModel;
     apiKey = targetApiKey;
 
-    console.log(`[Analysis:${id}] Starting — provider=${provider} qModel=${quickModel} dModel=${deepModel} hasKey=${!!apiKey} uid=${uid} cfgFound=${!!config}`);
+    logger.info('analysis', `[${id}] Starting — provider=${provider} qModel=${quickModel} dModel=${deepModel} hasKey=${!!apiKey} uid=${uid} cfgFound=${!!config} symbol=${symbol}`);
 
     db.prepare(`
       INSERT INTO analyses (id, uid, symbol, date, status, decision, result, error, created_at, updated_at)
@@ -82,16 +83,18 @@ router.post('/run', optionalAuth, async (req, res) => {
     let output = '';
     let errorOutput = '';
     let parsedDecision = null;
+    const stagesOutput = {};
 
     // Parse JSON progress lines from stdout in real-time
     python.stdout.on('data', (data) => {
       const text = data.toString();
-      output += text;
       const lines = text.split('\n').filter(l => l.trim());
       for (const line of lines) {
         try {
           const msg = JSON.parse(line);
           if (msg.type === 'stage') {
+            stagesOutput[msg.stage] = msg.output;
+            output += msg.output + '\n\n';
             io.emit(`analysis:${id}`, { status: 'stage', stage: msg.stage, name: msg.name, output: msg.output });
           } else if (msg.type === 'complete') {
             parsedDecision = msg.decision;
@@ -99,7 +102,7 @@ router.post('/run', optionalAuth, async (req, res) => {
             errorOutput += msg.message + '\n';
             io.emit(`analysis:${id}`, { status: 'error_log', error: msg.message });
           }
-        } catch (_) { /* not JSON — regular stdout */ }
+        } catch (_) { /* non-JSON stdout — add raw */ output += line + '\n'; }
       }
     });
 
@@ -122,7 +125,7 @@ router.post('/run', optionalAuth, async (req, res) => {
     const ANALYSIS_TIMEOUT_MS = 15 * 60 * 1000;
     const analysisTimeout = setTimeout(() => {
       python.kill('SIGTERM');
-      console.error(`Analysis ${id} timed out`);
+      logger.warn('analysis', `[${id}] Timed out after ${ANALYSIS_TIMEOUT_MS}ms`);
       errorOutput += `\n[TIMEOUT] Analysis exceeded ${ANALYSIS_TIMEOUT_MS / 60000} minutes and was terminated.`;
     }, ANALYSIS_TIMEOUT_MS);
 
@@ -132,14 +135,17 @@ router.post('/run', optionalAuth, async (req, res) => {
 
       const decision = parsedDecision || (output.match(/\bBUY\b/) ? 'BUY' : output.match(/\bSELL\b/) ? 'SELL' : output.match(/\bHOLD\b/) ? 'HOLD' : null);
 
+      const stagesJson = Object.keys(stagesOutput).length ? JSON.stringify(stagesOutput) : null;
+
       db.prepare(`
         UPDATE analyses
-        SET status = ?, decision = ?, result = ?, error = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%S.000Z','now')
+        SET status = ?, decision = ?, result = ?, stages = ?, error = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%S.000Z','now')
         WHERE id = ?
       `).run(
         code === 0 ? 'completed' : 'failed',
         decision,
         output.substring(0, 10000),
+        stagesJson,
         errorOutput.substring(0, 5000),
         id
       );
@@ -149,13 +155,14 @@ router.post('/run', optionalAuth, async (req, res) => {
         status: code === 0 ? 'completed' : 'failed',
         decision,
         result: output.substring(0, 10000),
+        stages: stagesOutput,
         error: errorMsg
       });
     });
 
     res.json({ id, symbol: symbol.toUpperCase(), date: analysisDate, status: 'started' });
   } catch (error) {
-    console.error('Analysis error:', error);
+    logger.error('analysis', `Run error — ${error.message}`, error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -180,6 +187,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       status: analysis.status,
       decision: analysis.decision,
       result: analysis.result,
+      stages: analysis.stages ? JSON.parse(analysis.stages) : null,
       error: analysis.error,
       createdAt: analysis.created_at,
       updatedAt: analysis.updated_at
@@ -201,6 +209,7 @@ router.get('/', optionalAuth, async (req, res) => {
       status: a.status,
       decision: a.decision,
       result: a.result,
+      stages: a.stages ? JSON.parse(a.stages) : null,
       error: a.error,
       createdAt: a.created_at,
       updatedAt: a.updated_at

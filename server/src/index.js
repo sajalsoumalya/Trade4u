@@ -15,6 +15,7 @@ import db from './services/db.js';
 import { runMigration } from './services/migrate.js';
 import { startAIEngine, stopAIEngine, shutdownAllEngines } from './services/botEngine.js';
 import { shutdownAnalyses } from './routes/analysis.js';
+import { logger, requestLogger } from './services/logger.js';
 
 dotenv.config();
 runMigration();
@@ -34,7 +35,7 @@ const corsOptions = {
       // Deliberate (commit 9b8b913): log unknown origins instead of rejecting,
       // so deploys behind proxies / alternate domains aren't hard-blocked.
       // Auth is via Bearer token (not cookies), so reflecting origin is low-risk.
-      console.warn(`CORS: blocked origin ${origin}`);
+      logger.warn('cors', `Blocked origin ${origin}`);
       callback(null, origin);
     }
   },
@@ -61,12 +62,7 @@ const firebaseConfig = {
   appId: process.env.FIREBASE_APP_ID || '1:000000000000:web:0000000000000000000000'
 };
 
-console.log('Firebase config:', {
-  apiKey: firebaseConfig.apiKey ? `SET (${firebaseConfig.apiKey.length} chars)` : 'MISSING',
-  authDomain: firebaseConfig.authDomain,
-  projectId: firebaseConfig.projectId,
-  appId: firebaseConfig.appId
-});
+logger.info('firebase', `Config — apiKey=${firebaseConfig.apiKey ? 'SET' : 'MISSING'} authDomain=${firebaseConfig.authDomain} projectId=${firebaseConfig.projectId}`);
 
 const staticPath = path.join(__dirname, '../../public');
 
@@ -82,11 +78,7 @@ app.use('/api', apiLimiter);
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Request logger
-app.use((req, _res, next) => {
-  console.log(`${req.method} ${req.path}`);
-  next();
-});
+app.use(requestLogger);
 
 // API routes
 app.use('/api/analysis', analysisRoutes);
@@ -138,15 +130,21 @@ app.get('*', (req, res) => {
 
 // Error handler — prevents 504 hangs on uncaught errors
 app.use((err, _req, res, _next) => {
-  console.error('Unhandled error:', err);
+  logger.error('express', `Unhandled error — ${err.message}`, err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-  socket.on('subscribe', (symbol) => socket.join(`crypto:${symbol}`));
-  socket.on('unsubscribe', (symbol) => socket.leave(`crypto:${symbol}`));
-  socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
+  logger.info('socket', `Client connected — id=${socket.id}`);
+  socket.on('subscribe', (symbol) => {
+    socket.join(`crypto:${symbol}`);
+    logger.info('socket', `Client ${socket.id} subscribed to ${symbol}`);
+  });
+  socket.on('unsubscribe', (symbol) => {
+    socket.leave(`crypto:${symbol}`);
+    logger.info('socket', `Client ${socket.id} unsubscribed from ${symbol}`);
+  });
+  socket.on('disconnect', () => logger.info('socket', `Client disconnected — id=${socket.id}`));
 });
 
 let fetchingPrices = false;
@@ -172,7 +170,7 @@ async function fetchAndBroadcastPrices() {
       }
     }
   } catch (e) {
-    console.error('Price broadcast error:', e);
+    logger.error('price-broadcast', `Failed — ${e.message}`, e);
   } finally {
     fetchingPrices = false;
   }
@@ -189,11 +187,12 @@ app.set('io', io);
 
 const PORT = process.env.PORT || 8501;
 httpServer.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  logger.info('server', `Listening on port ${PORT}`);
 
   // Auto-restart previously running bots from DB
   try {
     const runningBots = db.prepare("SELECT * FROM bots WHERE status = 'running'").all();
+    logger.info('server', `Auto-restarting ${runningBots.length} bot(s) from DB`);
     for (const bot of runningBots) {
       const symbols = JSON.parse(bot.symbols || '[]');
       startAIEngine({
@@ -208,9 +207,8 @@ httpServer.listen(PORT, () => {
         deepModel: bot.bot_deep_model,
       }, io);
     }
-    if (runningBots.length > 0) console.log(`Auto-restarted ${runningBots.length} bot(s) from DB`);
   } catch (err) {
-    console.error('Auto-restart bots error:', err.message);
+    logger.error('server', `Auto-restart bots failed — ${err.message}`, err);
   }
 
   // Mark in-flight analyses as failed (they died when the container stopped)
@@ -219,9 +217,9 @@ httpServer.listen(PORT, () => {
       UPDATE analyses SET status = 'failed', error = 'Server redeployed — analysis was interrupted.', updated_at = datetime('now')
       WHERE status IN ('running', 'pending')
     `).run();
-    if (affected.changes > 0) console.log(`Marked ${affected.changes} interrupted analysis(es) as failed`);
+    if (affected.changes > 0) logger.info('server', `Marked ${affected.changes} interrupted analysis(es) as failed`);
   } catch (err) {
-    console.error('Cleanup analyses error:', err.message);
+    logger.error('server', `Cleanup analyses failed — ${err.message}`, err);
   }
 
   // Mark in-progress decision logs as interrupted
@@ -230,28 +228,28 @@ httpServer.listen(PORT, () => {
       UPDATE decision_logs SET status = 'error', error = 'Bot engine restarted — cycle was interrupted.'
       WHERE status = 'running'
     `).run();
-    if (affected.changes > 0) console.log(`Marked ${affected.changes} interrupted decision log(s) as errored`);
+    if (affected.changes > 0) logger.info('server', `Marked ${affected.changes} interrupted decision log(s) as errored`);
   } catch (err) {
-    console.error('Cleanup decision logs error:', err.message);
+    logger.error('server', `Cleanup decision logs failed — ${err.message}`, err);
   }
 });
 
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received — shutting down gracefully...');
+  logger.info('server', 'SIGTERM received — shutting down gracefully...');
   shutdownAllEngines();
   shutdownAnalyses();
   httpServer.close(() => {
-    console.log('HTTP server closed.');
+    logger.info('server', 'HTTP server closed.');
     process.exit(0);
   });
   setTimeout(() => {
-    console.error('Forced exit after timeout.');
+    logger.error('server', 'Forced exit after timeout.');
     process.exit(1);
   }, 8000);
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT received — shutting down...');
+  logger.info('server', 'SIGINT received — shutting down...');
   process.exit(0);
 });
 

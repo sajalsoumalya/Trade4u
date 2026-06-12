@@ -1,5 +1,6 @@
 import firebaseAdmin from '../services/firebase.js';
 import { getAuth } from 'firebase-admin/auth';
+import { logger } from '../services/logger.js';
 
 export const requireAuth = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -28,7 +29,7 @@ export const requireAuth = async (req, res, next) => {
     req.uid = decodedToken.uid;
     next();
   } catch (error) {
-    console.error('Token verification failed:', error.message);
+    logger.warn('auth', `Token verification failed — ${error.message}`);
     res.status(401).json({ error: 'Unauthorized: Invalid token' });
   }
 };

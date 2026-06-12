@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import db from './db.js';
+import { logger } from './logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
@@ -9,11 +10,11 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
 export function runMigration() {
   const usersExist = db.prepare('SELECT count(*) as count FROM users').get().count > 0;
   if (usersExist) {
-    console.log('Database already initialized. Skipping migration.');
+    logger.info('migrate', 'Database already initialized. Skipping migration.');
     return;
   }
 
-  console.log('Database is empty. Starting JSON data migration to SQLite...');
+  logger.info('migrate', 'Database is empty. Starting JSON data migration to SQLite...');
 
   db.transaction(() => {
     // 1. Migrate Balances
@@ -28,7 +29,7 @@ export function runMigration() {
             .run(entry.uid, entry.balance);
         }
       } catch (err) {
-        console.error('Failed to migrate balances:', err.message);
+        logger.error('migrate', `Balances migration failed — ${err.message}`);
       }
     }
 
@@ -44,7 +45,7 @@ export function runMigration() {
           VALUES (?, ?, ?, ?, ?)
         `).run(defaultUid, config.provider, config.apiKey, config.quickModel, config.deepModel);
       } catch (err) {
-        console.error('Failed to migrate config:', err.message);
+        logger.error('migrate', `Config migration failed — ${err.message}`);
       }
     }
 
@@ -74,7 +75,7 @@ export function runMigration() {
           `).run(t.id, t.uid, t.symbol, t.type, t.quantity, t.price, t.quantity * (t.price || 0), t.pnl || 0.0, t.status, t.openedAt || t.createdAt);
         }
       } catch (err) {
-        console.error('Failed to migrate trades:', err.message);
+        logger.error('migrate', `Trades migration failed — ${err.message}`);
       }
     }
 
@@ -98,7 +99,7 @@ export function runMigration() {
           }
         }
       } catch (err) {
-        console.error('Failed to migrate positions:', err.message);
+        logger.error('migrate', `Positions migration failed — ${err.message}`);
       }
     }
 
@@ -115,10 +116,10 @@ export function runMigration() {
           `).run(a.id, a.uid, a.symbol, a.date, a.status, a.decision, a.result, a.error, a.createdAt, a.updatedAt);
         }
       } catch (err) {
-        console.error('Failed to migrate analyses:', err.message);
+        logger.error('migrate', `Analyses migration failed — ${err.message}`);
       }
     }
   })();
 
-  console.log('JSON files migration transaction complete.');
+  logger.info('migrate', 'JSON files migration transaction complete.');
 }

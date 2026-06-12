@@ -19,7 +19,8 @@ import {
   Loader2,
   Sparkles,
   ArrowRight,
-  Clock
+  Clock,
+  ChevronDown
 } from 'lucide-react';
 
 const DEFAULT_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
@@ -195,6 +196,16 @@ export default function Analysis() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [stageOutputs, setStageOutputs] = useState<Record<number, string>>({});
+  const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
+
+  const toggleStage = (stageId: number) => {
+    setExpandedStages(prev => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
+      return next;
+    });
+  };
 
   const socketRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
@@ -215,7 +226,7 @@ export default function Analysis() {
         setCurrentAnalysisId(latest.id);
         if (latest.symbol) { setSymbol(latest.symbol); setSearchQuery(latest.symbol); }
         // Start timer from the analysis creation time so it doesn't jump to 0
-        const createdAt = latest.createdAt ? latest.createdAt + 'Z' : null;
+        const createdAt = latest.createdAt ? latest.createdAt.endsWith('Z') ? latest.createdAt : latest.createdAt + 'Z' : null;
         const elapsed = createdAt ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000) : 0;
         startTracking(Math.max(0, elapsed));
       }
@@ -258,6 +269,7 @@ export default function Analysis() {
         setStatus('completed');
         setDecision(data.decision);
         setReport(data.result);
+        if (data.stages) setStageOutputs(data.stages);
         setCurrentStage(7);
         addToast('success', `AI Analysis for ${symbol} finalized!`);
         loadHistory();
@@ -279,6 +291,7 @@ export default function Analysis() {
     setDecision(null);
     setReport(null);
     setErrorText(null);
+    setStageOutputs({});
 
     try {
       startTracking();
@@ -312,6 +325,7 @@ export default function Analysis() {
     setDecision(null);
     setReport(null);
     setErrorText(null);
+    setStageOutputs({});
 
     try {
       const res = await getAnalysis(id);
@@ -320,6 +334,7 @@ export default function Analysis() {
         setStatus('completed');
         setDecision(res.decision);
         setReport(res.result);
+        if (res.stages) setStageOutputs(res.stages);
       } else if (res.status === 'failed') {
         setCurrentAnalysisId(id);
         setStatus('failed');
@@ -327,7 +342,7 @@ export default function Analysis() {
       } else {
         // running/pending — connect socket for live updates without resetting timer
         setCurrentAnalysisId(id);
-        const createdAt = res.createdAt ? res.createdAt + 'Z' : null;
+        const createdAt = res.createdAt ? res.createdAt.endsWith('Z') ? res.createdAt : res.createdAt + 'Z' : null;
         const elapsed = createdAt ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000) : 0;
         startTracking(Math.max(0, elapsed));
       }
@@ -613,19 +628,78 @@ export default function Analysis() {
                         : 'bg-white/5 text-muted border border-border'
                     }`}
                   >
-                    Recommendation: {decision}
+                    Recommendation: {decision || 'N/A'}
                   </span>
                 </div>
               </div>
 
-              {/* Output Content */}
-              <div className="max-h-[520px] overflow-y-auto pr-1">
-                {report ? (
-                  <MarkdownRenderer content={report} />
-                ) : (
-                  <p className="text-xs text-muted italic">Draft proposal is currently empty.</p>
-                )}
-              </div>
+              {/* Stage-by-stage collapsible output */}
+              {Object.keys(stageOutputs).length > 0 && (
+                <div className="space-y-2">
+                  {STAGES.map(stage => {
+                    const content = stageOutputs[stage.id];
+                    if (!content) return null;
+                    const isExpanded = expandedStages.has(stage.id);
+                    const needsTrunc = !isExpanded && content.length > 280;
+                    const preview = needsTrunc ? content.slice(0, 280) + '...' : content;
+                    return (
+                      <div key={stage.id} className="rounded-xl border bg-white/5 border-border overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => toggleStage(stage.id)}
+                          className="w-full flex items-center gap-3 p-3 hover:bg-white/[0.02] transition-colors text-left"
+                        >
+                          <div className="flex-shrink-0">
+                            <div className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">✓</div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-xs font-bold text-white">{stage.name}</h4>
+                            {!isExpanded && (
+                              <p className="text-[10px] text-muted/60 mt-0.5 truncate max-w-md">{preview.replace(/[#*`\n]/g, ' ').replace(/\s+/g, ' ').trim()}</p>
+                            )}
+                          </div>
+                          <ChevronDown className={`w-3.5 h-3.5 text-muted transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                        {isExpanded && (
+                          <div className="px-3 pb-3">
+                            <div className="p-2 bg-black/40 border border-border rounded-lg text-[10px] text-muted max-h-96 overflow-y-auto leading-relaxed">
+                              <MarkdownRenderer content={content} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Full Comprehensive Report at the bottom */}
+              {Object.keys(stageOutputs).length > 0 && (
+                <details className="group border-t border-border pt-3">
+                  <summary className="text-xs font-bold text-primary cursor-pointer hover:text-primary-light transition-colors flex items-center gap-2 select-none">
+                    <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" />
+                    Full Comprehensive Report
+                  </summary>
+                  <div className="mt-3 max-h-[520px] overflow-y-auto pr-1">
+                    {report ? (
+                      <MarkdownRenderer content={report} />
+                    ) : (
+                      <p className="text-xs text-muted italic">Draft proposal is currently empty.</p>
+                    )}
+                  </div>
+                </details>
+              )}
+
+              {/* Fall back to full report text when no stages data (old analyses) */}
+              {Object.keys(stageOutputs).length === 0 && (
+                <div className="max-h-[520px] overflow-y-auto pr-1">
+                  {report ? (
+                    <MarkdownRenderer content={report} />
+                  ) : (
+                    <p className="text-xs text-muted italic">Draft proposal is currently empty.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

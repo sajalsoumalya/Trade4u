@@ -1,4 +1,5 @@
 import { initializeApp, cert } from 'firebase-admin/app';
+import { logger } from './logger.js';
 
 let firebaseAdmin = null;
 
@@ -76,7 +77,7 @@ function resolvePrivateKey() {
     try {
       return normalizePrivateKey(Buffer.from(b64.trim(), 'base64').toString('utf8'));
     } catch (err) {
-      console.error('Failed to decode FIREBASE_PRIVATE_KEY_BASE64, falling back to FIREBASE_PRIVATE_KEY:', err.message);
+      logger.error('firebase', `Failed to decode FIREBASE_PRIVATE_KEY_BASE64, falling back to FIREBASE_PRIVATE_KEY: ${err.message}`);
     }
   }
   return normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
@@ -96,9 +97,9 @@ if (
         privateKey,
       })
     });
-    console.log('Firebase Admin SDK initialized successfully.');
+    logger.info('firebase', 'Admin SDK initialized successfully.');
   } catch (err) {
-    console.error('Failed to initialize Firebase Admin SDK certified credential:', err.message);
+    logger.error('firebase', `Failed to initialize Admin SDK credential: ${err.message}`);
     // Safe diagnostic (NO key material). base64BodyDecodes=false means the key
     // bytes are mangled (chars substituted/dropped, not just reformatted);
     // base64BodyDecodes=true means the bytes are intact and the error is a
@@ -108,17 +109,10 @@ if (
     if (bodyMatch) {
       try { base64BodyDecodes = Buffer.from(bodyMatch[1].replace(/\n/g, ''), 'base64').length > 100; } catch (_) {}
     }
-    console.error(
-      '[firebase] key diagnostic —',
-      `source=${process.env.FIREBASE_PRIVATE_KEY_BASE64 ? 'BASE64' : 'PLAIN'}`,
-      `startsWithHeader=${(privateKey || '').startsWith(HEADER)}`,
-      `endsWithFooter=${(privateKey || '').trimEnd().endsWith(FOOTER)}`,
-      `lines=${(privateKey || '').split('\n').length}`,
-      `base64BodyDecodes=${base64BodyDecodes}`
-    );
+    logger.error('firebase', `Key diagnostic — source=${process.env.FIREBASE_PRIVATE_KEY_BASE64 ? 'BASE64' : 'PLAIN'} startsWithHeader=${(privateKey || '').startsWith(HEADER)} endsWithFooter=${(privateKey || '').trimEnd().endsWith(FOOTER)} lines=${(privateKey || '').split('\n').length} base64BodyDecodes=${base64BodyDecodes}`);
   }
 } else {
-  console.warn('Firebase Admin credentials not found in environment. Running in development/demo mode with mock verification.');
+  logger.warn('firebase', 'Credentials not found in environment. Running in development/demo mode.');
 }
 
 export default firebaseAdmin;

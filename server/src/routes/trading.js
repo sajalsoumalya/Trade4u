@@ -6,6 +6,7 @@ import { optionalAuth } from '../middleware/auth.js';
 import { startAIEngine, stopAIEngine, isEngineRunning } from '../services/botEngine.js';
 import db from '../services/db.js';
 import { encrypt, decrypt } from '../services/cryptoHelper.js';
+import { logger } from '../services/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
@@ -92,7 +93,7 @@ router.post('/order', optionalAuth, async (req, res) => {
 
     res.json({ id, symbol: symbol.toUpperCase(), type: type.toLowerCase(), quantity, price: tradePrice, status: 'open', tradingMode });
   } catch (error) {
-    console.error('Order error:', error);
+    logger.error('trading', `Order error — ${error.message}`, error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -695,7 +696,7 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
 
     res.json({ models, source });
   } catch (error) {
-    console.error('Model fetch error:', error);
+    logger.error('trading', `Model fetch error — ${error.message}`, error);
     res.status(500).json({ error: error.message });
   }
 });
