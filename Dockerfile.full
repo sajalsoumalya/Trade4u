@@ -54,6 +54,7 @@ COPY --from=node-build /server/package.json ./server/package.json
 
 # Copy server source
 COPY server/src ./server/src
+COPY server/bot_signal.py ./server/
 
 WORKDIR /app
 
