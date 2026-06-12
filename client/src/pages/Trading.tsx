@@ -79,20 +79,6 @@ export default function Trading() {
     return () => clearInterval(interval);
   }, [activePairs.join(',')]);
 
-  // Re-spawn AI engine for existing running bots after page refresh exactly once on mount
-  useEffect(() => {
-    bots.forEach(bot => {
-      if (bot.status === 'running') {
-        const provider = bot.botProvider || llmProvider || 'opencode';
-        const qModel = bot.botQuickModel || quickModel || 'minimax-m2.5-free';
-        const dModel = bot.botDeepModel || deepModel || 'minimax-m2.5-free';
-        stopBotEngine(bot.id).then(() => {
-          startBotEngine(bot.id, bot.symbols, bot.stopLoss, bot.takeProfit, bot.interval, provider, qModel, dModel, bot.name);
-        });
-      }
-    });
-  }, []);
-
   // Socket.IO for AI engine signals
   useEffect(() => {
     const socket = io({ path: '/api/socket.io' });
