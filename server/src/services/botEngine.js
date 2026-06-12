@@ -84,12 +84,19 @@ export function startAIEngine(bot, io) {
   const qModel = bot.quickModel || config.quickModel || config.fallbackQuickModel || 'minimax-m2.5-free';
   const dModel = bot.deepModel || config.deepModel || config.fallbackDeepModel || 'minimax-m2.5-free';
 
-  // Resolve the API key for the *chosen* provider. Matching the provider to the
-  // primary or fallback slot avoids handing e.g. the OpenAI key to a DeepSeek
-  // run (which then fails auth). Mirrors the resolution in routes/analysis.js.
+  // Resolve the API key for the *chosen* provider.  First tries to match the
+  // provider to the primary or fallback slot (avoids handing e.g. the OpenAI
+  // key to a DeepSeek run).  When neither slot matches, falls back to the
+  // primary key anyway — matching the behaviour of resolveStoredKey() used by
+  // the Settings /test-connection endpoint so the bot and the test agree.
   let apiKey = '';
-  if (provider === config.provider) apiKey = config.apiKey || '';
-  else if (provider === config.fallbackProvider) apiKey = config.fallbackApiKey || '';
+  if (provider === config.provider) {
+    apiKey = config.apiKey || '';
+  } else if (provider === config.fallbackProvider) {
+    apiKey = config.fallbackApiKey || '';
+  } else {
+    apiKey = config.apiKey || '';
+  }
 
   const scriptPath = path.join(PROJECT_ROOT, 'server', 'bot_signal.py');
   const args = [

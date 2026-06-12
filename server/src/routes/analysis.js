@@ -44,7 +44,7 @@ router.post('/run', optionalAuth, async (req, res) => {
         } else if (targetProvider === config.fallback_provider) {
           targetApiKey = config.fallback_api_key ? decrypt(config.fallback_api_key) : '';
         } else {
-          targetApiKey = '';
+          targetApiKey = config.api_key ? decrypt(config.api_key) : '';
         }
       } else {
         targetApiKey = '';
