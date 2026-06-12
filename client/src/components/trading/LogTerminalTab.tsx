@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Bot } from '../../store/appStore';
 import { Terminal, Loader2 } from 'lucide-react';
 import { fetchBotLogs } from '../../lib/api';
+import { formatTime } from '../../lib/format';
 
 interface LogTerminalTabProps {
   bot: Bot;
@@ -95,7 +96,7 @@ export function LogTerminalTab({
                   </div>
                   <span className="text-[10px] text-muted font-semibold">
                     {price ? `$${Number(price).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : ''} ·{' '}
-                    {new Date(timestamp).toLocaleTimeString()}
+                    {formatTime(timestamp)}
                   </span>
                 </div>
 

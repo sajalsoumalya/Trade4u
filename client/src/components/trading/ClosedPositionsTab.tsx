@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bot } from '../../store/appStore';
 import { History } from 'lucide-react';
+import { formatDateTime } from '../../lib/format';
 
 interface ClosedPositionsTabProps {
   bot: Bot;
@@ -46,7 +47,7 @@ export function ClosedPositionsTab({
               <tbody>
                 {closed.map(cp => (
                   <tr key={cp.id} className="border-b border-border/50 hover:bg-white/5 transition-colors">
-                    <td className="p-4 text-xs text-muted font-mono">{new Date(cp.closedAt).toLocaleString()}</td>
+                    <td className="p-4 text-xs text-muted font-mono">{formatDateTime(cp.closedAt)}</td>
                     <td className="p-4">
                       <div className="flex items-center gap-1">
                         <span className="text-sm font-semibold text-white">{pairNames[cp.symbol] || cp.symbol.replace('USDT', '/USDT')}</span>
@@ -169,7 +170,7 @@ export function ClosedPositionsTab({
                     {cp.pnl >= 0 ? '+' : ''}${cp.pnl.toFixed(2)} ({cp.pnlPct >= 0 ? '+' : ''}{cp.pnlPct.toFixed(2)}%)
                   </p>
                 </div>
-                <p className="text-[10px] text-muted mt-2 text-right font-mono">{new Date(cp.closedAt).toLocaleString()}</p>
+                <p className="text-[10px] text-muted mt-2 text-right font-mono">{formatDateTime(cp.closedAt)}</p>
               </div>
             ))}
           </div>

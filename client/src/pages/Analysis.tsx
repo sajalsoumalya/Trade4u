@@ -8,6 +8,7 @@ import {
   getAnalysisHistory,
   fetchBinanceSymbols
 } from '../lib/api';
+import { formatDate } from '../lib/format';
 import { useQuery } from '@tanstack/react-query';
 import {
   Brain,
@@ -509,7 +510,7 @@ export default function Analysis() {
                     <div className="flex items-center justify-between text-[10px] text-muted">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        {new Date(item.createdAt).toLocaleDateString()}
+                        {formatDate(item.createdAt)}
                       </span>
                       <span
                         className={`font-semibold ${
