@@ -560,7 +560,22 @@ export default function Settings() {
     <div className="space-y-5 animate-fade-in max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Configure AI Engine</h1>
-        <button onClick={() => setMode('view')}
+        <button onClick={() => {
+          // Restore Zustand from server so stray edits are discarded
+          loadLlmConfig().then(config => {
+            if (config.provider) setLlmProvider(config.provider);
+            if (config.apiKey && config.apiKey !== '●●●●●●●●') setApiKey(config.apiKey);
+            if (config.quickModel && config.quickModel !== 'minimax-m2.5-free') setQuickModel(config.quickModel);
+            if (config.deepModel && config.deepModel !== 'minimax-m2.5-free') setDeepModel(config.deepModel);
+            if (config.fallbackProvider) setFallbackProvider(config.fallbackProvider);
+            if (config.fallbackApiKey && config.fallbackApiKey !== '●●●●●●●●') setFallbackApiKey(config.fallbackApiKey);
+            if (config.fallbackQuickModel && config.fallbackQuickModel !== 'minimax-m2.5-free') setFallbackQuickModel(config.fallbackQuickModel);
+            if (config.fallbackDeepModel && config.fallbackDeepModel !== 'minimax-m2.5-free') setFallbackDeepModel(config.fallbackDeepModel);
+          }).catch(() => {
+            // Server unreachable — keep Zustand as-is (don't wipe on network error)
+          });
+          setMode('view');
+        }}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-background border border-border text-sm text-muted hover:text-white hover:border-gray-500 transition-all">
           <X className="w-4 h-4" /> Cancel
         </button>
