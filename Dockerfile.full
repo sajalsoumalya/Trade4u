@@ -1,14 +1,18 @@
 # Trade4u - Complete Trading Platform Docker Image
 # Includes: React Frontend + Node.js Server + Python AI + WebSocket
 
-# ============ Stage 1: Build React Client ============
-FROM node:20-slim as react-build
+# ============ Stage 1: Build React Client + Server Deps ============
+FROM node:20-slim as node-build
 
 WORKDIR /client
 COPY client/package*.json ./
 RUN npm install
 COPY client/ ./
 RUN npm run build
+
+WORKDIR /server
+COPY server/package*.json ./
+RUN npm install --production
 
 # ============ Stage 2: Python Dependencies ============
 FROM python:3.13-slim as python-deps
@@ -44,19 +48,17 @@ COPY tradingagents/ ./tradingagents/
 # Install tradingagents package
 RUN pip install --no-cache-dir -e .
 
-# Copy server directory and install deps
-COPY server/ ./server/
-WORKDIR /app/server
-RUN apt-get update && apt-get install -y build-essential && \
-    npm install --production && \
-    apt-get purge -y build-essential && \
-    apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/*
+# Copy server node_modules (pre-built in node-build stage — no build-essential needed)
+COPY --from=node-build /server/node_modules ./server/node_modules
+COPY --from=node-build /server/package.json ./server/package.json
+
+# Copy server source
+COPY server/src ./server/src
 
 WORKDIR /app
 
 # Copy built React files to public
-COPY --from=react-build /client/dist ./public
+COPY --from=node-build /client/dist ./public
 
 # Create data directory
 RUN mkdir -p /app/data
