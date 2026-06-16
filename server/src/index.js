@@ -177,7 +177,7 @@ async function fetchAndBroadcastPrices() {
 }
 
 setInterval(fetchAndBroadcastPrices, 10000);
-fetchAndBroadcastPrices();
+fetchAndBroadcastPrices().catch(err => logger.warn('price-broadcast', `Initial fetch failed — ${err.message}`));
 
 export function broadcastCryptoPrice(symbol, priceData) {
   io.to(`crypto:${symbol}`).emit('crypto-price', { symbol, ...priceData, timestamp: Date.now() });
@@ -234,6 +234,11 @@ httpServer.listen(PORT, () => {
   } catch (err) {
     logger.error('server', `Cleanup decision logs failed — ${err.message}`, err);
   }
+});
+
+// Prevent crash on unhandled promise rejections (e.g., network blips during startup)
+process.on('unhandledRejection', (reason) => {
+  logger.error('server', `Unhandled rejection — ${reason instanceof Error ? reason.message : reason}`);
 });
 
 process.on('SIGTERM', () => {
