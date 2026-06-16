@@ -6,6 +6,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_fundamentals,
     get_income_statement,
     get_language_instruction,
+    truncate_messages,
 )
 
 
@@ -52,7 +53,7 @@ def create_fundamentals_analyst(llm):
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        result = chain.invoke(truncate_messages(state["messages"]))
 
         report = ""
 

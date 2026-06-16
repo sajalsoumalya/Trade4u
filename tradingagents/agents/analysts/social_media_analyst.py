@@ -1,5 +1,5 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from tradingagents.agents.utils.agent_utils import build_instrument_context, get_language_instruction, get_news
+from tradingagents.agents.utils.agent_utils import build_instrument_context, get_language_instruction, get_news, truncate_messages
 
 def create_social_media_analyst(llm):
     def social_media_analyst_node(state):
@@ -40,7 +40,7 @@ def create_social_media_analyst(llm):
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        result = chain.invoke(truncate_messages(state["messages"]))
 
         report = ""
 

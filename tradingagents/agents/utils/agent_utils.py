@@ -58,4 +58,12 @@ def create_msg_delete():
     return delete_messages
 
 
+def truncate_messages(messages, max_messages=15):
+    """Keep only the last N messages to stay within the model's context window.
+
+    Returns the full list when under the limit — no copy overhead.
+    """
+    return messages if len(messages) <= max_messages else messages[-max_messages:]
+
+
         

@@ -4,6 +4,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_indicators,
     get_language_instruction,
     get_stock_data,
+    truncate_messages,
 )
 
 def create_market_analyst(llm):
@@ -71,7 +72,7 @@ Volume-Based Indicators:
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        result = chain.invoke(truncate_messages(state["messages"]))
 
         report = ""
 
