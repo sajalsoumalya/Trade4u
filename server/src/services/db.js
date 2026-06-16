@@ -199,6 +199,24 @@ try {
   db.exec("ALTER TABLE analyses ADD COLUMN stages TEXT;");
 } catch (_) {}
 
+// Add provider_keys column — JSON map of provider -> encrypted api_key
+try {
+  db.exec("ALTER TABLE llm_config ADD COLUMN provider_keys TEXT DEFAULT '{}';");
+} catch (_) {}
+
+// Migrate existing keys into provider_keys so per-provider lookup works
+try {
+  const rows = db.prepare("SELECT uid, provider, api_key, fallback_provider, fallback_api_key FROM llm_config WHERE provider_keys IS NULL OR provider_keys = '{}'").all();
+  for (const r of rows) {
+    const keys = {};
+    if (r.provider && r.api_key) keys[r.provider] = r.api_key;
+    if (r.fallback_provider && r.fallback_api_key) keys[r.fallback_provider] = r.fallback_api_key;
+    if (Object.keys(keys).length > 0) {
+      db.prepare("UPDATE llm_config SET provider_keys = ? WHERE uid = ?").run(JSON.stringify(keys), r.uid);
+    }
+  }
+} catch (_) {}
+
 logger.info('db', `Schema initialized — path=${dbPath}`);
 
 export default db;

@@ -28,14 +28,23 @@ const writeData = (name, data) => fs.writeFileSync(getFile(name), JSON.stringify
 // primary or fallback slot so we never test/use the wrong provider's key.
 const MASKED_KEYS = ['●●●●●●●●', '******'];
 const isMaskedKey = (k) => !k || MASKED_KEYS.includes(k) || k.includes('●');
+
+function parseProviderKeys(config) {
+  try { return JSON.parse(config.provider_keys || '{}'); } catch { return {}; }
+}
+
 function resolveStoredKey(uid, provider, isFallback = false) {
   const config = db.prepare(
-    'SELECT provider, api_key, fallback_provider, fallback_api_key FROM llm_config WHERE uid = ?'
+    'SELECT provider, api_key, fallback_provider, fallback_api_key, provider_keys FROM llm_config WHERE uid = ?'
   ).get(uid);
   if (!config) return '';
+  // Try matching the provider to the primary or fallback slot first
   if (provider && provider === config.provider && config.api_key) return decrypt(config.api_key);
   if (provider && provider === config.fallback_provider && config.fallback_api_key) return decrypt(config.fallback_api_key);
-  // Provider didn't disambiguate (e.g. same provider in both slots): use the hint.
+  // Try per-provider key store (works for any provider the user has saved a key for)
+  const pk = parseProviderKeys(config);
+  if (provider && pk[provider]) return decrypt(pk[provider]);
+  // Fall back to the slot hint
   if (isFallback) return config.fallback_api_key ? decrypt(config.fallback_api_key) : '';
   return config.api_key ? decrypt(config.api_key) : '';
 }
@@ -261,6 +270,11 @@ router.get('/config', optionalAuth, async (req, res) => {
       // overwrite it with server-side defaults on a fresh/empty DB.
       return res.json({});
     }
+    const pk = parseProviderKeys(config);
+    const providerKeys = {};
+    for (const prov of Object.keys(pk)) {
+      providerKeys[prov] = true;
+    }
     res.json({
       provider: config.provider,
       apiKey: config.api_key ? '●●●●●●●●' : '',
@@ -270,6 +284,7 @@ router.get('/config', optionalAuth, async (req, res) => {
       fallbackApiKey: config.fallback_api_key ? '●●●●●●●●' : '',
       fallbackQuickModel: config.fallback_quick_model || '',
       fallbackDeepModel: config.fallback_deep_model || '',
+      providerKeys,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -292,7 +307,7 @@ router.post('/config', optionalAuth, async (req, res) => {
 
     db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
 
-    const existing = db.prepare('SELECT api_key, fallback_api_key FROM llm_config WHERE uid = ?').get(uid);
+    const existing = db.prepare('SELECT api_key, fallback_api_key, provider_keys FROM llm_config WHERE uid = ?').get(uid);
     let finalKey = existing ? existing.api_key : '';
     let finalFallbackKey = existing ? existing.fallback_api_key : '';
 
@@ -308,13 +323,29 @@ router.post('/config', optionalAuth, async (req, res) => {
       finalFallbackKey = '';
     }
 
+    // Update per-provider key store
+    const pk = parseProviderKeys(existing || { provider_keys: '{}' });
+    if (apiKey && apiKey !== '●●●●●●●●' && !apiKey.includes('●')) {
+      pk[provider] = encrypt(apiKey);
+    } else if (apiKey === '') {
+      delete pk[provider];
+    }
+    if (fallbackProvider) {
+      if (fallbackApiKey && fallbackApiKey !== '●●●●●●●●' && !fallbackApiKey.includes('●')) {
+        pk[fallbackProvider] = encrypt(fallbackApiKey);
+      } else if (fallbackApiKey === '') {
+        delete pk[fallbackProvider];
+      }
+    }
+    const providerKeysJson = JSON.stringify(pk);
+
     db.prepare(`
       INSERT INTO llm_config (
         uid, provider, api_key, quick_model, deep_model,
         fallback_provider, fallback_api_key, fallback_quick_model, fallback_deep_model,
-        updated_at
+        provider_keys, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(uid) DO UPDATE SET
         provider = excluded.provider,
         api_key = excluded.api_key,
@@ -324,6 +355,7 @@ router.post('/config', optionalAuth, async (req, res) => {
         fallback_api_key = excluded.fallback_api_key,
         fallback_quick_model = excluded.fallback_quick_model,
         fallback_deep_model = excluded.fallback_deep_model,
+        provider_keys = excluded.provider_keys,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       uid,
@@ -334,7 +366,8 @@ router.post('/config', optionalAuth, async (req, res) => {
       fallbackProvider || 'opencode',
       finalFallbackKey,
       fallbackQuickModel || 'minimax-m2.5-free',
-      fallbackDeepModel || 'minimax-m2.5-free'
+      fallbackDeepModel || 'minimax-m2.5-free',
+      providerKeysJson
     );
 
     res.json({ success: true });

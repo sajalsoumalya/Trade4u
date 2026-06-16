@@ -77,6 +77,7 @@ export default function Settings() {
   const [showFallbackKey, setShowFallbackKey] = useState(false);
   const [fallbackConnectionStatus, setFallbackConnectionStatus] = useState<ConnStatus | null>(null);
   const [testingFallbackConn, setTestingFallbackConn] = useState(false);
+  const [providerKeys, setProviderKeys] = useState<Record<string, boolean>>({});
 
   const hasConfig = llmProvider && quickModel && deepModel;
 
@@ -103,6 +104,7 @@ export default function Settings() {
       }
       if (config.fallbackQuickModel && config.fallbackQuickModel !== 'minimax-m2.5-free') setFallbackQuickModel(config.fallbackQuickModel);
       if (config.fallbackDeepModel && config.fallbackDeepModel !== 'minimax-m2.5-free') setFallbackDeepModel(config.fallbackDeepModel);
+      if (config.providerKeys) setProviderKeys(config.providerKeys);
     }).catch(() => {
       // Server unreachable — keep Zustand persisted state as-is
     }).finally(() => {
@@ -524,13 +526,12 @@ export default function Settings() {
   const setActiveLoadingModels = isMain ? setLoadingModels : setLoadingFallbackModels;
 
   const handleActiveProviderChange = (id: string) => {
-    // Re-clicking the already-selected provider must NOT wipe the saved API key
-    // / models — only reset when actually switching to a different provider.
     if (id === activeProvider) return;
     setActiveProvider(id);
     setActiveProviderChanged(true);
     setActiveModels([]);
-    setActiveApiKey('');
+    // Restore saved key for the selected provider, if any
+    setActiveApiKey(providerKeys[id] ? '●●●●●●●●' : '');
     setActiveQuickModel('');
     setActiveDeepModel('');
     setActiveConnectionStatus(null);
@@ -571,6 +572,7 @@ export default function Settings() {
             if (config.fallbackApiKey && config.fallbackApiKey !== '●●●●●●●●') setFallbackApiKey(config.fallbackApiKey);
             if (config.fallbackQuickModel && config.fallbackQuickModel !== 'minimax-m2.5-free') setFallbackQuickModel(config.fallbackQuickModel);
             if (config.fallbackDeepModel && config.fallbackDeepModel !== 'minimax-m2.5-free') setFallbackDeepModel(config.fallbackDeepModel);
+            if (config.providerKeys) setProviderKeys(config.providerKeys);
           }).catch(() => {
             // Server unreachable — keep Zustand as-is (don't wipe on network error)
           });
