@@ -19,14 +19,24 @@ class NormalizedChatOpenAI(ChatOpenAI):
     PydanticSerializationUnexpectedValue warnings per call without
     affecting correctness).
 
-    Provider-specific quirks (e.g. DeepSeek's thinking mode) live in
-    purpose-built subclasses below so this base class stays small.
+    All DeepSeek models (``deepseek-*`` regardless of provider) raise
+    ``NotImplementedError`` from ``with_structured_output`` because their
+    thinking mode does not support ``tool_choice``.  Agent factories
+    fall back to free-text generation (see
+    ``tradingagents/agents/utils/structured.py``).
     """
 
     def invoke(self, input, config=None, **kwargs):
         return normalize_content(super().invoke(input, config, **kwargs))
 
     def with_structured_output(self, schema, *, method=None, **kwargs):
+        model_name = (getattr(self, "model_name", "") or getattr(self, "model", "") or "").lower()
+        if "deepseek" in model_name:
+            raise NotImplementedError(
+                "DeepSeek models do not support tool_choice with thinking mode; "
+                "structured output is unavailable. Agent factories fall back to "
+                "free-text generation automatically."
+            )
         if method is None:
             method = "function_calling"
         return super().with_structured_output(schema, method=method, **kwargs)
