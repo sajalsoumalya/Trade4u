@@ -211,7 +211,7 @@ export default function Trading() {
       const provider = target.botProvider || llmProvider || 'opencode';
       const qModel = target.botQuickModel || quickModel || 'minimax-m2.5-free';
       const dModel = target.botDeepModel || deepModel || 'minimax-m2.5-free';
-      await startBotEngine(target.id, target.symbols, target.stopLoss, target.takeProfit, target.interval, provider, qModel, dModel, target.name);
+      await startBotEngine(target.id, target.symbols, target.stopLoss, target.takeProfit, target.interval, provider, qModel, dModel, target.name, target.allocationType, target.allocationValue);
     } catch {
       stopBot(id);
       addToast('error', 'Failed to start bot engine. Check server logs.');
@@ -265,7 +265,9 @@ export default function Trading() {
         provider,
         qModel,
         dModel,
-        newBot.name
+        newBot.name,
+        newBot.allocationType,
+        newBot.allocationValue
       );
     }
 

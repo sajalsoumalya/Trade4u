@@ -53,7 +53,7 @@ async function executeTrade(bot, signal) {
   } else {
     tradeAmount = Math.min(bot.allocationValue, balance);
   }
-  if (tradeAmount <= 0 || balance < tradeAmount) return;
+  if (typeof tradeAmount !== 'number' || isNaN(tradeAmount) || tradeAmount <= 0 || balance < tradeAmount) return;
 
   const quantity = tradeAmount / price;
   const posId = newId();

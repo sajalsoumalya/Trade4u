@@ -216,7 +216,7 @@ router.get('/balance', optionalAuth, async (req, res) => {
 router.post('/bots/:id/start', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, symbols, stopLoss, takeProfit, interval, provider, quickModel, deepModel } = req.body;
+    const { name, symbols, stopLoss, takeProfit, interval, provider, quickModel, deepModel, allocationType, allocationValue } = req.body;
     const io = req.app.get('io');
     const uid = req.uid;
 
@@ -225,14 +225,15 @@ router.post('/bots/:id/start', optionalAuth, async (req, res) => {
     // Persist bot to SQLite so it can be auto-restarted on server boot
     db.prepare(`
       INSERT INTO bots (id, uid, name, symbols, allocation_type, allocation_value, frozen_amount, status, stop_loss, take_profit, interval, bot_provider, bot_quick_model, bot_deep_model)
-      VALUES (?, ?, ?, ?, 'percentage', 0, 0, 'running', ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, 0, 'running', ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         status = 'running', symbols = COALESCE(?, symbols), stop_loss = COALESCE(?, stop_loss), take_profit = COALESCE(?, take_profit),
-        interval = COALESCE(?, interval), bot_provider = COALESCE(?, bot_provider), bot_quick_model = COALESCE(?, bot_quick_model), bot_deep_model = COALESCE(?, bot_deep_model)
-    `).run(id, uid, name || id, JSON.stringify(symbols || []), stopLoss ?? null, takeProfit ?? null, interval ?? 5, provider ?? null, quickModel ?? null, deepModel ?? null,
-      JSON.stringify(symbols || []), stopLoss ?? null, takeProfit ?? null, interval ?? 5, provider ?? null, quickModel ?? null, deepModel ?? null);
+        interval = COALESCE(?, interval), bot_provider = COALESCE(?, bot_provider), bot_quick_model = COALESCE(?, bot_quick_model), bot_deep_model = COALESCE(?, bot_deep_model),
+        allocation_type = COALESCE(?, allocation_type), allocation_value = COALESCE(?, allocation_value)
+    `).run(id, uid, name || id, JSON.stringify(symbols || []), allocationType || 'percentage', allocationValue ?? 0, stopLoss ?? null, takeProfit ?? null, interval ?? 5, provider ?? null, quickModel ?? null, deepModel ?? null,
+      JSON.stringify(symbols || []), stopLoss ?? null, takeProfit ?? null, interval ?? 5, provider ?? null, quickModel ?? null, deepModel ?? null, allocationType || 'percentage', allocationValue ?? 0);
 
-    const ok = startAIEngine({ id, uid, symbols: symbols || [], stopLoss, takeProfit, interval, provider, quickModel, deepModel }, io);
+    const ok = startAIEngine({ id, uid, symbols: symbols || [], stopLoss, takeProfit, interval, provider, quickModel, deepModel, allocationType, allocationValue }, io);
     res.json({ success: ok, running: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

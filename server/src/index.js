@@ -205,6 +205,8 @@ httpServer.listen(PORT, () => {
         provider: bot.bot_provider,
         quickModel: bot.bot_quick_model,
         deepModel: bot.bot_deep_model,
+        allocationType: bot.allocation_type,
+        allocationValue: bot.allocation_value,
       }, io);
     }
   } catch (err) {
