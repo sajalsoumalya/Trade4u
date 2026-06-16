@@ -2,7 +2,7 @@
 # Includes: React Frontend + Node.js Server + Python AI + WebSocket
 
 # ============ Stage 1: Build React Client + Server Deps ============
-FROM node:20-slim as node-build
+FROM node:20 as node-build
 
 WORKDIR /client
 COPY client/package*.json ./
@@ -12,7 +12,7 @@ RUN npm run build
 
 WORKDIR /server
 COPY server/package*.json ./
-RUN npm_config_build_from_source=false npm install --production
+RUN npm install --production
 
 # ============ Stage 2: Python Dependencies ============
 FROM python:3.13-slim as python-deps
