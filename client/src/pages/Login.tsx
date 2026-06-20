@@ -167,6 +167,7 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input w-full pl-12"
+                autoComplete="email"
               />
             </div>
 
@@ -178,6 +179,7 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input w-full pl-12 pr-12"
+                autoComplete={isLogin ? 'current-password' : 'new-password'}
               />
               <button
                 type="button"
