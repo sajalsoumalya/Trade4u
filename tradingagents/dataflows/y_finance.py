@@ -16,8 +16,9 @@ def _normalize_crypto_symbol(symbol: str) -> str:
     - BTCUSDT -> BTC-USD
     - EURUSD -> EURUSD=X (forex suffix)
     - USDJPY -> USDJPY=X (forex suffix)
+    - $SPY -> SPY (strip $ prefix)
     """
-    symbol = symbol.upper().strip()
+    symbol = symbol.upper().strip().lstrip('$')
 
     # Handle slash-based crypto pairs (e.g., BTC/USDT, ETH/USDT)
     if "/" in symbol:

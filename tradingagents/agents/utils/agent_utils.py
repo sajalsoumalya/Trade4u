@@ -58,12 +58,29 @@ def create_msg_delete():
     return delete_messages
 
 
-def truncate_messages(messages, max_messages=15):
-    """Keep only the last N messages to stay within the model's context window.
+def truncate_messages(messages, max_messages=10):
+    """Keep only the last N messages and truncate individual content to stay
+    within the model's context window.
 
+    Tool response content (the largest contributor to token overflows) is
+    capped at 3000 characters per message. AI and human messages at 5000.
     Returns the full list when under the limit — no copy overhead.
     """
-    return messages if len(messages) <= max_messages else messages[-max_messages:]
+    from langchain_core.messages import ToolMessage
+
+    truncated = []
+    for m in messages:
+        if isinstance(m, ToolMessage) and m.content and len(str(m.content)) > 3000:
+            truncated.append(ToolMessage(
+                content=str(m.content)[:3000] + '\n...[truncated]',
+                tool_call_id=m.tool_call_id,
+                name=m.name,
+                artifact=m.artifact,
+            ))
+        else:
+            truncated.append(m)
+
+    return truncated if len(truncated) <= max_messages else truncated[-max_messages:]
 
 
         
