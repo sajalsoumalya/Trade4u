@@ -206,16 +206,15 @@ export default function Login() {
             </button>
           </form>
 
-            <p className="text-center text-sm text-gray-400">
-              {isLogin ? "Don't have an account? " : 'Already have an account? '}
-              <button
-                onClick={() => setIsLogin(!isLogin)}
-                className="text-primary hover:text-primary-light font-medium transition-colors"
-              >
-                {isLogin ? 'Sign up' : 'Sign in'}
-              </button>
-            </p>
-          </div>
+          <p className="text-center text-sm text-gray-400 mt-4">
+            {isLogin ? "Don't have an account? " : 'Already have an account? '}
+            <button
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-primary hover:text-primary-light font-medium transition-colors"
+            >
+              {isLogin ? 'Sign up' : 'Sign in'}
+            </button>
+          </p>
 
           <button
             onClick={handleDemo}
@@ -234,6 +233,7 @@ export default function Login() {
           <p className="text-center text-xs text-gray-500 mt-8">
             By continuing, you agree to our Terms of Service and Privacy Policy
           </p>
+        </div>
       </div>
     </div>
   );
