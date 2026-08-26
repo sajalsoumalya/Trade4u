@@ -8,12 +8,11 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import analysisRoutes from './routes/analysis.js';
-import cryptoRoutes from './routes/crypto.js';
 import tradingRoutes from './routes/trading.js';
-import autotradeRoutes from './routes/autotrade.js';
 import db from './services/db.js';
 import { runMigration } from './services/migrate.js';
-import { startAIEngine, stopAIEngine, shutdownAllEngines } from './services/botEngine.js';
+import { startAIEngine, shutdownAllEngines } from './services/botEngine.js';
+import { sweepStopsAndTargets } from './services/tradeService.js';
 import { shutdownAnalyses } from './routes/analysis.js';
 import { logger, requestLogger } from './services/logger.js';
 
@@ -82,9 +81,7 @@ app.use(requestLogger);
 
 // API routes
 app.use('/api/analysis', analysisRoutes);
-app.use('/api/crypto', cryptoRoutes);
 app.use('/api/trading', tradingRoutes);
-app.use('/api/autotrade', autotradeRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -156,7 +153,9 @@ async function fetchAndBroadcastPrices() {
     const response = await fetch('https://api.binance.com/api/v3/ticker/24hr');
     if (!response.ok) return;
     const allData = await response.json();
+    const priceMap = {};
     for (const t of allData) {
+      priceMap[t.symbol] = parseFloat(t.lastPrice);
       if (symbols.includes(t.symbol)) {
         broadcastCryptoPrice(t.symbol, {
           price: parseFloat(t.lastPrice),
@@ -169,6 +168,10 @@ async function fetchAndBroadcastPrices() {
         });
       }
     }
+    // Honour stop-loss / take-profit here rather than in the browser, so open
+    // positions are still protected when nobody has the app open.
+    const closed = sweepStopsAndTargets(priceMap, io);
+    if (closed.length > 0) io.emit('positions-changed', { closed: closed.length });
   } catch (e) {
     logger.error('price-broadcast', `Failed — ${e.message}`, e);
   } finally {
@@ -194,19 +197,18 @@ httpServer.listen(PORT, () => {
     const runningBots = db.prepare("SELECT * FROM bots WHERE status = 'running'").all();
     logger.info('server', `Auto-restarting ${runningBots.length} bot(s) from DB`);
     for (const bot of runningBots) {
-      const symbols = JSON.parse(bot.symbols || '[]');
+      // Allocation is read straight from the bots row when a trade fires, so it
+      // no longer has to be threaded through the engine's arguments.
       startAIEngine({
         id: bot.id,
         uid: bot.uid,
-        symbols,
+        symbols: JSON.parse(bot.symbols || '[]'),
         stopLoss: bot.stop_loss,
         takeProfit: bot.take_profit,
         interval: bot.interval,
         provider: bot.bot_provider,
         quickModel: bot.bot_quick_model,
         deepModel: bot.bot_deep_model,
-        allocationType: bot.allocation_type,
-        allocationValue: bot.allocation_value,
       }, io);
     }
   } catch (err) {

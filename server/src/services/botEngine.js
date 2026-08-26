@@ -2,103 +2,27 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import db from './db.js';
-import { decrypt } from './cryptoHelper.js';
+import { resolveEngineConfig } from './llmConfig.js';
 import { logger } from './logger.js';
+import { envVarFor } from './providers.js';
+import { openPosition, applySltpBySymbol, newId } from './tradeService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../../');
 
 const processes = new Map();
 
-const newId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
-
-function loadLlmConfig(uid) {
-  try {
-    const config = db.prepare('SELECT * FROM llm_config WHERE uid = ?').get(uid || 'demo');
-    if (config) {
-      return {
-        provider: config.provider,
-        apiKey: config.api_key ? decrypt(config.api_key) : '',
-        quickModel: config.quick_model,
-        deepModel: config.deep_model,
-        fallbackProvider: config.fallback_provider || 'opencode',
-        fallbackApiKey: config.fallback_api_key ? decrypt(config.fallback_api_key) : '',
-        fallbackQuickModel: config.fallback_quick_model || 'minimax-m2.5-free',
-        fallbackDeepModel: config.fallback_deep_model || 'minimax-m2.5-free',
-      };
-    }
-  } catch (err) {
-    logger.error('botEngine', `loadLlmConfig failed — ${err.message}`);
-  }
-  return {};
-}
-
-async function executeTrade(bot, signal) {
-  const symbol = signal.symbol;
-  const action = signal.action;
-  const price = signal.price || signal.aiEntryPrice;
-  if (!price || price <= 0) return;
-
-  // Don't double-up: skip if there's already an open position for this bot+symbol
-  const existing = db.prepare('SELECT id FROM positions WHERE bot_id = ? AND symbol = ? AND status = "open"').get(bot.id, symbol);
-  if (existing) return;
-
-  const balanceRow = db.prepare('SELECT balance FROM balances WHERE uid = ?').get(bot.uid);
-  if (!balanceRow) return;
-  const balance = balanceRow.balance;
-
-  let tradeAmount;
-  if (bot.allocationType === 'percentage') {
-    tradeAmount = balance * (bot.allocationValue / 100);
-  } else {
-    tradeAmount = Math.min(bot.allocationValue, balance);
-  }
-  if (typeof tradeAmount !== 'number' || isNaN(tradeAmount) || tradeAmount <= 0 || balance < tradeAmount) return;
-
-  const quantity = tradeAmount / price;
-  const posId = newId();
-
-  db.transaction(() => {
-    if (action === 'buy') {
-      db.prepare('UPDATE balances SET balance = balance - ? WHERE uid = ?').run(tradeAmount, bot.uid);
-    } else {
-      db.prepare('UPDATE balances SET balance = balance + ? WHERE uid = ?').run(tradeAmount, bot.uid);
-    }
-    db.prepare(`INSERT INTO positions (id, bot_id, uid, symbol, type, quantity, entry_price, stop_loss, take_profit, status, opened_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', strftime('%Y-%m-%dT%H:%M:%S.000Z','now'))`)
-      .run(posId, bot.id, bot.uid, symbol, action, quantity, price, signal.stopLoss || null, signal.takeProfit || null);
-    db.prepare(`INSERT INTO trade_history (id, uid, bot_id, symbol, type, quantity, price, amount, status, trading_mode, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', 'paper', strftime('%Y-%m-%dT%H:%M:%S.000Z','now'))`)
-      .run(posId, bot.uid, bot.id, symbol, action, quantity, price, tradeAmount);
-  })();
-
-  logger.info('botEngine', `[${bot.id}] Auto-executed ${action.toUpperCase()} ${symbol} qty=${quantity.toFixed(6)} price=$${price}`);
-}
-
 export function startAIEngine(bot, io) {
   if (processes.has(bot.id)) return false;
 
-  const config = loadLlmConfig(bot.uid);
-  logger.info('botEngine', `[${bot.id}] Config lookup — uid=${bot.uid} cfgProvider=${config.provider} cfgApiKey=${!!config.apiKey} fbProvider=${config.fallbackProvider} fbApiKey=${!!config.fallbackApiKey} botProvider=${bot.provider}`);
-
-  // Determine LLM provider/models: bot-specific -> primary config -> system fallback config
-  const provider = bot.provider || config.provider || config.fallbackProvider || 'opencode';
-  const qModel = bot.quickModel || config.quickModel || config.fallbackQuickModel || 'minimax-m2.5-free';
-  const dModel = bot.deepModel || config.deepModel || config.fallbackDeepModel || 'minimax-m2.5-free';
-
-  // Resolve the API key for the *chosen* provider.  First tries to match the
-  // provider to the primary or fallback slot (avoids handing e.g. the OpenAI
-  // key to a DeepSeek run).  When neither slot matches, falls back to the
-  // primary key anyway — matching the behaviour of resolveStoredKey() used by
-  // the Settings /test-connection endpoint so the bot and the test agree.
-  let apiKey = '';
-  if (provider === config.provider) {
-    apiKey = config.apiKey || '';
-  } else if (provider === config.fallbackProvider) {
-    apiKey = config.fallbackApiKey || '';
-  } else {
-    apiKey = config.apiKey || '';
-  }
+  // A bot's own pinned provider/models win; otherwise fall back to the user's
+  // saved config. Shared with the analysis route and the Settings connection
+  // test so all three resolve the same key for the same provider.
+  const { provider, quickModel: qModel, deepModel: dModel, apiKey } = resolveEngineConfig(bot.uid, {
+    provider: bot.provider,
+    quickModel: bot.quickModel,
+    deepModel: bot.deepModel,
+  });
 
   const scriptPath = path.join(PROJECT_ROOT, 'server', 'bot_signal.py');
   const args = [
@@ -118,17 +42,7 @@ export function startAIEngine(bot, io) {
     args.push('--api-key', apiKey);
   }
 
-  // Map provider to its expected API key env var
-  const providerEnvMap = {
-    opencode: 'OPENCODE_API_KEY',
-    nvidia_nim: 'NVIDIA_NIM_API_KEY',
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    google: 'GOOGLE_API_KEY',
-    deepseek: 'DEEPSEEK_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
-  };
-  const providerEnvVar = providerEnvMap[provider] || 'OPENAI_API_KEY';
+  const providerEnvVar = envVarFor(provider);
 
   const childEnv = {
     ...process.env,
@@ -145,7 +59,11 @@ export function startAIEngine(bot, io) {
 
   let buffer = '';
   const MAX_BUFFER = 1024 * 64;
-  const entry = processes.get(bot.id);
+  // Register before wiring handlers: startAIEngine bails out early when the id
+  // is already present, so reading it back here would always yield undefined
+  // and run_cycle would be stuck at 0.
+  const entry = { process: proc, io, botUid: bot.uid, cycleCount: 0 };
+  processes.set(bot.id, entry);
   let pendingLogIds = [];
   proc.stdout.on('data', (data) => {
     buffer += data.toString();
@@ -165,14 +83,24 @@ export function startAIEngine(bot, io) {
         if (signal.type === 'log') {
           io.emit(`bot:${bot.id}:log`, signal);
         }
-        // Emit trade events for buy/sell actions
+        // Execute buy/sell on the server, then tell the client what actually
+        // happened rather than letting it book its own version of the trade.
         if (signal.type === 'signal' && (signal.action === 'buy' || signal.action === 'sell') && signal.symbol) {
-          io.emit(`bot:${bot.id}:trade`, signal);
-          // Auto-execute the position on the server
-          executeTrade(bot, signal).catch(err => logger.error('botEngine', `[${bot.id}] Trade execution error — ${err.message}`, err));
+          try {
+            const opened = openPosition(bot, signal);
+            io.emit(`bot:${bot.id}:trade`, { ...signal, executed: !!opened, position: opened });
+          } catch (err) {
+            logger.error('botEngine', `[${bot.id}] Trade execution error — ${err.message}`, err);
+            io.emit(`bot:${bot.id}:trade`, { ...signal, executed: false, error: err.message });
+          }
         }
-        // Emit SL/TP updates from AI
+        // Apply AI-suggested SL/TP to the positions this bot already holds.
         if (signal.type === 'update_sltp' && signal.symbol) {
+          try {
+            applySltpBySymbol(bot.id, signal.symbol, signal.stopLoss, signal.takeProfit);
+          } catch (err) {
+            logger.error('botEngine', `[${bot.id}] SL/TP update failed — ${err.message}`);
+          }
           io.emit(`bot:${bot.id}:update_sltp`, signal);
         }
 
@@ -184,7 +112,7 @@ export function startAIEngine(bot, io) {
             db.prepare(`
               INSERT INTO decision_logs (id, bot_id, uid, symbol, action, price, stop_loss, take_profit, status, reasoning, error, run_cycle, created_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, NULL, ?, ?)
-            `).run(logId, bot.id, bot.uid, signal.symbol, signal.action || 'hold', signal.price || null, signal.stopLoss || null, signal.takeProfit || null, reasonStr, entry?.cycleCount || 0, signal.timestamp || new Date().toISOString());
+            `).run(logId, bot.id, bot.uid, signal.symbol, signal.action || 'hold', signal.price || null, signal.stopLoss || null, signal.takeProfit || null, reasonStr, entry.cycleCount, signal.timestamp || new Date().toISOString());
           } catch (_) {}
           pendingLogIds.push(logId);
         }
@@ -197,7 +125,7 @@ export function startAIEngine(bot, io) {
           } catch (_) {}
         }
         if (signal.type === 'cycle_complete') {
-          if (entry) entry.cycleCount = (entry.cycleCount || 0) + 1;
+          entry.cycleCount += 1;
           // Mark any remaining pending logs as completed
           for (const pid of pendingLogIds) {
             try { db.prepare(`UPDATE decision_logs SET status = 'completed' WHERE id = ?`).run(pid); } catch (_) {}
@@ -224,7 +152,7 @@ export function startAIEngine(bot, io) {
       db.prepare(`
         INSERT INTO decision_logs (id, bot_id, uid, symbol, action, price, status, error, run_cycle, created_at)
         VALUES (?, ?, ?, ?, ?, ?, 'error', ?, ?, ?)
-      `).run(errId, bot.id, bot.uid, 'SYSTEM', 'error', null, msg.slice(0, 2000), entry?.cycleCount || 0, new Date().toISOString());
+      `).run(errId, bot.id, bot.uid, 'SYSTEM', 'error', null, msg.slice(0, 2000), entry.cycleCount, new Date().toISOString());
     } catch (_) {}
   });
 
@@ -246,7 +174,6 @@ export function startAIEngine(bot, io) {
     }
   });
 
-  processes.set(bot.id, { process: proc, io, botUid: bot.uid, cycleCount: 0 });
   io.emit(`bot:${bot.id}:status`, { running: true });
   return true;
 }

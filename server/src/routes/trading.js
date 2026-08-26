@@ -1,260 +1,210 @@
 import { Router } from 'express';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { optionalAuth } from '../middleware/auth.js';
 import { startAIEngine, stopAIEngine, isEngineRunning } from '../services/botEngine.js';
 import db from '../services/db.js';
-import { encrypt, decrypt } from '../services/cryptoHelper.js';
+import { encrypt } from '../services/cryptoHelper.js';
+import { isMaskedKey, resolveStoredKey, loadRawConfig, parseProviderKeys } from '../services/llmConfig.js';
 import { logger } from '../services/logger.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-const getFile = (name) => path.join(DATA_DIR, `${name}.json`);
-const readData = (name) => {
-  const f = getFile(name);
-  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : [];
-};
-const readJsonData = (name) => {
-  const f = getFile(name);
-  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
-};
-const writeData = (name, data) => fs.writeFileSync(getFile(name), JSON.stringify(data, null, 2));
-
-// Resolve the real (decrypted) stored key for a provider. When the client sends
-// a masked/empty key we look it up here, matching the requested provider to the
-// primary or fallback slot so we never test/use the wrong provider's key.
-const MASKED_KEYS = ['●●●●●●●●', '******'];
-const isMaskedKey = (k) => !k || MASKED_KEYS.includes(k) || k.includes('●');
-
-function parseProviderKeys(config) {
-  try { return JSON.parse(config.provider_keys || '{}'); } catch { return {}; }
-}
-
-function resolveStoredKey(uid, provider, isFallback = false) {
-  const config = db.prepare(
-    'SELECT provider, api_key, fallback_provider, fallback_api_key, provider_keys FROM llm_config WHERE uid = ?'
-  ).get(uid);
-  if (!config) return '';
-  // Try matching the provider to the primary or fallback slot first
-  if (provider && provider === config.provider && config.api_key) return decrypt(config.api_key);
-  if (provider && provider === config.fallback_provider && config.fallback_api_key) return decrypt(config.fallback_api_key);
-  // Try per-provider key store (works for any provider the user has saved a key for)
-  const pk = parseProviderKeys(config);
-  if (provider && pk[provider]) return decrypt(pk[provider]);
-  // Fall back to the slot hint
-  if (isFallback) return config.fallback_api_key ? decrypt(config.fallback_api_key) : '';
-  return config.api_key ? decrypt(config.api_key) : '';
-}
+import {
+  listModels as listProviderModels,
+  testConnection as testProviderConnection,
+} from '../services/providers.js';
+import {
+  getWallet, setWallet,
+  listBots, createBot, updateBot, deleteBot, setBotStatus,
+  listOpenPositions, closePosition, closeAllForBot, updatePositionSltp, getTradeHistory,
+} from '../services/tradeService.js';
 
 const router = Router();
 
-router.post('/order', optionalAuth, async (req, res) => {
+// ---------------------------------------------------------------- wallet
+
+router.get('/balance', optionalAuth, (req, res) => {
   try {
-    const { symbol, type, quantity, price } = req.body;
-    const uid = req.uid;
+    res.json({ balance: getWallet(req.uid), tradingMode: 'paper' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-    if (!symbol || !type || !quantity) {
-      return res.status(400).json({ error: 'symbol, type, quantity required' });
+router.post('/balance', optionalAuth, (req, res) => {
+  try {
+    const balance = Number(req.body.balance);
+    if (!Number.isFinite(balance) || balance < 0) {
+      return res.status(400).json({ error: 'balance must be a non-negative number' });
+    }
+    res.json({ balance: setWallet(req.uid, balance) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ------------------------------------------------------------------ bots
+
+router.get('/bots', optionalAuth, (req, res) => {
+  try {
+    // Reconcile the reported status with the processes actually alive, so a
+    // container restart can't leave a bot showing "running" with no engine.
+    const bots = listBots(req.uid).map((b) => ({ ...b, engineRunning: isEngineRunning(b.id) }));
+    res.json(bots);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bots', optionalAuth, (req, res) => {
+  try {
+    const { name, symbols, allocationType, allocationValue, stopLoss, takeProfit, interval,
+            botProvider, botQuickModel, botDeepModel, start } = req.body;
+    if (!Array.isArray(symbols) || symbols.length === 0) {
+      return res.status(400).json({ error: 'At least one symbol is required' });
     }
 
-    if (!['buy', 'sell'].includes(type.toLowerCase())) {
-      return res.status(400).json({ error: 'type must be buy or sell' });
-    }
+    let bot = createBot(req.uid, {
+      name, symbols, allocationType, allocationValue, stopLoss, takeProfit, interval,
+      botProvider, botQuickModel, botDeepModel,
+    });
 
-    db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
+    if (start) bot = startBot(req.uid, bot.id, req.app.get('io'));
+    res.json(bot);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 
-    let balanceRow = db.prepare('SELECT balance FROM balances WHERE uid = ?').get(uid);
-    if (!balanceRow) {
-      db.prepare('INSERT INTO balances (uid, balance) VALUES (?, 100000.0)').run(uid);
-      balanceRow = { balance: 100000.0 };
-    }
+router.patch('/bots/:id', optionalAuth, (req, res) => {
+  try {
+    const bot = updateBot(req.uid, req.params.id, req.body);
+    if (!bot) return res.status(404).json({ error: 'Bot not found' });
+    res.json(bot);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 
-    const tradePrice = price || 0;
-    const orderCost = tradePrice * parseFloat(quantity);
+router.delete('/bots/:id', optionalAuth, (req, res) => {
+  try {
+    stopAIEngine(req.params.id);
+    if (!deleteBot(req.uid, req.params.id)) return res.status(404).json({ error: 'Bot not found' });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-    if (type.toLowerCase() === 'buy' && balanceRow.balance < orderCost) {
-      return res.status(400).json({ error: 'Insufficient balance' });
-    }
+// Spawn the Python engine for a bot that is already persisted, resolving its
+// LLM settings from the bot row so a restart uses the same models.
+function startBot(uid, id, io) {
+  const bot = setBotStatus(uid, id, 'running');
+  if (!bot) return null;
+  startAIEngine({
+    id: bot.id,
+    uid,
+    symbols: bot.symbols,
+    stopLoss: bot.stopLoss,
+    takeProfit: bot.takeProfit,
+    interval: bot.interval,
+    provider: bot.botProvider,
+    quickModel: bot.botQuickModel,
+    deepModel: bot.botDeepModel,
+  }, io);
+  return bot;
+}
 
-    const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
-    const tradingMode = 'paper';
+router.post('/bots/:id/start', optionalAuth, (req, res) => {
+  try {
+    const bot = startBot(req.uid, req.params.id, req.app.get('io'));
+    if (!bot) return res.status(404).json({ error: 'Bot not found' });
+    res.json({ success: true, running: true, bot });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 
-    db.transaction(() => {
-      if (type.toLowerCase() === 'buy') {
-        db.prepare('UPDATE balances SET balance = balance - ? WHERE uid = ?').run(orderCost, uid);
-      } else {
-        db.prepare('UPDATE balances SET balance = balance + ? WHERE uid = ?').run(orderCost, uid);
+router.post('/bots/:id/stop', optionalAuth, (req, res) => {
+  try {
+    stopAIEngine(req.params.id);
+    const bot = setBotStatus(req.uid, req.params.id, 'stopped');
+    if (!bot) return res.status(404).json({ error: 'Bot not found' });
+    res.json({ success: true, running: false, bot });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/bots/:id/status', optionalAuth, (req, res) => {
+  res.json({ running: isEngineRunning(req.params.id) });
+});
+
+router.post('/bots/:id/close-all', optionalAuth, (req, res) => {
+  try {
+    const closed = closeAllForBot(req.uid, req.params.id, req.body.prices || {});
+    res.json({ closed: closed.length, positions: closed });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * One-time adoption of bots that were created before the server owned this
+ * state (they lived only in the browser's localStorage). Ignores bots whose id
+ * is already present so a repeated call is harmless.
+ */
+router.post('/bots/import', optionalAuth, (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body.bots) ? req.body.bots : [];
+    const existing = new Set(listBots(req.uid).map((b) => b.name));
+    const imported = [];
+    for (const b of incoming) {
+      if (!Array.isArray(b.symbols) || b.symbols.length === 0) continue;
+      if (existing.has(b.name)) continue;
+      try {
+        imported.push(createBot(req.uid, b));
+        existing.add(b.name);
+      } catch (err) {
+        logger.warn('trading', `Bot import skipped "${b.name}" — ${err.message}`);
       }
-
-      db.prepare(`
-        INSERT INTO positions (id, uid, symbol, type, quantity, entry_price, status, opened_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(id, uid, symbol.toUpperCase(), type.toLowerCase(), parseFloat(quantity), tradePrice, 'open');
-
-      db.prepare(`
-        INSERT INTO trade_history (id, uid, symbol, type, quantity, price, amount, status, trading_mode, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(id, uid, symbol.toUpperCase(), type.toLowerCase(), parseFloat(quantity), tradePrice, orderCost, 'open', tradingMode);
-    })();
-
-    res.json({ id, symbol: symbol.toUpperCase(), type: type.toLowerCase(), quantity, price: tradePrice, status: 'open', tradingMode });
-  } catch (error) {
-    logger.error('trading', `Order error — ${error.message}`, error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.delete('/order/:id', optionalAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { price } = req.body;
-    const uid = req.uid;
-
-    const pos = db.prepare('SELECT * FROM positions WHERE id = ? AND uid = ? AND status = "open"').get(id, uid);
-    if (!pos) return res.status(404).json({ error: 'Trade not found' });
-
-    const closePrice = price || pos.entry_price || 0;
-    const pnl = pos.type === 'sell'
-      ? (pos.entry_price - closePrice) * pos.quantity
-      : (closePrice - pos.entry_price) * pos.quantity;
-
-    db.transaction(() => {
-      if (pos.type === 'buy') {
-        db.prepare('UPDATE balances SET balance = balance + ? WHERE uid = ?').run(pos.quantity * closePrice, uid);
-      } else {
-        db.prepare('UPDATE balances SET balance = balance - ? WHERE uid = ?').run(pos.quantity * closePrice, uid);
-      }
-
-      db.prepare('DELETE FROM positions WHERE id = ?').run(id);
-
-      db.prepare(`
-        INSERT INTO closed_positions (id, bot_id, uid, symbol, type, quantity, entry_price, exit_price, pnl, pnl_pct, fee, status, opened_at, closed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(id, pos.bot_id, uid, pos.symbol, pos.type, pos.quantity, pos.entry_price, closePrice, pnl, pos.entry_price > 0 ? (pnl / (pos.entry_price * pos.quantity)) * 100 : 0.0, 0.0, 'closed', pos.opened_at);
-
-      db.prepare('UPDATE trade_history SET status = "closed", pnl = ? WHERE id = ?').run(pnl, id);
-    })();
-
-    res.json({ id, status: 'closed', pnl });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.get('/positions', optionalAuth, async (req, res) => {
-  try {
-    const uid = req.uid;
-    const positions = db.prepare('SELECT * FROM positions WHERE uid = ? AND status = "open"').all(uid);
-    const mapped = positions.map(p => ({
-      id: p.id,
-      botId: p.bot_id,
-      uid: p.uid,
-      symbol: p.symbol,
-      type: p.type,
-      quantity: p.quantity,
-      entryPrice: p.entry_price,
-      stopLoss: p.stop_loss,
-      takeProfit: p.take_profit,
-      status: p.status,
-      openedAt: p.opened_at
-    }));
-    res.json(mapped);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.get('/history', optionalAuth, async (req, res) => {
-  try {
-    const uid = req.uid;
-    const { limit = 50 } = req.query;
-    
-    const trades = db.prepare('SELECT * FROM trade_history WHERE uid = ? ORDER BY created_at DESC LIMIT ?').all(uid, parseInt(limit, 10));
-    const mapped = trades.map(t => ({
-      id: t.id,
-      uid: t.uid,
-      botId: t.bot_id,
-      symbol: t.symbol,
-      type: t.type,
-      quantity: t.quantity,
-      price: t.price,
-      amount: t.amount,
-      pnl: t.pnl,
-      status: t.status,
-      tradingMode: t.trading_mode,
-      createdAt: t.created_at
-    }));
-
-    const totalPnlRow = db.prepare('SELECT SUM(pnl) as total FROM closed_positions WHERE uid = ?').get(uid);
-    const totalPnl = totalPnlRow ? (totalPnlRow.total || 0) : 0;
-
-    res.json({ trades: mapped, totalPnl });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.get('/balance', optionalAuth, async (req, res) => {
-  try {
-    const uid = req.uid;
-    db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
-    let balanceRow = db.prepare('SELECT balance FROM balances WHERE uid = ?').get(uid);
-    if (!balanceRow) {
-      db.prepare('INSERT INTO balances (uid, balance) VALUES (?, 100000.0)').run(uid);
-      balanceRow = { balance: 100000.0 };
     }
-    res.json({ balance: balanceRow.balance, tradingMode: 'paper' });
+    res.json({ imported: imported.length, bots: listBots(req.uid) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// AI Engine lifecycle — managed by botEngine.js
-router.post('/bots/:id/start', optionalAuth, async (req, res) => {
+// -------------------------------------------------------------- positions
+
+router.get('/positions', optionalAuth, (req, res) => {
   try {
-    const { id } = req.params;
-    const { name, symbols, stopLoss, takeProfit, interval, provider, quickModel, deepModel, allocationType, allocationValue } = req.body;
-    const io = req.app.get('io');
-    const uid = req.uid;
-
-    db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
-
-    // Persist bot to SQLite so it can be auto-restarted on server boot
-    db.prepare(`
-      INSERT INTO bots (id, uid, name, symbols, allocation_type, allocation_value, frozen_amount, status, stop_loss, take_profit, interval, bot_provider, bot_quick_model, bot_deep_model)
-      VALUES (?, ?, ?, ?, ?, ?, 0, 'running', ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        status = 'running', symbols = COALESCE(?, symbols), stop_loss = COALESCE(?, stop_loss), take_profit = COALESCE(?, take_profit),
-        interval = COALESCE(?, interval), bot_provider = COALESCE(?, bot_provider), bot_quick_model = COALESCE(?, bot_quick_model), bot_deep_model = COALESCE(?, bot_deep_model),
-        allocation_type = COALESCE(?, allocation_type), allocation_value = COALESCE(?, allocation_value)
-    `).run(id, uid, name || id, JSON.stringify(symbols || []), allocationType || 'percentage', allocationValue ?? 0, stopLoss ?? null, takeProfit ?? null, interval ?? 5, provider ?? null, quickModel ?? null, deepModel ?? null,
-      JSON.stringify(symbols || []), stopLoss ?? null, takeProfit ?? null, interval ?? 5, provider ?? null, quickModel ?? null, deepModel ?? null, allocationType || 'percentage', allocationValue ?? 0);
-
-    const ok = startAIEngine({ id, uid, symbols: symbols || [], stopLoss, takeProfit, interval, provider, quickModel, deepModel, allocationType, allocationValue }, io);
-    res.json({ success: ok, running: true });
+    res.json(listOpenPositions(req.uid));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.post('/bots/:id/stop', optionalAuth, async (req, res) => {
+router.post('/positions/:id/close', optionalAuth, (req, res) => {
   try {
-    const { id } = req.params;
-    db.prepare('UPDATE bots SET status = ? WHERE id = ?').run('stopped', id);
-    stopAIEngine(id);
-    res.json({ success: true, running: false });
+    const result = closePosition(req.uid, req.params.id, req.body.price, req.body.status || 'closed');
+    if (!result) return res.status(404).json({ error: 'Open position not found' });
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get('/bots/:id/status', optionalAuth, async (req, res) => {
+router.patch('/positions/:id/sltp', optionalAuth, (req, res) => {
   try {
-    const { id } = req.params;
-    res.json({ running: isEngineRunning(id) });
+    const { stopLoss, takeProfit } = req.body;
+    const pos = updatePositionSltp(req.uid, req.params.id, stopLoss, takeProfit);
+    if (!pos) return res.status(404).json({ error: 'Open position not found' });
+    res.json(pos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/history', optionalAuth, (req, res) => {
+  try {
+    res.json(getTradeHistory(req.uid, parseInt(req.query.limit ?? 50, 10)));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -263,8 +213,7 @@ router.get('/bots/:id/status', optionalAuth, async (req, res) => {
 // --- LLM Config persistence ---
 router.get('/config', optionalAuth, async (req, res) => {
   try {
-    const uid = req.uid;
-    const config = db.prepare('SELECT * FROM llm_config WHERE uid = ?').get(uid);
+    const config = loadRawConfig(req.uid);
     if (!config) {
       // Return empty values — the client's Zustand persisted state
       // (localStorage) holds the user's actual config, and we must not
@@ -378,128 +327,16 @@ router.post('/config', optionalAuth, async (req, res) => {
 });
 
 // --- Test API connection ---
-const PROVIDER_ENDPOINTS = {
-  opencode:     { base: 'https://opencode.ai/zen/v1',             chatUrl: 'https://opencode.ai/zen/v1/chat/completions' },
-  openai:       { base: 'https://api.openai.com/v1',              chatUrl: 'https://api.openai.com/v1/chat/completions' },
-  anthropic:    { base: 'https://api.anthropic.com',              chatUrl: 'https://api.anthropic.com/v1/messages' },
-  google:       { base: 'https://generativelanguage.googleapis.com', chatUrl: null },
-  deepseek:     { base: 'https://api.deepseek.com',              chatUrl: 'https://api.deepseek.com/chat/completions' },
-  nvidia:       { base: 'https://integrate.api.nvidia.com/v1',   chatUrl: 'https://integrate.api.nvidia.com/v1/chat/completions' },
-  nvidia_nim:   { base: 'https://integrate.api.nvidia.com/v1',   chatUrl: 'https://integrate.api.nvidia.com/v1/chat/completions' },
-  openrouter:   { base: 'https://openrouter.ai/api/v1',          chatUrl: 'https://openrouter.ai/api/v1/chat/completions' },
-  xai:          { base: 'https://api.x.ai/v1',                   chatUrl: 'https://api.x.ai/v1/chat/completions' },
-  qwen:         { base: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', chatUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions' },
-  glm:          { base: 'https://api.z.ai/api/paas/v4/',         chatUrl: 'https://api.z.ai/api/paas/v4/chat/completions' },
-};
-
 router.post('/test-connection', optionalAuth, async (req, res) => {
   try {
     let { provider, apiKey, model, isFallback } = req.body;
     if (!provider) return res.status(400).json({ ok: false, error: 'provider required' });
 
-    const uid = req.uid;
     if (isMaskedKey(apiKey)) {
-      apiKey = resolveStoredKey(uid, provider, isFallback);
+      apiKey = resolveStoredKey(req.uid, provider, isFallback);
     }
 
-    const ep = PROVIDER_ENDPOINTS[provider] || PROVIDER_ENDPOINTS.openai;
-    let ok = false;
-    let error = null;
-    let endpointUrl = ep.base;
-
-    // Step 1: validate API key
-    let keyOk = false;
-    if (!apiKey) {
-      if (provider === 'opencode') { keyOk = true; }
-      else { error = 'API key required'; }
-    } else {
-      let validateUrl;
-      let validateHeaders;
-      switch (provider) {
-        case 'opencode':
-          validateUrl = `${ep.base}/models`;
-          validateHeaders = { Authorization: `Bearer ${apiKey}` };
-          break;
-        case 'anthropic':
-          validateUrl = `${ep.base}/v1/models`;
-          validateHeaders = { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
-          break;
-        case 'google':
-          validateUrl = `${ep.base}/v1/models?key=${apiKey}`;
-          validateHeaders = {};
-          break;
-        default:
-          validateUrl = `${ep.base}/models`;
-          validateHeaders = { Authorization: `Bearer ${apiKey}` };
-      }
-      const vr = await fetch(validateUrl, { headers: validateHeaders });
-      keyOk = vr.ok;
-      if (!vr.ok) error = `Key validation: HTTP ${vr.status}`;
-    }
-
-    // Step 2: attempt actual LLM chat call
-    let llmResponse = null;
-    const testModel = model || 'gpt-4.1-mini';
-
-    if (keyOk && apiKey) {
-      try {
-        if (provider === 'anthropic') {
-          const r = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: testModel,
-              max_tokens: 50,
-              messages: [{ role: 'user', content: 'Reply with just: OK' }],
-            }),
-          });
-          if (r.ok) {
-            const data = await r.json();
-            llmResponse = data.content?.[0]?.text || JSON.stringify(data);
-          } else {
-            const text = await r.text().catch(() => '');
-            llmResponse = `HTTP ${r.status}: ${text.slice(0, 200)}`;
-          }
-        } else if (provider === 'google') {
-          const r = await fetch(`${ep.base}/v1/models/${testModel}:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: 'Reply with just: OK' }] }] }),
-          });
-          if (r.ok) {
-            const data = await r.json();
-            llmResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(data);
-          } else {
-            const text = await r.text().catch(() => '');
-            llmResponse = `HTTP ${r.status}: ${text.slice(0, 200)}`;
-          }
-        } else {
-          const r = await fetch(ep.chatUrl, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: testModel,
-              messages: [{ role: 'user', content: 'Reply with just: OK' }],
-              max_tokens: 20,
-              temperature: 0,
-            }),
-          });
-          if (r.ok) {
-            const data = await r.json();
-            llmResponse = data.choices?.[0]?.message?.content || JSON.stringify(data);
-          } else {
-            const text = await r.text().catch(() => '');
-            llmResponse = `HTTP ${r.status}: ${text.slice(0, 200)}`;
-          }
-        }
-      } catch (e) {
-        llmResponse = `Request failed: ${e.message}`;
-      }
-    }
-
-    ok = keyOk && (!llmResponse || !llmResponse.startsWith('HTTP')) && !error;
-
-    res.json({ ok, error: error || (llmResponse?.startsWith('HTTP') ? llmResponse : null), endpointUrl, llmResponse, keyOk });
+    res.json(await testProviderConnection(provider, apiKey, model));
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }
@@ -511,231 +348,16 @@ router.post('/models/fetch', optionalAuth, async (req, res) => {
     let { provider, apiKey } = req.body;
     if (!provider) return res.status(400).json({ error: 'provider required' });
 
-    const uid = req.uid;
     if (isMaskedKey(apiKey)) {
-      apiKey = resolveStoredKey(uid, provider);
+      apiKey = resolveStoredKey(req.uid, provider);
     }
 
-    let models = [];
-    // 'live' once a provider's real API returns models; flipped to 'fallback'
-    // whenever we have to use the static suggestion list (no/invalid key, or
-    // the provider lookup failed). The client uses this to prompt for a key.
-    let source = 'live';
-
-    switch (provider) {
-      case 'opencode':
-        try {
-          const resp = await fetch('https://opencode.ai/zen/v1/models', {
-            headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            models = (data.data || []).map((m, i) => ({
-              id: m.id,
-              name: m.id,
-              cost: 'Free',
-              context: 256000,
-              maxOutput: 16384,
-              capabilities: ['reasoning', 'tools', 'vision', 'open weights'],
-            }));
-          }
-        } catch (_) { /* fall through */ }
-        if (models.length === 0) {
-          source = 'fallback';
-          models = [
-            { id: 'minimax-m2.5-free', name: 'MiniMax M2.5 Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-            { id: 'ring-2.6-1t-free', name: 'Ring 2.6 1T Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-            { id: 'nemotron-3-super-free', name: 'Nemotron 3 Super Free', cost: 'Free', context: 256000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'open weights'] },
-          ];
-        }
-        break;
-
-      case 'openai':
-        if (apiKey) {
-          try {
-            const resp = await fetch('https://api.openai.com/v1/models', {
-              headers: { Authorization: `Bearer ${apiKey}` },
-            });
-            if (resp.ok) {
-              const data = await resp.json();
-              models = (data.data || [])
-                .filter(m => m.id && (m.id.startsWith('gpt-') || m.id.startsWith('o')))
-                .map(m => ({
-                  id: m.id,
-                  name: m.id,
-                  cost: 'Paid',
-                  context: 128000,
-                  maxOutput: 16384,
-                  capabilities: ['reasoning', 'tools', 'vision'],
-                }));
-            }
-          } catch (_) { /* fall through to fallback list */ }
-        }
-        // fallback
-        if (models.length === 0) {
-          source = 'fallback';
-          models = [
-            { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', cost: 'Paid', context: 128000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision'] },
-            { id: 'gpt-4.1', name: 'GPT-4.1', cost: 'Paid', context: 1048576, maxOutput: 32768, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
-            { id: 'gpt-5.4', name: 'GPT-5.4', cost: 'Paid', context: 256000, maxOutput: 65536, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents'] },
-            { id: 'gpt-5.4-pro', name: 'GPT-5.4 Pro', cost: 'Paid', context: 256000, maxOutput: 65536, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents', 'research'] },
-          ];
-        }
-        break;
-
-      case 'anthropic':
-        if (apiKey) {
-          try {
-            const resp = await fetch('https://api.anthropic.com/v1/models', {
-              headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-            });
-            if (resp.ok) {
-              const data = await resp.json();
-              models = (data.data || []).map(m => ({
-                id: m.id,
-                name: m.display_name || m.id,
-                cost: 'Paid',
-                context: 200000,
-                maxOutput: 8192,
-                capabilities: ['reasoning', 'tools', 'vision'],
-              }));
-            }
-          } catch (_) { /* fall through to fallback list */ }
-        }
-        if (models.length === 0) {
-          source = 'fallback';
-          models = [
-            { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'vision', 'code'] },
-            { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['tools', 'vision', 'fast'] },
-            { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', cost: 'Paid', context: 200000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
-          ];
-        }
-        break;
-
-      case 'google':
-        if (apiKey) {
-          try {
-            const resp = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
-            if (resp.ok) {
-              const data = await resp.json();
-              models = (data.models || []).map(m => {
-                const id = (m.name || '').replace('models/', '');
-                return {
-                  id,
-                  name: m.displayName || m.display_name || id,
-                  cost: 'Paid',
-                  context: 1048576,
-                  maxOutput: 8192,
-                  capabilities: ['reasoning', 'tools', 'vision'],
-                };
-              }).filter(m => m.id);
-            }
-          } catch (_) { /* fall through to fallback list */ }
-        }
-        if (models.length === 0) {
-          source = 'fallback';
-          models = [
-            { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: 'Paid', context: 1048576, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'vision', 'fast'] },
-            { id: 'gemini-3-flash', name: 'Gemini 3 Flash', cost: 'Paid', context: 1048576, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'fast'] },
-            { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', cost: 'Paid', context: 1048576, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
-            { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', cost: 'Paid', context: 2097152, maxOutput: 32768, capabilities: ['reasoning', 'tools', 'vision', 'code', 'agents', 'research'] },
-          ];
-        }
-        break;
-
-      case 'deepseek':
-        if (apiKey) {
-          try {
-            const resp = await fetch('https://api.deepseek.com/v1/models', {
-              headers: { Authorization: `Bearer ${apiKey}` },
-            });
-            if (resp.ok) {
-              const data = await resp.json();
-              models = (data.data || []).map(m => ({
-                id: m.id,
-                name: m.id,
-                cost: 'Paid',
-                context: 262144,
-                maxOutput: 16384,
-                capabilities: ['reasoning', 'tools', 'code'],
-              }));
-            }
-          } catch (_) { /* fall through to fallback list */ }
-        }
-        if (models.length === 0) {
-          source = 'fallback';
-          models = [
-            { id: 'deepseek-chat', name: 'DeepSeek V3', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
-            { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'vision', 'code', 'research'] },
-            { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', cost: 'Paid', context: 262144, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'code'] },
-          ];
-        }
-        break;
-      case 'openrouter':
-        // OpenRouter's model list is public — fetch it with or without a key.
-        try {
-          const resp = await fetch('https://openrouter.ai/api/v1/models', {
-            headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            models = (data.data || []).map(m => ({
-              id: m.id, name: m.name || m.id, cost: 'Paid',
-              context: m.context_length || 128000, maxOutput: m.top_provider?.max_completion_tokens || 8192,
-              capabilities: ['reasoning', 'tools'],
-            }));
-          }
-        } catch (_) { /* fall through to fallback list */ }
-        if (models.length === 0) {
-          source = 'fallback';
-          models = [
-            { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: 'Paid', context: 200000, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
-            { id: 'openai/gpt-5.4-mini', name: 'GPT-5.4 Mini', cost: 'Paid', context: 128000, maxOutput: 16384, capabilities: ['reasoning', 'tools', 'fast'] },
-            { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: 'Paid', context: 1048576, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'fast'] },
-            { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'tools', 'code'] },
-            { id: 'qwen/qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'tools'] },
-          ];
-        }
-        break;
-      case 'nvidia':
-      case 'nvidia_nim':
-        if (apiKey) {
-          try {
-            const resp = await fetch('https://integrate.api.nvidia.com/v1/models', {
-              headers: { Authorization: `Bearer ${apiKey}` },
-            });
-            if (resp.ok) {
-              const data = await resp.json();
-              models = (data.data || []).map(m => ({
-                id: m.id,
-                name: m.id,
-                cost: 'Paid',
-                context: 131072,
-                maxOutput: 8192,
-                capabilities: ['reasoning', 'tools', 'code'],
-              }));
-            }
-          } catch (_) { /* fall through to fallback list */ }
-        }
-        if (models.length === 0) {
-          source = 'fallback';
-          models = [
-            { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'code'] },
-            { id: 'nvidia/deepseek-ai/deepseek-v3-671b', name: 'DeepSeek V3 671B', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'code'] },
-            { id: 'nvidia/meta/llama-3.2-90b-vision', name: 'Llama 3.2 90B Vision', cost: 'Paid', context: 131072, maxOutput: 8192, capabilities: ['reasoning', 'vision', 'code'] },
-          ];
-        }
-        break;
-    }
-
-    res.json({ models, source });
+    res.json(await listProviderModels(provider, apiKey));
   } catch (error) {
     logger.error('trading', `Model fetch error — ${error.message}`, error);
     res.status(500).json({ error: error.message });
   }
 });
-
-
 
 // Get bot decision logs (per-cycle results)
 router.get('/bots/:id/logs', optionalAuth, async (req, res) => {

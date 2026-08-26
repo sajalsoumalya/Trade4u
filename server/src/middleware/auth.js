@@ -1,38 +1,5 @@
 import firebaseAdmin from '../services/firebase.js';
 import { getAuth } from 'firebase-admin/auth';
-import { logger } from '../services/logger.js';
-
-export const requireAuth = async (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  let token = null;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  }
-
-  // Fallback for local development/testing if Firebase Admin is not configured
-  const isFirebaseActive = firebaseAdmin !== null;
-  if (!isFirebaseActive) {
-    const uid = req.headers['x-uid'] || req.body.uid || req.query.uid;
-    if (!uid) {
-      return res.status(401).json({ error: 'Authentication required (Firebase not configured & no fallback UID)' });
-    }
-    req.uid = uid;
-    return next();
-  }
-
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required: Token missing' });
-  }
-
-  try {
-    const decodedToken = await getAuth(firebaseAdmin).verifyIdToken(token);
-    req.uid = decodedToken.uid;
-    next();
-  } catch (error) {
-    logger.warn('auth', `Token verification failed — ${error.message}`);
-    res.status(401).json({ error: 'Unauthorized: Invalid token' });
-  }
-};
 
 export const optionalAuth = async (req, res, next) => {
   const authHeader = req.headers['authorization'];

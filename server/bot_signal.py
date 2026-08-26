@@ -30,6 +30,31 @@ _PROVIDER_DEFAULT_MODELS = {
 }
 
 
+def _as_pct_of(value, reference, fallback_pct):
+    """Normalise an AI stop-loss figure to a percentage distance from entry.
+
+    The model may answer with either a percentage ("2.5") or an absolute price
+    ("94500"). Anything within a plausible percentage band is taken as-is; a
+    larger number is read as a price and converted against ``reference``.
+    Returns ``fallback_pct`` when the value is missing or unusable.
+    """
+    if value is None:
+        return fallback_pct
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return fallback_pct
+    if value <= 0:
+        return fallback_pct
+    if value < 100:
+        return value  # already a percentage
+    if not reference or reference <= 0:
+        return fallback_pct
+    pct = abs(reference - value) / reference * 100
+    # A "stop" further than 90% from entry is a parse artefact, not a stop.
+    return pct if 0 < pct < 90 else fallback_pct
+
+
 class SignalEmitter:
     def __init__(self, config):
         provider = config.get('provider', 'opencode')
@@ -153,7 +178,11 @@ class SignalEmitter:
             ai_reasoning = parsed.get('reasoning_text')
 
             entry_price = ai_entry or price
-            stop_loss = ai_sl if ai_sl is not None else self.stop_loss_pct
+            # stopLoss/takeProfit travel as PERCENTAGES everywhere downstream
+            # (the server and UI both compute entry * (1 -+ pct/100)). The AI
+            # writes "Stop Loss: $94,500" — an absolute price — so convert it
+            # against the entry instead of passing the raw dollar figure on.
+            stop_loss = _as_pct_of(ai_sl, entry_price, self.stop_loss_pct)
             take_profit = self.take_profit_pct
             if action in ('buy', 'sell') and price:
                 ai_tp, _ = self.get_sltp_suggestion(symbol, action, price, logs)

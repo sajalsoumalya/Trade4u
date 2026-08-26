@@ -16,8 +16,13 @@ services:
       - NODE_ENV=production
       - PORT=8501
       - LLM_PROVIDER=opencode
+      # Must match the mount target below. Without it db.js resolves to
+      # /app/server/data, which is inside the container and lost on redeploy.
+      - DATA_DIR=/app/data
     volumes:
-      - ./data:/app/data
+      # Persistent host storage: the container is disposable, this path is not.
+      # Override for a local run with TRADE4U_STORAGE=./data docker compose up.
+      - ${TRADE4U_STORAGE:-/mnt/imdaa-storage/trade4u}:/app/data
     networks:
       - trade4u
 

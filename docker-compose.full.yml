@@ -15,6 +15,10 @@ services:
       - NODE_ENV=production
       - PORT=8501
       - LLM_PROVIDER=opencode
+      # Must match the mount target below. Without it db.js falls back to
+      # /app/server/data — inside the container, so wiped on every redeploy.
       - DATA_DIR=/app/data
     volumes:
-      - /mnt/trade4u-storage/trade4u:/app/data
+      # Host storage lives outside the container image, so rebuilding and
+      # redeploying replaces the app but never touches app.db.
+      - /mnt/imdaa-storage/trade4u:/app/data

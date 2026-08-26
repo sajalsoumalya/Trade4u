@@ -6,7 +6,8 @@ import { optionalAuth } from '../middleware/auth.js';
 
 const runningAnalyses = new Set();
 import db from '../services/db.js';
-import { decrypt } from '../services/cryptoHelper.js';
+import { resolveEngineConfig } from '../services/llmConfig.js';
+import { envVarFor } from '../services/providers.js';
 import { logger } from '../services/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,36 +30,14 @@ router.post('/run', optionalAuth, async (req, res) => {
 
     db.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').run(uid);
 
-    // Fetch user LLM config from DB to resolve credentials and fallbacks
-    const config = db.prepare('SELECT * FROM llm_config WHERE uid = ?').get(uid);
+    // Request parameters win, then the user's saved config, then defaults —
+    // resolved by the same helper the bot engine and Settings test use, so all
+    // three agree on which key belongs to which provider.
+    ({ provider, quickModel, deepModel, apiKey } = resolveEngineConfig(uid, {
+      provider, quickModel, deepModel, apiKey,
+    }));
 
-    // Determine target provider, models and key based on request parameters -> user settings config -> system fallback config
-    let targetProvider = provider || (config ? config.provider : '') || (config ? config.fallback_provider : '') || 'opencode';
-    let targetQuickModel = quickModel || (config ? config.quick_model : '') || (config ? config.fallback_quick_model : '') || 'minimax-m2.5-free';
-    let targetDeepModel = deepModel || (config ? config.deep_model : '') || (config ? config.fallback_deep_model : '') || 'minimax-m2.5-free';
-    let targetApiKey = apiKey;
-
-    if (targetApiKey === '●●●●●●●●' || targetApiKey === '******' || !targetApiKey) {
-      if (config) {
-        if (targetProvider === config.provider) {
-          targetApiKey = config.api_key ? decrypt(config.api_key) : '';
-        } else if (targetProvider === config.fallback_provider) {
-          targetApiKey = config.fallback_api_key ? decrypt(config.fallback_api_key) : '';
-        } else {
-          targetApiKey = config.api_key ? decrypt(config.api_key) : '';
-        }
-      } else {
-        targetApiKey = '';
-      }
-    }
-
-    // Override local variables with final resolved targets
-    provider = targetProvider;
-    quickModel = targetQuickModel;
-    deepModel = targetDeepModel;
-    apiKey = targetApiKey;
-
-    logger.info('analysis', `[${id}] Starting — provider=${provider} qModel=${quickModel} dModel=${deepModel} hasKey=${!!apiKey} uid=${uid} cfgFound=${!!config} symbol=${symbol}`);
+    logger.info('analysis', `[${id}] Starting — provider=${provider} qModel=${quickModel} dModel=${deepModel} hasKey=${!!apiKey} uid=${uid} symbol=${symbol}`);
 
     db.prepare(`
       INSERT INTO analyses (id, uid, symbol, date, status, decision, result, error, created_at, updated_at)
@@ -77,7 +56,17 @@ router.post('/run', optionalAuth, async (req, res) => {
     if (quickModel) args.push('--quick-model', quickModel);
     if (apiKey) args.push('--api-key', apiKey);
 
-    const python = spawn(process.env.PYTHON || 'python3', args, { env: { ...process.env } });
+    // Mirror the bot engine's child environment: PYTHONPATH so `tradingagents`
+    // imports regardless of the server's working directory, and the provider's
+    // own key variable so main.py authenticates even if an SDK reads it from
+    // the environment rather than the --api-key argument.
+    const childEnv = {
+      ...process.env,
+      PYTHONPATH: `${PROJECT_ROOT}:${process.env.PYTHONPATH || ''}`,
+    };
+    if (apiKey) childEnv[envVarFor(provider)] = apiKey;
+
+    const python = spawn(process.env.PYTHON || 'python3', args, { env: childEnv });
     runningAnalyses.add(python);
 
     let output = '';

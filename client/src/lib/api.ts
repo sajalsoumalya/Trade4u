@@ -2,22 +2,7 @@ import { API_BASE, getAuthHeaders } from './firebase';
 
 const CRYPTO_API = 'https://api.binance.com';
 
-// Crypto API (no auth required)
-export const fetchCryptoPrice = async (symbol: string) => {
-  const res = await fetch(`${CRYPTO_API}/api/v3/ticker/24hr?symbol=${symbol.toUpperCase()}`);
-  const data = await res.json();
-  return {
-    symbol: data.symbol,
-    price: parseFloat(data.lastPrice),
-    priceChange: parseFloat(data.priceChange),
-    priceChangePercent: parseFloat(data.priceChangePercent),
-    high24h: parseFloat(data.highPrice),
-    low24h: parseFloat(data.lowPrice),
-    volume: parseFloat(data.volume),
-    quoteVolume: parseFloat(data.quoteVolume),
-  };
-};
-
+// Crypto API (no auth required) — Binance is queried directly from the browser
 export const fetchCryptoPrices = async (symbols: string[]) => {
   const symbolsParam = encodeURIComponent(JSON.stringify(symbols.map(s => s.toUpperCase())));
   const res = await fetch(`${CRYPTO_API}/api/v3/ticker/24hr?symbols=${symbolsParam}`);
@@ -50,26 +35,6 @@ export const fetchCryptoKlines = async (symbol: string, interval = '1h', limit =
   }));
 };
 
-// Market API
-export const fetchPrice = async (symbol: string) => {
-  const res = await fetch(`${API_BASE}/market/price/${symbol}`);
-  return res.json();
-};
-
-export const fetchHistory = async (symbol: string, period = '1mo') => {
-  const res = await fetch(`${API_BASE}/market/history/${symbol}?period=${period}`);
-  return res.json();
-};
-
-export const fetchPrices = async (symbols: string[]) => {
-  const res = await fetch(`${API_BASE}/market/prices`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ symbols })
-  });
-  return res.json();
-};
-
 // Analysis API
 export const runAnalysis = async (symbol: string, date?: string, options?: Record<string, string>) => {
   const res = await fetch(`${API_BASE}/analysis/run`, {
@@ -95,72 +60,89 @@ export const getAnalysisHistory = async (limit = 20) => {
   return res.json();
 };
 
-// Trading API
-export const placeOrder = async (symbol: string, type: 'buy' | 'sell', quantity: number, price?: number) => {
-  const res = await fetch(`${API_BASE}/trading/order`, {
+// --- Trading API ---------------------------------------------------------
+// SQLite on the server is the single source of truth for bots, positions and
+// balance; these read and mutate it rather than keeping a parallel copy.
+
+const req = async (path: string, init?: RequestInit) => {
+  const res = await fetch(`${API_BASE}${path}`, { headers: getAuthHeaders(), ...init });
+  const text = await res.text();
+  let body: any = null;
+  try { body = text ? JSON.parse(text) : null; } catch { /* non-JSON error page */ }
+  if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`);
+  return body;
+};
+
+export interface ApiBot {
+  id: string;
+  name: string;
+  createdAt: string;
+  symbols: string[];
+  allocationType: 'percentage' | 'fixed';
+  allocationValue: number;
+  frozenAmount: number;
+  status: 'running' | 'stopped';
+  positions: any[];
+  closedPositions: any[];
+  totalPnl: number;
+  closedTrades: number;
+  winningTrades: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  interval: number;
+  botProvider?: string;
+  botQuickModel?: string;
+  botDeepModel?: string;
+  engineRunning?: boolean;
+}
+
+export const getBots = (): Promise<ApiBot[]> => req('/trading/bots');
+
+export const getWalletBalance = async (): Promise<number> => {
+  const data = await req('/trading/balance');
+  return data?.balance ?? 0;
+};
+
+export const setWalletBalance = (balance: number) =>
+  req('/trading/balance', { method: 'POST', body: JSON.stringify({ balance }) });
+
+export const createBotApi = (config: {
+  name: string; symbols: string[];
+  allocationType: 'percentage' | 'fixed'; allocationValue: number;
+  stopLoss?: number; takeProfit?: number; interval: number;
+  botProvider?: string; botQuickModel?: string; botDeepModel?: string;
+  start?: boolean;
+}): Promise<ApiBot> => req('/trading/bots', { method: 'POST', body: JSON.stringify(config) });
+
+export const updateBotApi = (botId: string, changes: Record<string, unknown>): Promise<ApiBot> =>
+  req(`/trading/bots/${botId}`, { method: 'PATCH', body: JSON.stringify(changes) });
+
+export const deleteBotApi = (botId: string) =>
+  req(`/trading/bots/${botId}`, { method: 'DELETE' });
+
+export const startBotEngine = (botId: string) =>
+  req(`/trading/bots/${botId}/start`, { method: 'POST' });
+
+export const stopBotEngine = (botId: string) =>
+  req(`/trading/bots/${botId}/stop`, { method: 'POST' });
+
+export const closePositionApi = (positionId: string, price: number, status?: string) =>
+  req(`/trading/positions/${positionId}/close`, {
     method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ symbol, type, quantity, price })
+    body: JSON.stringify({ price, status }),
   });
-  return res.json();
-};
 
-export const closePosition = async (id: string, price: number) => {
-  const res = await fetch(`${API_BASE}/trading/order/${id}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ price })
-  });
-  return res.json();
-};
+export const closeAllPositionsApi = (botId: string, prices: Record<string, number>) =>
+  req(`/trading/bots/${botId}/close-all`, { method: 'POST', body: JSON.stringify({ prices }) });
 
-export const getPositions = async () => {
-  const res = await fetch(`${API_BASE}/trading/positions`, {
-    headers: getAuthHeaders()
+export const updatePositionSltpApi = (positionId: string, stopLoss?: number, takeProfit?: number) =>
+  req(`/trading/positions/${positionId}/sltp`, {
+    method: 'PATCH',
+    body: JSON.stringify({ stopLoss, takeProfit }),
   });
-  return res.json();
-};
 
-export const getTradeHistory = async (limit = 50) => {
-  const res = await fetch(`${API_BASE}/trading/history?limit=${limit}`, {
-    headers: getAuthHeaders()
-  });
-  return res.json();
-};
-
-export const getBalance = async () => {
-  const res = await fetch(`${API_BASE}/trading/balance`, {
-    headers: getAuthHeaders()
-  });
-  return res.json();
-};
-
-export const verifyToken = async (idToken: string) => {
-  const res = await fetch(`${API_BASE}/auth/verify`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken })
-  });
-  return res.json();
-};
-
-// AI Bot Engine API
-export const startBotEngine = async (botId: string, symbols: string[], stopLoss?: number, takeProfit?: number, interval?: number, provider?: string, quickModel?: string, deepModel?: string, name?: string, allocationType?: string, allocationValue?: number) => {
-  const res = await fetch(`${API_BASE}/trading/bots/${botId}/start`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ name, symbols, stopLoss, takeProfit, interval, provider, quickModel, deepModel, allocationType, allocationValue })
-  });
-  return res.json();
-};
-
-export const stopBotEngine = async (botId: string) => {
-  const res = await fetch(`${API_BASE}/trading/bots/${botId}/stop`, {
-    method: 'POST',
-    headers: getAuthHeaders()
-  });
-  return res.json();
-};
+export const importBotsApi = (bots: unknown[]) =>
+  req('/trading/bots/import', { method: 'POST', body: JSON.stringify({ bots }) });
 
 // LLM Config API
 export const saveLlmConfig = async (config: {

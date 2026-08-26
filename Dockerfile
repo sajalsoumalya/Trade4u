@@ -41,7 +41,6 @@ COPY --from=python-deps /usr/local/bin /usr/local/bin
 
 # Copy root level files
 COPY main.py ./
-COPY bot.py ./
 COPY pyproject.toml ./
 COPY tradingagents/ ./tradingagents/
 

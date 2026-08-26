@@ -14,9 +14,14 @@ parser.add_argument('--quick-model', type=str, default='minimax-m2.5-free', help
 parser.add_argument('--api-key', type=str, default=None, help='API key for the LLM provider')
 args = parser.parse_args()
 
-# Load environment variables from .env file
-from dotenv import load_dotenv
-load_dotenv()
+# Load environment variables from .env file. Optional: when this runs as a
+# subprocess of the Node server every setting already arrives via argv/env, so a
+# missing python-dotenv must not take the whole analysis down.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 # Use API key from args (passed from DB config via analysis.js)
 api_key = args.api_key or ''

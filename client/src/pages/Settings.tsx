@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
+import { useTrading } from '../hooks/useTrading';
 import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff, Wifi, WifiOff, RotateCw, Pencil, X, Zap, Activity } from 'lucide-react';
 import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider, testConnection, startBotEngine, stopBotEngine } from '../lib/api';
 
@@ -45,12 +46,12 @@ function ModelDetails({ model }: { model: ModelEntry | undefined }) {
 
 export default function Settings() {
   const {
-    llmProvider, apiKey, deepModel, quickModel, walletBalance,
+    llmProvider, apiKey, deepModel, quickModel,
     fallbackProvider, fallbackApiKey, fallbackDeepModel, fallbackQuickModel,
-    setLlmProvider, setApiKey, setDeepModel, setQuickModel, setWalletBalance,
+    setLlmProvider, setApiKey, setDeepModel, setQuickModel,
     setFallbackProvider, setFallbackApiKey, setFallbackDeepModel, setFallbackQuickModel,
-    bots, applyGlobalLlmToAllBots,
   } = useAppStore();
+  const { bots, walletBalance, setWalletBalance, updateBot } = useTrading();
 
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   // Must be declared with the other hooks (before the view-mode early return) —
@@ -203,7 +204,7 @@ export default function Settings() {
     }
 
     const nb = parseInt(balanceInput);
-    if (!isNaN(nb) && nb > 0) setWalletBalance(nb);
+    if (!isNaN(nb) && nb > 0) setWalletBalance.mutate(nb);
     try {
       await saveLlmConfig({
         provider: llmProvider,
@@ -219,14 +220,17 @@ export default function Settings() {
       // Apply the new config to every bot and restart the running ones so the
       // change takes effect at runtime. The engine reloads the key from the DB
       // (just saved) and uses the new provider/models on the next cycle.
-      applyGlobalLlmToAllBots(llmProvider, quickModel, deepModel);
       for (const b of bots) {
-        if (b.status === 'running') {
-          try {
+        try {
+          await updateBot.mutateAsync({
+            id: b.id,
+            changes: { botProvider: llmProvider, botQuickModel: quickModel, botDeepModel: deepModel },
+          });
+          if (b.status === 'running') {
             await stopBotEngine(b.id);
-            await startBotEngine(b.id, b.symbols, b.stopLoss, b.takeProfit, b.interval, llmProvider, quickModel, deepModel);
-          } catch (_) { /* best-effort; engine status surfaces on the Trading page */ }
-        }
+            await startBotEngine(b.id);
+          }
+        } catch (_) { /* best-effort; engine status surfaces on the Trading page */ }
       }
     } catch (e: any) {
       setConnectionStatus({ ok: false, error: 'Config save failed: ' + (e.message || 'Server unreachable') });

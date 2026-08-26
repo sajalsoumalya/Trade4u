@@ -160,23 +160,9 @@ db.exec(`
     error TEXT,
     run_cycle INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE,
     FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
-  );
-
-  -- Autotrade settings Table
-  CREATE TABLE IF NOT EXISTS autotrade_settings (
-    uid TEXT PRIMARY KEY,
-    enabled INTEGER NOT NULL DEFAULT 0,
-    symbols TEXT NOT NULL DEFAULT '["BTCUSDT"]',
-    trade_amount REAL NOT NULL DEFAULT 100.0,
-    max_positions INTEGER NOT NULL DEFAULT 3,
-    stop_loss REAL NOT NULL DEFAULT 2.0,
-    take_profit REAL NOT NULL DEFAULT 5.0,
-    analysis_interval INTEGER NOT NULL DEFAULT 15,
-    risk_per_trade REAL NOT NULL DEFAULT 1.0,
-    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
-    FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
   );
 `);
 
@@ -202,6 +188,23 @@ try {
 // Add provider_keys column — JSON map of provider -> encrypted api_key
 try {
   db.exec("ALTER TABLE llm_config ADD COLUMN provider_keys TEXT DEFAULT '{}';");
+} catch (_) {}
+
+// decision_logs.updated_at was written by botEngine before it existed in the
+// schema, so the UPDATE that marks a cycle 'completed' failed silently and
+// every log stayed 'running' until a reboot flipped it to 'error'.
+try {
+  db.exec("ALTER TABLE decision_logs ADD COLUMN updated_at TEXT;");
+} catch (_) {}
+
+// Recover logs stranded by that bug: anything still 'running' from a previous
+// process cannot be in flight now, and anything wrongly marked 'error' by the
+// boot cleanup carries that exact message.
+try {
+  db.prepare(`
+    UPDATE decision_logs SET status = 'completed', error = NULL
+    WHERE status = 'running' OR error = 'Bot engine restarted — cycle was interrupted.'
+  `).run();
 } catch (_) {}
 
 // Migrate existing keys into provider_keys so per-provider lookup works

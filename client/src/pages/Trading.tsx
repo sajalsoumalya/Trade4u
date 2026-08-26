@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAppStore, Bot } from '../store/appStore';
-import { fetchCryptoPrices, startBotEngine, stopBotEngine, fetchBinanceSymbols } from '../lib/api';
+import { fetchCryptoPrices, fetchBinanceSymbols } from '../lib/api';
+import { useTrading } from '../hooks/useTrading';
 import { io } from 'socket.io-client';
 import { useToast } from '../components/Toast';
 import { Plus } from 'lucide-react';
@@ -28,32 +29,26 @@ function buildPairNames(symbols: string[]): Record<string, string> {
 }
 
 export default function Trading() {
+  const { llmProvider, quickModel, deepModel, botLogs, addBotLog, setEngineError } = useAppStore();
   const {
     bots,
     walletBalance,
     createBot,
+    updateBot,
     deleteBot,
     startBot,
     stopBot,
     closePosition,
     closeAllPositions,
-    addPosition,
-    updatePositionSLTP,
-    updateBotSLTP,
-    updateBot,
-    botLogs,
-    addBotLog,
-    llmProvider,
-    quickModel,
-    deepModel,
-  } = useAppStore();
+    updatePositionSltp,
+    refresh,
+  } = useTrading();
 
   const [prices, setPrices] = useState<Record<string, any>>({});
   const [view, setView] = useState<'list' | 'create' | 'detail'>('list');
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
 
   const { addToast } = useToast();
-  const socketRef = useRef<any>(null);
 
   // Fetch full symbols list dynamically from Binance API
   const { data: allPairs = DEFAULT_PAIRS } = useQuery({
@@ -66,133 +61,77 @@ export default function Trading() {
 
   const selectedBot = bots.find(b => b.id === selectedBotId) || null;
 
-  // Filter prices to fetch only for active bots and default pairs to prevent API rate limits
-  const activePairs = Array.from(new Set([
-    ...bots.flatMap(b => b.symbols),
-    ...(selectedBot ? selectedBot.symbols : []),
-    ...DEFAULT_PAIRS
-  ]));
+  // Only price the pairs actually on screen, to stay clear of rate limits.
+  const activePairs = useMemo(
+    () => Array.from(new Set([...bots.flatMap(b => b.symbols), ...DEFAULT_PAIRS])),
+    [bots]
+  );
+  const activePairsKey = activePairs.join(',');
 
+  // Prices are display-only now: stop-loss and take-profit are enforced by the
+  // server on its own price tick, so they no longer depend on this tab.
   useEffect(() => {
+    let cancelled = false;
+    const loadPrices = async () => {
+      try {
+        const data = await fetchCryptoPrices(activePairsKey.split(','));
+        if (cancelled) return;
+        const map: Record<string, any> = {};
+        data.forEach((d: any) => { map[d.symbol] = d; });
+        setPrices(map);
+      } catch { /* transient — the next tick retries */ }
+    };
     loadPrices();
-    const interval = setInterval(loadPrices, 30000);
-    return () => clearInterval(interval);
-  }, [activePairs.join(',')]);
+    const timer = setInterval(loadPrices, 30000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [activePairsKey]);
 
-  // Socket.IO for AI engine signals
+  // Socket.IO for AI engine signals. One connection, re-subscribed when the set
+  // of bot ids changes; every handler re-reads server state rather than keeping
+  // its own tally.
+  const botIdsKey = bots.map(b => b.id).join(',');
   useEffect(() => {
     const socket = io({ path: '/api/socket.io' });
-    socketRef.current = socket;
+    const botsById = new Map(bots.map(b => [b.id, b.name] as const));
 
-    bots.forEach(bot => {
-      socket.on(`bot:${bot.id}:trade`, (signal: any) => {
-        if (signal.action === 'buy' && signal.price) {
-          addPosition(bot.id, {
-            symbol: signal.symbol,
-            type: 'buy',
-            quantity: 0.001,
-            entryPrice: signal.price,
-            stopLoss: signal.stopLoss,
-            takeProfit: signal.takeProfit,
-          });
-          addToast('success', `${bot.name}: Bought ${signal.symbol} @ $${signal.price.toFixed(2)}`);
-        } else if (signal.action === 'sell') {
-          const liveBot = useAppStore.getState().bots.find(b => b.id === bot.id);
-          const pos = liveBot?.positions.find(p => p.symbol === signal.symbol);
-          if (pos) {
-            closePosition(bot.id, pos.id, signal.price);
-            addToast('info', `${bot.name}: Sold ${signal.symbol} @ $${signal.price.toFixed(2)}`);
-          }
+    for (const [id, name] of botsById) {
+      socket.on(`bot:${id}:trade`, (signal: any) => {
+        if (signal.executed) {
+          const verb = signal.action === 'buy' ? 'Bought' : 'Sold';
+          addToast('success', `${name}: ${verb} ${signal.symbol} @ $${Number(signal.price).toFixed(2)}`);
+          refresh();
         }
       });
 
-      // AI can dynamically update SL/TP per position
-      socket.on(`bot:${bot.id}:update_sltp`, (data: any) => {
-        const liveBot = useAppStore.getState().bots.find(b => b.id === bot.id);
-        const pos = liveBot?.positions.find(p => p.symbol === data.symbol);
-        if (pos && (data.stopLoss !== undefined || data.takeProfit !== undefined)) {
-          updatePositionSLTP(bot.id, pos.id, data.stopLoss, data.takeProfit);
-          addToast('info', `${bot.name}: SL/TP updated for ${data.symbol}`);
+      socket.on(`bot:${id}:update_sltp`, () => refresh());
+
+      socket.on(`bot:${id}:status`, (status: any) => {
+        if (status.error) {
+          addToast('error', `${name}: Engine error — ${status.error}`);
+          setEngineError(id, status.error);
         }
+        refresh();
       });
 
-      socket.on(`bot:${bot.id}:status`, (status: any) => {
-        if (status.running) {
-          addToast('success', `${bot.name}: AI engine started`);
-        } else if (status.error) {
-          addToast('error', `${bot.name}: Engine error — ${status.error}`);
-          updateBot(bot.id, { engineError: status.error });
-        } else {
-          addToast('warning', `${bot.name}: AI engine stopped`);
-        }
-      });
+      socket.on(`bot:${id}:log`, (log: any) => addBotLog(id, log));
 
-      // Collect decision engine logs
-      socket.on(`bot:${bot.id}:log`, (log: any) => {
-        addBotLog(bot.id, log);
-      });
-
-      // Forward Python stderr errors to the store
-      socket.on(`bot:${bot.id}:engineError`, (msg: string) => {
-        updateBot(bot.id, { engineError: msg });
-        addToast('error', `${bot.name}: ${msg}`);
-        // Stop the bot on auth failures so it doesn't stay "Running" while
-        // every cycle is doomed to 401.  The user can fix config and restart.
+      socket.on(`bot:${id}:engineError`, (msg: string) => {
+        setEngineError(id, msg);
+        addToast('error', `${name}: ${msg}`);
+        // Auth failures will fail every future cycle too — stop rather than
+        // leave the bot "Running" and burning through them.
         if (msg.includes('401') || msg.includes('Authentication failed') || msg.includes('Unauthorized')) {
-          stopBot(bot.id);
-          stopBotEngine(bot.id);
+          stopBot.mutate(id);
         }
       });
-    });
+    }
 
-    return () => {
-      socket.disconnect();
-    };
-  }, [bots.map(b => b.id).join(',')]);
+    // Server-side stop/target closes and any other position change.
+    socket.on('positions-changed', () => refresh());
 
-  const loadPrices = async () => {
-    try {
-      const data = await fetchCryptoPrices(activePairs);
-      const map: Record<string, any> = {};
-      data.forEach((d: any) => {
-        map[d.symbol] = d;
-      });
-      setPrices(map);
-
-      // Auto-close positions when SL or TP is hit
-      bots.forEach(bot => {
-        if (bot.status !== 'running') return;
-        bot.positions.forEach(pos => {
-          const cp = map[pos.symbol]?.price;
-          if (!cp) return;
-          if (pos.stopLoss) {
-            const slHit =
-              pos.type === 'buy'
-                ? cp <= pos.entryPrice * (1 - pos.stopLoss / 100)
-                : cp >= pos.entryPrice * (1 + pos.stopLoss / 100);
-            if (slHit) {
-              closePosition(bot.id, pos.id, cp, 'sl');
-              addToast('error', `${bot.name}: SL hit ${pos.symbol} @ $${cp.toFixed(2)}`);
-              return;
-            }
-          }
-          if (pos.takeProfit) {
-            const tpHit =
-              pos.type === 'buy'
-                ? cp >= pos.entryPrice * (1 + pos.takeProfit / 100)
-                : cp <= pos.entryPrice * (1 - pos.takeProfit / 100);
-            if (tpHit) {
-              closePosition(bot.id, pos.id, cp, 'tp');
-              addToast('success', `${bot.name}: TP hit ${pos.symbol} @ $${cp.toFixed(2)}`);
-              return;
-            }
-          }
-        });
-      });
-    } catch {}
-  };
-
-
+    return () => { socket.disconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botIdsKey]);
 
   const totalInvested = bots.reduce((s, b) => s + b.frozenAmount, 0);
   const totalPnl = bots.reduce((s, b) => s + b.totalPnl, 0);
@@ -203,34 +142,29 @@ export default function Trading() {
       ? ((bots.reduce((s, b) => s + b.winningTrades, 0) / totalTrades) * 100).toFixed(1)
       : '0.0';
 
-  const handleStartBotEngine = async (id: string) => {
-    startBot(id);
-    const target = bots.find(b => b.id === id);
-    if (!target) { stopBot(id); return; }
-    try {
-      const provider = target.botProvider || llmProvider || 'opencode';
-      const qModel = target.botQuickModel || quickModel || 'minimax-m2.5-free';
-      const dModel = target.botDeepModel || deepModel || 'minimax-m2.5-free';
-      await startBotEngine(target.id, target.symbols, target.stopLoss, target.takeProfit, target.interval, provider, qModel, dModel, target.name, target.allocationType, target.allocationValue);
-    } catch {
-      stopBot(id);
-      addToast('error', 'Failed to start bot engine. Check server logs.');
-    }
+  const handleStartBot = (id: string) => {
+    startBot.mutate(id, {
+      onError: (e: any) => addToast('error', `Failed to start bot: ${e.message}`),
+    });
   };
 
-  const handleStopBotEngine = (id: string) => {
-    stopBot(id);
-    stopBotEngine(id);
+  const handleStopBot = (id: string) => {
+    stopBot.mutate(id, {
+      onError: (e: any) => addToast('error', `Failed to stop bot: ${e.message}`),
+    });
   };
 
   const handleDeleteBot = (id: string) => {
-    if (confirm('Are you sure you want to delete this bot instance?')) {
-      deleteBot(id);
-      if (selectedBotId === id) {
-        setSelectedBotId(null);
-        setView('list');
-      }
-    }
+    if (!confirm('Are you sure you want to delete this bot instance?')) return;
+    deleteBot.mutate(id, {
+      onSuccess: () => {
+        if (selectedBotId === id) {
+          setSelectedBotId(null);
+          setView('list');
+        }
+      },
+      onError: (e: any) => addToast('error', `Failed to delete bot: ${e.message}`),
+    });
   };
 
   const handleCreateBot = (config: {
@@ -242,37 +176,44 @@ export default function Trading() {
     takeProfit?: number;
     interval: number;
   }) => {
-    const provider = llmProvider || 'opencode';
-    const qModel = quickModel || 'minimax-m2.5-free';
-    const dModel = deepModel || 'minimax-m2.5-free';
+    createBot.mutate(
+      {
+        ...config,
+        botProvider: llmProvider || 'opencode',
+        botQuickModel: quickModel || 'minimax-m2.5-free',
+        botDeepModel: deepModel || 'minimax-m2.5-free',
+        start: true,
+      },
+      {
+        onSuccess: () => {
+          addToast('success', `Bot "${config.name}" successfully created.`);
+          setView('list');
+        },
+        onError: (e: any) => addToast('error', `Could not create bot: ${e.message}`),
+      }
+    );
+  };
 
-    createBot({
-      ...config,
-      botProvider: provider,
-      botQuickModel: qModel,
-      botDeepModel: dModel,
+  const handleClosePosition = (_botId: string, posId: string, cp: number) => {
+    closePosition.mutate({ id: posId, price: cp });
+  };
+
+  const handleCloseAllPositions = (botId: string, priceMap: Record<string, number>) => {
+    closeAllPositions.mutate({ botId, prices: priceMap });
+  };
+
+  const handleUpdatePositionSLTP = (_botId: string, posId: string, sl?: number, tp?: number) => {
+    updatePositionSltp.mutate({ id: posId, stopLoss: sl, takeProfit: tp });
+  };
+
+  const handleUpdateBotSLTP = (botId: string, sl: number, tp: number) => {
+    updateBot.mutate({ id: botId, changes: { stopLoss: sl, takeProfit: tp } });
+  };
+
+  const handleUpdateBot = (botId: string, changes: Partial<Bot>) => {
+    updateBot.mutate({ id: botId, changes: changes as Record<string, unknown> }, {
+      onError: (e: any) => addToast('error', e.message),
     });
-
-    const state = useAppStore.getState();
-    const newBot = state.bots[state.bots.length - 1];
-    if (newBot) {
-      startBotEngine(
-        newBot.id,
-        newBot.symbols,
-        newBot.stopLoss,
-        newBot.takeProfit,
-        newBot.interval,
-        provider,
-        qModel,
-        dModel,
-        newBot.name,
-        newBot.allocationType,
-        newBot.allocationValue
-      );
-    }
-
-    addToast('success', `Bot "${config.name}" successfully created.`);
-    setView('list');
   };
 
   if (view === 'create') {
@@ -301,14 +242,14 @@ export default function Trading() {
           setSelectedBotId(null);
           setView('list');
         }}
-        onStartBot={handleStartBotEngine}
-        onStopBot={handleStopBotEngine}
+        onStartBot={handleStartBot}
+        onStopBot={handleStopBot}
         onDeleteBot={handleDeleteBot}
-        onClosePosition={closePosition}
-        onCloseAllPositions={closeAllPositions}
-        onUpdatePositionSLTP={updatePositionSLTP}
-        onUpdateBotSLTP={updateBotSLTP}
-        onUpdateBot={updateBot}
+        onClosePosition={handleClosePosition}
+        onCloseAllPositions={handleCloseAllPositions}
+        onUpdatePositionSLTP={handleUpdatePositionSLTP}
+        onUpdateBotSLTP={handleUpdateBotSLTP}
+        onUpdateBot={handleUpdateBot}
       />
     );
   }
@@ -346,8 +287,8 @@ export default function Trading() {
           setSelectedBotId(id);
           setView('detail');
         }}
-        onStartBot={handleStartBotEngine}
-        onStopBot={handleStopBotEngine}
+        onStartBot={handleStartBot}
+        onStopBot={handleStopBot}
         onDeleteBot={handleDeleteBot}
         onNavigateToCreate={() => setView('create')}
       />

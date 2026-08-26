@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useAppStore } from '../store/appStore';
+import { useTrading } from '../hooks/useTrading';
 import { createChart, IChartApi, ISeriesApi, ColorType, CandlestickData, Time } from 'lightweight-charts';
 import { fetchCryptoKlines } from '../lib/api';
 import { TrendingUp, TrendingDown, BarChart3, Wallet, Snowflake, LineChart, Trophy, Target, PieChart, Activity } from 'lucide-react';
@@ -17,7 +17,7 @@ const intervals = [
 ];
 
 export default function Dashboard() {
-  const { walletBalance, bots } = useAppStore();
+  const { walletBalance, bots } = useTrading();
   const totalPnl = bots.reduce((s, b) => s + b.totalPnl, 0);
   const totalFrozen = bots.reduce((s, b) => s + b.frozenAmount, 0);
   const totalTrades = bots.reduce((s, b) => s + b.closedTrades, 0);
