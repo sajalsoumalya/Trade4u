@@ -1,4 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+/* tailwind.config.js has declared JetBrains Mono as the `font-mono` family all
+   along, and prices, model ids and tickers use it — but it was never loaded, so
+   every one of those fell back to the OS monospace. */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -366,4 +370,37 @@ body {
 /* Focus visible */
 *:focus-visible {
   @apply outline-none ring-2 ring-primary/50 ring-offset-2 ring-offset-background;
+}
+
+/* Rating ladder (sign-in page): the marker travels the scale once and settles,
+   showing the shape of what the agent desk actually emits. */
+@keyframes ladder-settle {
+  0%   { transform: translateY(-210%); opacity: 0; }
+  35%  { opacity: 1; }
+  70%  { transform: translateY(18%); }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.ladder-marker {
+  animation: ladder-settle 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes tier-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.tier-row {
+  opacity: 0;
+  animation: tier-in 0.45s ease-out forwards;
+}
+
+/* Anyone who has asked for less motion gets the final state immediately. */
+@media (prefers-reduced-motion: reduce) {
+  .ladder-marker,
+  .tier-row {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }

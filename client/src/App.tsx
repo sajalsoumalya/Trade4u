@@ -230,8 +230,10 @@ function App() {
     );
   }
 
-  const demoMode = localStorage.getItem('demoMode') === 'true';
-  const isAuthenticated = user || demoMode;
+  // Signing in is the only way through. The previous demo-mode escape hatch
+  // read a localStorage flag, which anyone could set by hand to skip auth
+  // entirely; it went away with the button that set it.
+  const isAuthenticated = !!user;
 
   return (
     <BrowserRouter>
