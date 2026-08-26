@@ -12,12 +12,15 @@ import { ArrowRight, Eye, EyeOff } from 'lucide-react';
  * Emerald and red are reserved for the ends of this scale — they carry
  * direction here, so they are not used decoratively anywhere on this page.
  */
+// Bar lengths are explicit pixels, not w-full / w-4/5 / w-1/2: those resolve
+// against the row's width and then clamp to the same max, so every tier came
+// out identical and the shape of the scale disappeared.
 const TIERS = [
-  { label: 'BUY', color: '#10b981', weight: 'w-full' },
-  { label: 'OVERWEIGHT', color: '#34d399', weight: 'w-4/5' },
-  { label: 'HOLD', color: '#6b7280', weight: 'w-1/2' },
-  { label: 'UNDERWEIGHT', color: '#f87171', weight: 'w-4/5' },
-  { label: 'SELL', color: '#ef4444', weight: 'w-full' },
+  { label: 'BUY', color: '#10b981', bar: 92 },
+  { label: 'OVERWEIGHT', color: '#34d399', bar: 68 },
+  { label: 'HOLD', color: '#6b7280', bar: 40 },
+  { label: 'UNDERWEIGHT', color: '#f87171', bar: 68 },
+  { label: 'SELL', color: '#ef4444', bar: 92 },
 ];
 
 // Where the marker settles. Hold is the honest modal answer for a desk that
@@ -149,26 +152,29 @@ export default function Login() {
 
           {/* Signature: the actual output scale. */}
           <div className="mt-11 max-w-sm">
-            <div className="relative flex flex-col gap-[7px] pl-5">
-              {/* Marker rides the axis and settles on one tier. */}
-              <div
-                className="absolute left-0 top-0 h-[26px] w-[3px] rounded-full bg-white ladder-marker"
-                style={{ top: `${SETTLES_ON * 33}px` }}
-                aria-hidden="true"
-              />
+            <div className="flex flex-col gap-[7px]">
               {TIERS.map((tier, i) => {
                 const active = i === SETTLES_ON;
                 return (
                   <div
                     key={tier.label}
-                    className="tier-row flex items-center gap-3.5"
+                    className="tier-row relative flex h-5 items-center gap-3.5 pl-5"
                     style={{ animationDelay: `${0.55 + i * 0.07}s` }}
                   >
+                    {/* The marker lives in the active row, so it lands aligned
+                        without anyone having to know the row pitch. Its
+                        keyframe travels from above in its own height. */}
+                    {active && (
+                      <span
+                        className="ladder-marker absolute left-0 top-[3px] h-[14px] w-[3px] rounded-full bg-white"
+                        aria-hidden="true"
+                      />
+                    )}
                     <span
-                      className={`h-[6px] rounded-full transition-opacity ${tier.weight}`}
+                      className="h-[6px] rounded-full"
                       style={{
+                        width: `${tier.bar}px`,
                         backgroundColor: tier.color,
-                        maxWidth: '92px',
                         opacity: active ? 1 : 0.28,
                       }}
                     />
@@ -180,7 +186,7 @@ export default function Login() {
                     </span>
                     {active && (
                       <span className="font-mono text-[10px] tracking-[0.1em] text-muted">
-                        ← today, on most names
+                        ← most names, most days
                       </span>
                     )}
                   </div>

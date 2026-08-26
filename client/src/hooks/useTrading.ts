@@ -17,7 +17,17 @@ const BALANCE_KEY = ['trading', 'balance'];
  */
 const MIGRATION_FLAG = 'trade4u-bots-migrated';
 
-function readLegacyBots(): unknown[] {
+/**
+ * Snapshot taken at module load, before anything can overwrite it.
+ *
+ * The store no longer persists `bots`, so the first time Zustand writes its
+ * partialized state the legacy array is dropped from localStorage. Any setter
+ * firing before the import request lands — the Settings page restoring config,
+ * say — would take those bots with it, so the read happens once, up front.
+ */
+const LEGACY_BOTS: unknown[] = readLegacyBotsFromStorage();
+
+function readLegacyBotsFromStorage(): unknown[] {
   if (localStorage.getItem(MIGRATION_FLAG)) return [];
   try {
     const raw = localStorage.getItem('trade4u-settings');
@@ -73,7 +83,7 @@ export function useTrading() {
   useEffect(() => {
     if (migrated.current || botsQuery.data === undefined) return;
     migrated.current = true;
-    const legacy = readLegacyBots();
+    const legacy = LEGACY_BOTS;
     if (legacy.length === 0) {
       localStorage.setItem(MIGRATION_FLAG, '1');
       return;

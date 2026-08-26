@@ -130,7 +130,14 @@ export function normalizeBaseUrl(raw) {
   if (!raw || typeof raw !== 'string') return '';
   let url = raw.trim();
   if (!url) return '';
-  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  if (!/^https?:\/\//i.test(url)) {
+    // A bare host needs a scheme. Loopback and private ranges are where local
+    // model servers live (Ollama, LM Studio, vLLM, LiteLLM) and they serve
+    // plain HTTP, so defaulting those to https would break the commonest
+    // reason to reach for a custom endpoint at all.
+    const isLocal = /^(localhost|127\.0\.0\.1|\[?::1\]?|0\.0\.0\.0|host\.docker\.internal|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(url);
+    url = `${isLocal ? 'http' : 'https'}://${url}`;
+  }
   url = url.replace(/\/+$/, '');
   url = url.replace(/\/(chat\/completions|completions|models)$/i, '');
   return url;
@@ -272,8 +279,14 @@ export async function testConnection(providerName, apiKey, modelId, baseUrl) {
   }
 
   let llmResponse = null;
+  const target = modelId || (p.fallbackModels || [])[0];
+  // A custom endpoint has no suggestion list to borrow a name from, so with no
+  // model chosen yet there is nothing to send. Report the key check alone
+  // rather than posting a request with no model and surfacing its complaint.
+  if (keyOk && !target) {
+    return { ok: true, error: null, endpointUrl, llmResponse: 'Key accepted — pick a model to test a call', keyOk };
+  }
   if (keyOk && (apiKey || p.keyOptional)) {
-    const target = modelId || (p.fallbackModels || [])[0];
     try {
       const r = await fetch(chatUrl(p, apiKey, target), {
         method: 'POST',

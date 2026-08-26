@@ -208,13 +208,15 @@ export default function Settings() {
     // configured (a no-key provider like opencode, or one that has a key). This
     // way updating just the Main engine never forces you to set up the Fallback
     // or shows a spurious "fallback key required" error.
-    const isConfigured = (provider: string, key: string) =>
+    // The base URL is passed in explicitly: inferring the slot from the
+    // provider name breaks when both engines are set to 'custom', because then
+    // the main engine matches the fallback provider and reads the wrong URL.
+    const isConfigured = (provider: string, key: string, baseUrl: string) =>
       (provider === 'opencode' || (!!key && key.trim() !== '' && key !== 'Not set')) &&
       // A custom engine is only "configured" once it has somewhere to call.
-      (!needsBaseUrl(provider) ||
-        !!(provider === fallbackProvider ? fallbackCustomBaseUrl : customBaseUrl).trim());
+      (!needsBaseUrl(provider) || !!baseUrl.trim());
 
-    if (isConfigured(llmProvider, apiKey)) {
+    if (isConfigured(llmProvider, apiKey, customBaseUrl)) {
       try {
         setConnectionStatus(await testConnection(llmProvider, apiKey, false, quickModel || deepModel || undefined, customBaseUrl || undefined));
       } catch (e: any) {
@@ -224,7 +226,7 @@ export default function Settings() {
       setConnectionStatus(null);
     }
 
-    if (isConfigured(fallbackProvider, fallbackApiKey)) {
+    if (isConfigured(fallbackProvider, fallbackApiKey, fallbackCustomBaseUrl)) {
       try {
         setFallbackConnectionStatus(await testConnection(fallbackProvider, fallbackApiKey, true, fallbackQuickModel || fallbackDeepModel || undefined, fallbackCustomBaseUrl || undefined));
       } catch (e: any) {

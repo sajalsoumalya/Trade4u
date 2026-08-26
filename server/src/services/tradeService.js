@@ -294,6 +294,14 @@ export function deleteBot(uid, id) {
 
 // ------------------------------------------------------------------ positions
 
+/**
+ * Archive a position and settle its history row.
+ *
+ * Every close path goes through here — a manual close, a stop or target, a bot
+ * being stopped, a bot being deleted — so the trade_history update belongs here
+ * too. Doing it only at the manual-close call site left stopping or deleting a
+ * bot with rows still marked 'open' for positions that no longer exist.
+ */
 function recordClose(p, exitPrice, status, pnl, fee) {
   const principal = p.entry_price * p.quantity;
   db.prepare(`
@@ -305,6 +313,7 @@ function recordClose(p, exitPrice, status, pnl, fee) {
     p.stop_loss, p.take_profit, pnl, principal > 0 ? (pnl / principal) * 100 : 0,
     fee, status, p.opened_at, nowIso(),
   );
+  db.prepare("UPDATE trade_history SET status = 'closed', pnl = ? WHERE id = ?").run(pnl, p.id);
 }
 
 /**
@@ -364,7 +373,6 @@ export function closePosition(uid, positionId, exitPrice, status = 'closed') {
   db.transaction(() => {
     recordClose(p, exit, status, netPnl, fee);
     db.prepare('DELETE FROM positions WHERE id = ?').run(positionId);
-    db.prepare("UPDATE trade_history SET status = 'closed', pnl = ? WHERE id = ?").run(netPnl, positionId);
     addToWallet(uid, netPnl);
   })();
 

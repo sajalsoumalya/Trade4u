@@ -374,10 +374,13 @@ body {
 
 /* Rating ladder (sign-in page): the marker travels the scale once and settles,
    showing the shape of what the agent desk actually emits. */
+/* Percentages resolve against the marker's own height (14px), so -400% is
+   roughly the two rows above the tier it settles on. The element is centred
+   with `top`, not a transform, so this animation has the transform to itself. */
 @keyframes ladder-settle {
-  0%   { transform: translateY(-210%); opacity: 0; }
+  0%   { transform: translateY(-400%); opacity: 0; }
   35%  { opacity: 1; }
-  70%  { transform: translateY(18%); }
+  75%  { transform: translateY(14%); }
   100% { transform: translateY(0); opacity: 1; }
 }
 
