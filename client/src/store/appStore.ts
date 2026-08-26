@@ -85,6 +85,7 @@ interface AppState {
   /** Last engine error seen per bot, surfaced on the bot detail view. */
   engineErrors: Record<string, string>;
   setEngineError: (botId: string, msg: string) => void;
+  clearEngineError: (botId: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -118,6 +119,10 @@ export const useAppStore = create<AppState>()(
       engineErrors: {},
       setEngineError: (botId, msg) =>
         set({ engineErrors: { ...get().engineErrors, [botId]: msg } }),
+      clearEngineError: (botId) => {
+        const { [botId]: _removed, ...rest } = get().engineErrors;
+        set({ engineErrors: rest });
+      },
     }),
     {
       name: 'trade4u-settings',

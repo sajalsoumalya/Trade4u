@@ -378,11 +378,19 @@ export function closeAllForBot(uid, botId, prices = {}) {
     .filter(Boolean);
 }
 
+/**
+ * Set or clear a position's stop-loss / take-profit.
+ *
+ * `undefined` (key absent from the request) leaves the current value alone;
+ * an explicit `null` clears it. Collapsing the two — as `??` would — makes
+ * removing a stop impossible, since JSON.stringify drops undefined keys.
+ */
 export function updatePositionSltp(uid, positionId, stopLoss, takeProfit) {
   const p = db.prepare("SELECT * FROM positions WHERE id = ? AND uid = ? AND status = 'open'").get(positionId, uid);
   if (!p) return null;
+  const keepOr = (incoming, current) => (incoming === undefined ? current : incoming);
   db.prepare('UPDATE positions SET stop_loss = ?, take_profit = ? WHERE id = ?')
-    .run(stopLoss ?? p.stop_loss, takeProfit ?? p.take_profit, positionId);
+    .run(keepOr(stopLoss, p.stop_loss), keepOr(takeProfit, p.take_profit), positionId);
   return mapPosition(db.prepare('SELECT * FROM positions WHERE id = ?').get(positionId));
 }
 

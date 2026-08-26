@@ -3,8 +3,8 @@ import { useAppStore } from '../store/appStore';
 import { useTrading } from '../hooks/useTrading';
 import { Save, Check, Brain, Cpu, Key, Wallet, Sparkles, RefreshCw, Eye, EyeOff, Wifi, WifiOff, RotateCw, Pencil, X, Zap, Activity } from 'lucide-react';
 import { saveLlmConfig, loadLlmConfig, fetchModelsFromProvider, testConnection, startBotEngine, stopBotEngine } from '../lib/api';
+import type { ModelEntry } from '../lib/api';
 
-interface ModelEntry { id: string; name: string; cost: string; context: number; maxOutput: number; capabilities: string[] }
 
 const llmProviders = [
   { id: 'opencode', name: 'OpenCode' },
@@ -14,6 +14,9 @@ const llmProviders = [
   { id: 'deepseek', name: 'DeepSeek' },
   { id: 'nvidia_nim', name: 'NVIDIA NIM' },
   { id: 'openrouter', name: 'OpenRouter' },
+  { id: 'xai', name: 'xAI (Grok)' },
+  { id: 'qwen', name: 'Qwen' },
+  { id: 'glm', name: 'GLM (Z.ai)' },
 ];
 
 function maskApiKey(key: string): string {

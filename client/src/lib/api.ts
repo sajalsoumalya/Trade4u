@@ -135,7 +135,13 @@ export const closePositionApi = (positionId: string, price: number, status?: str
 export const closeAllPositionsApi = (botId: string, prices: Record<string, number>) =>
   req(`/trading/bots/${botId}/close-all`, { method: 'POST', body: JSON.stringify({ prices }) });
 
-export const updatePositionSltpApi = (positionId: string, stopLoss?: number, takeProfit?: number) =>
+// null clears the level, a number sets it. Passing undefined would be dropped
+// by JSON.stringify and read on the server as "leave unchanged".
+export const updatePositionSltpApi = (
+  positionId: string,
+  stopLoss: number | null,
+  takeProfit: number | null,
+) =>
   req(`/trading/positions/${positionId}/sltp`, {
     method: 'PATCH',
     body: JSON.stringify({ stopLoss, takeProfit }),
@@ -180,12 +186,26 @@ export const testConnection = async (provider: string, apiKey?: string, isFallba
   try { return JSON.parse(text); } catch { return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 100)}` }; }
 };
 
-export const fetchModelsFromProvider = async (provider: string, apiKey?: string) => {
+export interface ModelEntry {
+  id: string;
+  name: string;
+  cost: string;
+  context: number;
+  maxOutput: number;
+  capabilities: string[];
+}
+
+/** `source` is 'live' when the provider answered, 'fallback' for suggestions. */
+export const fetchModelsFromProvider = async (
+  provider: string,
+  apiKey?: string,
+): Promise<{ models: ModelEntry[]; source?: string }> => {
   const res = await fetch(`${API_BASE}/trading/models/fetch`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify({ provider, apiKey })
   });
+  if (!res.ok) return { models: [], source: 'fallback' };
   return res.json();
 };
 

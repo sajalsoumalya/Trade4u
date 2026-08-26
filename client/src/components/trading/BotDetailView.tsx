@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Bot, Position } from '../../store/appStore';
+import { useState, useEffect } from 'react';
+import { Bot } from '../../store/appStore';
 import {
   ArrowLeft,
   Zap,
@@ -19,6 +19,7 @@ import { PositionsTab } from './PositionsTab';
 import { ClosedPositionsTab } from './ClosedPositionsTab';
 import { LogTerminalTab } from './LogTerminalTab';
 import { fetchBotLogs } from '../../lib/api';
+import { AlertTriangle } from 'lucide-react';
 
 interface BotDetailViewProps {
   bot: Bot;
@@ -26,16 +27,17 @@ interface BotDetailViewProps {
   pairNames: Record<string, string>;
   allPairs: string[];
   logs: any[];
-  walletBalance: number;
   onBack: () => void;
   onStartBot: (id: string) => void;
   onStopBot: (id: string) => void;
   onDeleteBot: (id: string) => void;
   onClosePosition: (botId: string, posId: string, cp: number) => void;
   onCloseAllPositions: (botId: string, prices: Record<string, number>) => void;
-  onUpdatePositionSLTP: (botId: string, posId: string, sl?: number, tp?: number) => void;
-  onUpdateBotSLTP: (botId: string, sl: number, tp: number) => void;
-  onUpdateBot: (botId: string, changes: Partial<Bot>) => void;
+  onUpdatePositionSLTP: (botId: string, posId: string, sl: number | null, tp: number | null) => void;
+  onUpdateBotSLTP: (botId: string, sl: number | null, tp: number | null) => void;
+  onUpdateBot: (botId: string, changes: Record<string, unknown>) => void;
+  onClearEngineError: (botId: string) => void;
+  busy?: boolean;
 }
 
 export function BotDetailView({
@@ -44,7 +46,6 @@ export function BotDetailView({
   pairNames,
   allPairs,
   logs,
-  walletBalance,
   onBack,
   onStartBot,
   onStopBot,
@@ -54,6 +55,8 @@ export function BotDetailView({
   onUpdatePositionSLTP,
   onUpdateBotSLTP,
   onUpdateBot,
+  onClearEngineError,
+  busy = false,
 }: BotDetailViewProps) {
   const [detailTab, setDetailTab] = useState<'open' | 'history' | 'logs'>('open');
   const [isEditingBot, setIsEditingBot] = useState(false);
@@ -71,7 +74,7 @@ export function BotDetailView({
       }
       setLogCount(seen.size);
     }).catch(() => setLogCount(logs.length));
-  }, [bot.id, logs]);
+  }, [bot.id, logs.length]);
 
   // Edit bot config states
   const [editName, setEditName] = useState(bot.name);
@@ -204,14 +207,16 @@ export function BotDetailView({
           <>
             <button
               onClick={() => onStopBot(bot.id)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary/10 hover:bg-secondary/20 text-secondary border border-secondary/20 text-sm font-semibold transition-all"
+              disabled={busy}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary/10 hover:bg-secondary/20 text-secondary border border-secondary/20 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Square className="w-4 h-4" /> Stop Engine
             </button>
             {bot.positions.length > 0 && (
               <button
                 onClick={handleCloseAll}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary/10 hover:bg-secondary/20 text-secondary border border-secondary/20 text-sm font-semibold transition-all"
+                disabled={busy}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary/10 hover:bg-secondary/20 text-secondary border border-secondary/20 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <XCircle className="w-4 h-4" /> Close Positions
               </button>
@@ -220,7 +225,8 @@ export function BotDetailView({
         ) : (
           <button
             onClick={() => onStartBot(bot.id)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-sm font-semibold transition-all"
+            disabled={busy}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Play className="w-4 h-4" /> Start Engine
           </button>
@@ -233,11 +239,22 @@ export function BotDetailView({
         </button>
         <button
           onClick={() => onDeleteBot(bot.id)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/5 text-muted hover:text-secondary border border-border text-sm font-semibold transition-all"
+          disabled={busy}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/5 text-muted hover:text-secondary border border-border text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Trash2 className="w-4 h-4" /> Delete Bot
         </button>
       </div>
+
+      {bot.status === 'running' && bot.engineRunning === false && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3.5 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+          <p className="text-xs text-amber-500 font-medium flex-1">
+            <span className="font-bold">Engine not running.</span> This bot is marked active but has no
+            live process — it will not trade. Stop and start it to respawn the engine.
+          </p>
+        </div>
+      )}
 
       {/* Engine Error Indicator */}
       {bot.engineError && (
@@ -247,7 +264,7 @@ export function BotDetailView({
             <span className="font-bold">Execution Error:</span> {bot.engineError}
           </p>
           <button
-            onClick={() => onUpdateBot(bot.id, { engineError: undefined })}
+            onClick={() => onClearEngineError(bot.id)}
             className="text-muted hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
@@ -285,7 +302,7 @@ export function BotDetailView({
                 <span className="text-secondary text-xs font-semibold">%</span>
                 <button
                   onClick={() => {
-                    onUpdateBotSLTP(bot.id, botSLEdit, bot.takeProfit || 0);
+                    onUpdateBotSLTP(bot.id, botSLEdit, bot.takeProfit ?? null);
                     setEditingBotSL(false);
                   }}
                   className="text-primary hover:text-white"
@@ -294,7 +311,7 @@ export function BotDetailView({
                 </button>
                 <button
                   onClick={() => {
-                    onUpdateBot(bot.id, { stopLoss: undefined });
+                    onUpdateBot(bot.id, { stopLoss: null });
                     setEditingBotSL(false);
                   }}
                   className="text-muted hover:text-white"
@@ -353,7 +370,7 @@ export function BotDetailView({
                 <span className="text-primary text-xs font-semibold">%</span>
                 <button
                   onClick={() => {
-                    onUpdateBotSLTP(bot.id, bot.stopLoss || 0, botTPEdit);
+                    onUpdateBotSLTP(bot.id, bot.stopLoss ?? null, botTPEdit);
                     setEditingBotTP(false);
                   }}
                   className="text-primary hover:text-white"
@@ -362,7 +379,7 @@ export function BotDetailView({
                 </button>
                 <button
                   onClick={() => {
-                    onUpdateBot(bot.id, { takeProfit: undefined });
+                    onUpdateBot(bot.id, { takeProfit: null });
                     setEditingBotTP(false);
                   }}
                   className="text-muted hover:text-white"
@@ -474,6 +491,7 @@ export function BotDetailView({
             onClosePosition={(posId, cp) => onClosePosition(bot.id, posId, cp)}
             onCloseAllPositions={handleCloseAll}
             onUpdatePositionSLTP={(posId, sl, tp) => onUpdatePositionSLTP(bot.id, posId, sl, tp)}
+            busy={busy}
           />
         )}
         {detailTab === 'history' && (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Bot } from '../../store/appStore';
 import { Plus, Play, Square, Trash2, ChevronRight, BarChart3 } from 'lucide-react';
 
@@ -14,6 +14,8 @@ interface BotListTableProps {
   onStopBot: (id: string) => void;
   onDeleteBot: (id: string) => void;
   onNavigateToCreate: () => void;
+  busy?: boolean;
+  isLoading?: boolean;
 }
 
 export function BotListTable({
@@ -28,6 +30,8 @@ export function BotListTable({
   onStopBot,
   onDeleteBot,
   onNavigateToCreate,
+  busy = false,
+  isLoading = false,
 }: BotListTableProps) {
   const [tab, setTab] = useState<'running' | 'all'>('running');
 
@@ -76,7 +80,19 @@ export function BotListTable({
         </div>
       </div>
 
-      {bots.length === 0 ? (
+      {isLoading && bots.length === 0 ? (
+        // Bots come from the server now, so the first paint has nothing yet —
+        // show a skeleton instead of briefly claiming there are no bots.
+        <div className="p-6 space-y-3">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="flex items-center gap-4 animate-pulse">
+              <div className="h-9 flex-1 rounded-lg bg-white/5" />
+              <div className="h-9 w-24 rounded-lg bg-white/5" />
+              <div className="h-9 w-24 rounded-lg bg-white/5" />
+            </div>
+          ))}
+        </div>
+      ) : bots.length === 0 ? (
         <div className="p-12 text-center">
           <div className="w-14 h-14 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4 border border-border">
             <BarChart3 className="w-6 h-6 text-muted" />
@@ -137,6 +153,9 @@ export function BotListTable({
                             }`}
                           />
                           {bot.status === 'running' ? 'Running' : 'Stopped'}
+                          {bot.status === 'running' && bot.engineRunning === false && (
+                            <span title="Marked active but no live engine process" className="text-amber-500 font-bold">!</span>
+                          )}
                         </span>
                       </td>
                       <td className="p-4 text-right text-sm font-mono text-white">${bot.frozenAmount.toLocaleString()}</td>
@@ -155,7 +174,8 @@ export function BotListTable({
                           {bot.status === 'running' ? (
                             <button
                               onClick={() => onStopBot(bot.id)}
-                              className="p-1.5 rounded hover:bg-white/5 text-secondary transition-all"
+                              disabled={busy}
+                            className="p-1.5 rounded hover:bg-white/5 text-secondary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Stop Bot Engine"
                             >
                               <Square className="w-4 h-4" />
@@ -163,7 +183,8 @@ export function BotListTable({
                           ) : (
                             <button
                               onClick={() => onStartBot(bot.id)}
-                              className="p-1.5 rounded hover:bg-white/5 text-primary transition-all"
+                              disabled={busy}
+                            className="p-1.5 rounded hover:bg-white/5 text-primary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Start Bot Engine"
                             >
                               <Play className="w-4 h-4" />
@@ -171,7 +192,8 @@ export function BotListTable({
                           )}
                           <button
                             onClick={() => onDeleteBot(bot.id)}
-                            className="p-1.5 rounded hover:bg-white/5 text-muted hover:text-secondary transition-all"
+                            disabled={busy}
+                            className="p-1.5 rounded hover:bg-white/5 text-muted hover:text-secondary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Delete Bot"
                           >
                             <Trash2 className="w-4 h-4" />

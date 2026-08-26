@@ -209,7 +209,6 @@ export default function Analysis() {
 
   const socketRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
-  const stageIntervalRef = useRef<any>(null);
 
   useEffect(() => {
     loadHistory();

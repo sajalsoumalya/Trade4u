@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useAppStore, Bot } from '../store/appStore';
+import { useAppStore } from '../store/appStore';
 import { fetchCryptoPrices, fetchBinanceSymbols } from '../lib/api';
 import { useTrading } from '../hooks/useTrading';
 import { io } from 'socket.io-client';
@@ -29,7 +29,7 @@ function buildPairNames(symbols: string[]): Record<string, string> {
 }
 
 export default function Trading() {
-  const { llmProvider, quickModel, deepModel, botLogs, addBotLog, setEngineError } = useAppStore();
+  const { llmProvider, quickModel, deepModel, botLogs, addBotLog, setEngineError, clearEngineError } = useAppStore();
   const {
     bots,
     walletBalance,
@@ -42,7 +42,16 @@ export default function Trading() {
     closeAllPositions,
     updatePositionSltp,
     refresh,
+    isLoading,
+    error,
   } = useTrading();
+
+  // Any in-flight write disables the destructive controls, so a double click
+  // cannot open or close a position twice.
+  const busy =
+    createBot.isPending || updateBot.isPending || deleteBot.isPending ||
+    startBot.isPending || stopBot.isPending || closePosition.isPending ||
+    closeAllPositions.isPending || updatePositionSltp.isPending;
 
   const [prices, setPrices] = useState<Record<string, any>>({});
   const [view, setView] = useState<'list' | 'create' | 'detail'>('list');
@@ -202,16 +211,18 @@ export default function Trading() {
     closeAllPositions.mutate({ botId, prices: priceMap });
   };
 
-  const handleUpdatePositionSLTP = (_botId: string, posId: string, sl?: number, tp?: number) => {
+  const handleUpdatePositionSLTP = (
+    _botId: string, posId: string, sl: number | null, tp: number | null,
+  ) => {
     updatePositionSltp.mutate({ id: posId, stopLoss: sl, takeProfit: tp });
   };
 
-  const handleUpdateBotSLTP = (botId: string, sl: number, tp: number) => {
+  const handleUpdateBotSLTP = (botId: string, sl: number | null, tp: number | null) => {
     updateBot.mutate({ id: botId, changes: { stopLoss: sl, takeProfit: tp } });
   };
 
-  const handleUpdateBot = (botId: string, changes: Partial<Bot>) => {
-    updateBot.mutate({ id: botId, changes: changes as Record<string, unknown> }, {
+  const handleUpdateBot = (botId: string, changes: Record<string, unknown>) => {
+    updateBot.mutate({ id: botId, changes }, {
       onError: (e: any) => addToast('error', e.message),
     });
   };
@@ -237,7 +248,6 @@ export default function Trading() {
         pairNames={pairNames}
         allPairs={allPairs}
         logs={botLogs[selectedBot.id] || []}
-        walletBalance={walletBalance}
         onBack={() => {
           setSelectedBotId(null);
           setView('list');
@@ -250,6 +260,8 @@ export default function Trading() {
         onUpdatePositionSLTP={handleUpdatePositionSLTP}
         onUpdateBotSLTP={handleUpdateBotSLTP}
         onUpdateBot={handleUpdateBot}
+        onClearEngineError={clearEngineError}
+        busy={busy}
       />
     );
   }
@@ -265,6 +277,21 @@ export default function Trading() {
           <Plus className="w-4 h-4 text-black" /> Create Trading Bot
         </button>
       </div>
+
+      {error && (
+        <div className="bg-secondary/10 border border-secondary/20 rounded-xl px-4 py-3.5 flex items-center gap-3">
+          <p className="text-xs text-secondary font-medium flex-1">
+            <span className="font-bold">Cannot reach the server.</span> Bots and balances below may be
+            out of date — {error.message}
+          </p>
+          <button
+            onClick={refresh}
+            className="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white border border-border font-semibold"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       <TradingStats
         walletBalance={walletBalance}
@@ -291,6 +318,8 @@ export default function Trading() {
         onStopBot={handleStopBot}
         onDeleteBot={handleDeleteBot}
         onNavigateToCreate={() => setView('create')}
+        busy={busy}
+        isLoading={isLoading}
       />
     </div>
   );

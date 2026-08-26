@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Bot, Position } from '../../store/appStore';
 import { BarChart3, Check, X, PencilLine } from 'lucide-react';
+import { formatQuantity, formatPrice } from '../../lib/format';
 
 interface PositionsTabProps {
   bot: Bot;
@@ -8,7 +9,8 @@ interface PositionsTabProps {
   pairNames: Record<string, string>;
   onClosePosition: (posId: string, cp: number) => void;
   onCloseAllPositions: () => void;
-  onUpdatePositionSLTP: (posId: string, sl?: number, tp?: number) => void;
+  onUpdatePositionSLTP: (posId: string, sl: number | null, tp: number | null) => void;
+  busy?: boolean;
 }
 
 export function PositionsTab({
@@ -18,6 +20,7 @@ export function PositionsTab({
   onClosePosition,
   onCloseAllPositions,
   onUpdatePositionSLTP,
+  busy = false,
 }: PositionsTabProps) {
   const [editingPosId, setEditingPosId] = useState<string | null>(null);
   const [editSL, setEditSL] = useState('');
@@ -30,9 +33,13 @@ export function PositionsTab({
   };
 
   const handleSave = (posId: string) => {
-    const sl = editSL ? parseFloat(editSL) : undefined;
-    const tp = editTP ? parseFloat(editTP) : undefined;
-    onUpdatePositionSLTP(posId, sl, tp);
+    // An emptied input clears the level; null survives JSON, undefined would
+    // be dropped and read on the server as "leave unchanged".
+    const parse = (raw: string) => {
+      const n = parseFloat(raw);
+      return raw.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null;
+    };
+    onUpdatePositionSLTP(posId, parse(editSL), parse(editTP));
     setEditingPosId(null);
   };
 
@@ -52,7 +59,8 @@ export function PositionsTab({
             <h4 className="text-xs font-semibold text-muted uppercase tracking-wider">Active Holdings</h4>
             <button
               onClick={onCloseAllPositions}
-              className="text-xs px-3 py-1.5 rounded-lg bg-secondary/10 hover:bg-secondary/20 text-secondary border border-secondary/20 transition-all font-semibold"
+              disabled={busy}
+              className="text-xs px-3 py-1.5 rounded-lg bg-secondary/10 hover:bg-secondary/20 text-secondary border border-secondary/20 transition-all font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Close All Positions
             </button>
@@ -100,9 +108,9 @@ export function PositionsTab({
                           {pos.type.toUpperCase()}
                         </span>
                       </td>
-                      <td className="p-4 text-right text-sm font-mono text-white">{pos.quantity}</td>
-                      <td className="p-4 text-right text-sm font-mono text-white">${pos.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td className="p-4 text-right text-sm font-mono text-white">${cp.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="p-4 text-right text-sm font-mono text-white">{formatQuantity(pos.quantity)}</td>
+                      <td className="p-4 text-right text-sm font-mono text-white">${formatPrice(pos.entryPrice)}</td>
+                      <td className="p-4 text-right text-sm font-mono text-white">${formatPrice(cp)}</td>
                       <td className="p-4 text-right">
                         {isEditing ? (
                           <div className="flex items-center justify-end gap-1">
@@ -170,7 +178,8 @@ export function PositionsTab({
                         ) : (
                           <button
                             onClick={() => onClosePosition(pos.id, cp)}
-                            className="text-xs px-3 py-1.5 rounded-lg bg-secondary/10 hover:bg-secondary/20 text-secondary border border-secondary/20 transition-all font-semibold"
+                            disabled={busy}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-secondary/10 hover:bg-secondary/20 text-secondary border border-secondary/20 transition-all font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             Close
                           </button>
@@ -231,7 +240,8 @@ export function PositionsTab({
                         </button>
                         <button
                           onClick={() => onClosePosition(pos.id, cp)}
-                          className="text-xs px-2.5 py-1.5 rounded bg-secondary/10 text-secondary border border-secondary/20 font-semibold"
+                          disabled={busy}
+                          className="text-xs px-2.5 py-1.5 rounded bg-secondary/10 text-secondary border border-secondary/20 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           Close
                         </button>
@@ -242,15 +252,15 @@ export function PositionsTab({
                   <div className="grid grid-cols-2 gap-2 text-xs mb-3 text-muted">
                     <div>
                       <span>Quantity</span>
-                      <p className="text-white font-mono font-medium">{pos.quantity}</p>
+                      <p className="text-white font-mono font-medium">{formatQuantity(pos.quantity)}</p>
                     </div>
                     <div>
                       <span>Entry Price</span>
-                      <p className="text-white font-mono font-medium">${pos.entryPrice.toLocaleString()}</p>
+                      <p className="text-white font-mono font-medium">${formatPrice(pos.entryPrice)}</p>
                     </div>
                     <div>
                       <span>Mark Price</span>
-                      <p className="text-white font-mono font-medium">${cp.toLocaleString()}</p>
+                      <p className="text-white font-mono font-medium">${formatPrice(cp)}</p>
                     </div>
                     <div>
                       <span>Holding PNL</span>

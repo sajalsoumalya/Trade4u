@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, Settings2, Zap } from 'lucide-react';
 
 interface CreateBotFormProps {

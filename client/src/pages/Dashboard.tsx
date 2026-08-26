@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTrading } from '../hooks/useTrading';
-import { createChart, IChartApi, ISeriesApi, ColorType, CandlestickData, Time } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, ColorType, Time } from 'lightweight-charts';
 import { fetchCryptoKlines } from '../lib/api';
 import { TrendingUp, TrendingDown, BarChart3, Wallet, Snowflake, LineChart, Trophy, Target, PieChart, Activity } from 'lucide-react';
 
@@ -23,7 +23,6 @@ export default function Dashboard() {
   const totalTrades = bots.reduce((s, b) => s + b.closedTrades, 0);
   const totalWins = bots.reduce((s, b) => s + b.winningTrades, 0);
   const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100) : 0;
-  const totalPositions = bots.reduce((s, b) => s + b.positions.length, 0);
   const available = walletBalance;
   const bestBot = [...bots].sort((a, b) => b.totalPnl - a.totalPnl)[0];
 

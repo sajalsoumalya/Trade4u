@@ -1,4 +1,4 @@
-import React from 'react';
+import { formatQuantity } from '../../lib/format';
 import { Bot } from '../../store/appStore';
 import { History } from 'lucide-react';
 import { formatDateTime } from '../../lib/format';
@@ -65,7 +65,7 @@ export function ClosedPositionsTab({
                         {cp.type.toUpperCase()}
                       </span>
                     </td>
-                    <td className="p-4 text-right text-sm font-mono text-white">{cp.quantity}</td>
+                    <td className="p-4 text-right text-sm font-mono text-white">{formatQuantity(cp.quantity)}</td>
                     <td className="p-4 text-right text-sm font-mono text-white">${cp.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     <td className="p-4 text-right text-sm font-mono text-white">${cp.exitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     <td className="p-4 text-right text-xs font-mono text-secondary">
@@ -141,7 +141,7 @@ export function ClosedPositionsTab({
                 <div className="grid grid-cols-2 gap-2 text-xs mb-3 text-muted">
                   <div>
                     <span>Quantity</span>
-                    <p className="text-white font-mono font-medium">{cp.quantity}</p>
+                    <p className="text-white font-mono font-medium">{formatQuantity(cp.quantity)}</p>
                   </div>
                   <div>
                     <span>Entry Price</span>

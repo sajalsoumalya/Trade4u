@@ -106,7 +106,7 @@ export function useTrading() {
     onSettled: refresh,
   });
   const updatePositionSltp = useMutation({
-    mutationFn: ({ id, stopLoss, takeProfit }: { id: string; stopLoss?: number; takeProfit?: number }) =>
+    mutationFn: ({ id, stopLoss, takeProfit }: { id: string; stopLoss: number | null; takeProfit: number | null }) =>
       updatePositionSltpApi(id, stopLoss, takeProfit),
     onSettled: refresh,
   });
