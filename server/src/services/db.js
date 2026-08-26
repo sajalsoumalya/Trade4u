@@ -49,6 +49,8 @@ db.exec(`
     fallback_api_key TEXT,
     fallback_quick_model TEXT DEFAULT 'minimax-m2.5-free',
     fallback_deep_model TEXT DEFAULT 'minimax-m2.5-free',
+    custom_base_url TEXT,           -- used when provider = 'custom'
+    fallback_custom_base_url TEXT,  -- used when fallback_provider = 'custom'
     updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S.000Z','now')),
     FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
   );
@@ -188,6 +190,15 @@ try {
 // Add provider_keys column — JSON map of provider -> encrypted api_key
 try {
   db.exec("ALTER TABLE llm_config ADD COLUMN provider_keys TEXT DEFAULT '{}';");
+} catch (_) {}
+
+// Base URL for the 'custom' provider — an arbitrary OpenAI-compatible endpoint.
+// Stored per slot, mirroring how the primary/fallback engines are kept apart.
+try {
+  db.exec('ALTER TABLE llm_config ADD COLUMN custom_base_url TEXT;');
+} catch (_) {}
+try {
+  db.exec('ALTER TABLE llm_config ADD COLUMN fallback_custom_base_url TEXT;');
 } catch (_) {}
 
 // decision_logs.updated_at was written by botEngine before it existed in the

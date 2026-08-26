@@ -154,6 +154,7 @@ export const importBotsApi = (bots: unknown[]) =>
 export const saveLlmConfig = async (config: {
   provider: string; apiKey: string; quickModel: string; deepModel: string;
   fallbackProvider?: string; fallbackApiKey?: string; fallbackQuickModel?: string; fallbackDeepModel?: string;
+  customBaseUrl?: string; fallbackCustomBaseUrl?: string;
 }) => {
   const res = await fetch(`${API_BASE}/trading/config`, {
     method: 'POST',
@@ -176,11 +177,13 @@ export const loadLlmConfig = async () => {
   try { return JSON.parse(text); } catch { return {}; }
 };
 
-export const testConnection = async (provider: string, apiKey?: string, isFallback = false, model?: string) => {
+export const testConnection = async (
+  provider: string, apiKey?: string, isFallback = false, model?: string, baseUrl?: string,
+) => {
   const res = await fetch(`${API_BASE}/trading/test-connection`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ provider, apiKey, isFallback, model })
+    body: JSON.stringify({ provider, apiKey, isFallback, model, baseUrl })
   });
   const text = await res.text();
   try { return JSON.parse(text); } catch { return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 100)}` }; }
@@ -199,13 +202,15 @@ export interface ModelEntry {
 export const fetchModelsFromProvider = async (
   provider: string,
   apiKey?: string,
-): Promise<{ models: ModelEntry[]; source?: string }> => {
+  baseUrl?: string,
+  isFallback = false,
+): Promise<{ models: ModelEntry[]; source?: string; error?: string }> => {
   const res = await fetch(`${API_BASE}/trading/models/fetch`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ provider, apiKey })
+    body: JSON.stringify({ provider, apiKey, baseUrl, isFallback })
   });
-  if (!res.ok) return { models: [], source: 'fallback' };
+  if (!res.ok) return { models: [], source: 'fallback', error: `HTTP ${res.status}` };
   return res.json();
 };
 

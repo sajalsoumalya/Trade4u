@@ -72,6 +72,26 @@ export function resolveStoredKey(uid, provider, isFallback = false) {
 }
 
 /**
+ * The stored base URL for `provider`, if it needs one.
+ *
+ * Only the 'custom' provider does; everything else carries its own endpoint in
+ * the provider registry, so this returns '' and the registry default applies.
+ */
+export function resolveStoredBaseUrl(uid, provider, isFallback = false) {
+  if (provider !== 'custom') return '';
+  const config = loadRawConfig(uid);
+  if (!config) return '';
+  // Match the slot the custom provider actually occupies, then fall back to
+  // whichever slot was hinted, then to either one that has a URL saved.
+  if (provider === config.provider && config.custom_base_url) return config.custom_base_url;
+  if (provider === config.fallback_provider && config.fallback_custom_base_url) {
+    return config.fallback_custom_base_url;
+  }
+  const hinted = isFallback ? config.fallback_custom_base_url : config.custom_base_url;
+  return hinted || config.custom_base_url || config.fallback_custom_base_url || '';
+}
+
+/**
  * Settle on the provider, models and key for an engine run.
  *
  * Precedence is explicit request > the user's saved primary > their configured
@@ -92,5 +112,9 @@ export function resolveEngineConfig(uid, overrides = {}) {
     ? resolveStoredKey(uid, provider)
     : overrides.apiKey;
 
-  return { provider, quickModel, deepModel, apiKey: apiKey || '' };
+  // Only a custom provider carries a URL; the engine passes it to Python as
+  // --backend-url so the OpenAI-compatible client points at the right host.
+  const baseUrl = overrides.baseUrl || resolveStoredBaseUrl(uid, provider);
+
+  return { provider, quickModel, deepModel, apiKey: apiKey || '', baseUrl: baseUrl || '' };
 }

@@ -3,11 +3,12 @@ import { optionalAuth } from '../middleware/auth.js';
 import { startAIEngine, stopAIEngine, isEngineRunning } from '../services/botEngine.js';
 import db from '../services/db.js';
 import { encrypt } from '../services/cryptoHelper.js';
-import { isMaskedKey, resolveStoredKey, loadRawConfig, parseProviderKeys } from '../services/llmConfig.js';
+import { isMaskedKey, resolveStoredKey, resolveStoredBaseUrl, loadRawConfig, parseProviderKeys } from '../services/llmConfig.js';
 import { logger } from '../services/logger.js';
 import {
   listModels as listProviderModels,
   testConnection as testProviderConnection,
+  normalizeBaseUrl,
 } from '../services/providers.js';
 import {
   getWallet, setWallet,
@@ -234,6 +235,8 @@ router.get('/config', optionalAuth, async (req, res) => {
       fallbackApiKey: config.fallback_api_key ? '●●●●●●●●' : '',
       fallbackQuickModel: config.fallback_quick_model || '',
       fallbackDeepModel: config.fallback_deep_model || '',
+      customBaseUrl: config.custom_base_url || '',
+      fallbackCustomBaseUrl: config.fallback_custom_base_url || '',
       providerKeys,
     });
   } catch (error) {
@@ -252,6 +255,8 @@ router.post('/config', optionalAuth, async (req, res) => {
       fallbackApiKey,
       fallbackQuickModel,
       fallbackDeepModel,
+      customBaseUrl,
+      fallbackCustomBaseUrl,
     } = req.body;
     const uid = req.uid;
 
@@ -293,9 +298,9 @@ router.post('/config', optionalAuth, async (req, res) => {
       INSERT INTO llm_config (
         uid, provider, api_key, quick_model, deep_model,
         fallback_provider, fallback_api_key, fallback_quick_model, fallback_deep_model,
-        provider_keys, updated_at
+        provider_keys, custom_base_url, fallback_custom_base_url, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(uid) DO UPDATE SET
         provider = excluded.provider,
         api_key = excluded.api_key,
@@ -306,6 +311,8 @@ router.post('/config', optionalAuth, async (req, res) => {
         fallback_quick_model = excluded.fallback_quick_model,
         fallback_deep_model = excluded.fallback_deep_model,
         provider_keys = excluded.provider_keys,
+        custom_base_url = excluded.custom_base_url,
+        fallback_custom_base_url = excluded.fallback_custom_base_url,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       uid,
@@ -317,7 +324,9 @@ router.post('/config', optionalAuth, async (req, res) => {
       finalFallbackKey,
       fallbackQuickModel || 'minimax-m2.5-free',
       fallbackDeepModel || 'minimax-m2.5-free',
-      providerKeysJson
+      providerKeysJson,
+      normalizeBaseUrl(customBaseUrl || ''),
+      normalizeBaseUrl(fallbackCustomBaseUrl || ''),
     );
 
     res.json({ success: true });
@@ -329,14 +338,15 @@ router.post('/config', optionalAuth, async (req, res) => {
 // --- Test API connection ---
 router.post('/test-connection', optionalAuth, async (req, res) => {
   try {
-    let { provider, apiKey, model, isFallback } = req.body;
+    let { provider, apiKey, model, isFallback, baseUrl } = req.body;
     if (!provider) return res.status(400).json({ ok: false, error: 'provider required' });
 
     if (isMaskedKey(apiKey)) {
       apiKey = resolveStoredKey(req.uid, provider, isFallback);
     }
+    if (!baseUrl) baseUrl = resolveStoredBaseUrl(req.uid, provider, isFallback);
 
-    res.json(await testProviderConnection(provider, apiKey, model));
+    res.json(await testProviderConnection(provider, apiKey, model, baseUrl));
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }
@@ -345,14 +355,15 @@ router.post('/test-connection', optionalAuth, async (req, res) => {
 // --- Dynamic model fetch from provider ---
 router.post('/models/fetch', optionalAuth, async (req, res) => {
   try {
-    let { provider, apiKey } = req.body;
+    let { provider, apiKey, baseUrl, isFallback } = req.body;
     if (!provider) return res.status(400).json({ error: 'provider required' });
 
     if (isMaskedKey(apiKey)) {
-      apiKey = resolveStoredKey(req.uid, provider);
+      apiKey = resolveStoredKey(req.uid, provider, isFallback);
     }
+    if (!baseUrl) baseUrl = resolveStoredBaseUrl(req.uid, provider, isFallback);
 
-    res.json(await listProviderModels(provider, apiKey));
+    res.json(await listProviderModels(provider, apiKey, baseUrl));
   } catch (error) {
     logger.error('trading', `Model fetch error — ${error.message}`, error);
     res.status(500).json({ error: error.message });

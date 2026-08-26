@@ -33,7 +33,8 @@ router.post('/run', optionalAuth, async (req, res) => {
     // Request parameters win, then the user's saved config, then defaults —
     // resolved by the same helper the bot engine and Settings test use, so all
     // three agree on which key belongs to which provider.
-    ({ provider, quickModel, deepModel, apiKey } = resolveEngineConfig(uid, {
+    let baseUrl;
+    ({ provider, quickModel, deepModel, apiKey, baseUrl } = resolveEngineConfig(uid, {
       provider, quickModel, deepModel, apiKey,
     }));
 
@@ -55,6 +56,7 @@ router.post('/run', optionalAuth, async (req, res) => {
     if (deepModel) args.push('--deep-model', deepModel);
     if (quickModel) args.push('--quick-model', quickModel);
     if (apiKey) args.push('--api-key', apiKey);
+    if (baseUrl) args.push('--backend-url', baseUrl);
 
     // Mirror the bot engine's child environment: PYTHONPATH so `tradingagents`
     // imports regardless of the server's working directory, and the provider's

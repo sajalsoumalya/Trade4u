@@ -161,15 +161,19 @@ class OpenAIClient(BaseLLMClient):
         if self.provider in _PROVIDER_CONFIG:
             default_base, _ = _PROVIDER_CONFIG[self.provider]
             llm_kwargs["base_url"] = self.base_url or default_base
-            # Use api_key from stored config (passed as kwarg) exclusively.
-            # Env var fallback is intentionally removed — all callers must
-            # pass the key explicitly via the config -> kwargs chain.
-            if self.kwargs.get("api_key"):
-                llm_kwargs["api_key"] = self.kwargs["api_key"]
-            elif self.provider == "ollama":
-                llm_kwargs["api_key"] = "ollama"
         elif self.base_url:
+            # Providers with no built-in entry (e.g. "custom") supply their own.
             llm_kwargs["base_url"] = self.base_url
+
+        # Use api_key from stored config (passed as kwarg) exclusively; the env
+        # var fallback is intentionally absent, so every caller passes the key
+        # through the config -> kwargs chain. This has to apply to
+        # base_url-only providers too, or a custom endpoint would silently
+        # authenticate with whatever OPENAI_API_KEY happened to be set.
+        if self.kwargs.get("api_key"):
+            llm_kwargs["api_key"] = self.kwargs["api_key"]
+        elif self.provider == "ollama":
+            llm_kwargs["api_key"] = "ollama"
 
         # Forward user-provided kwargs (except api_key already handled)
         for key in _PASSTHROUGH_KWARGS:

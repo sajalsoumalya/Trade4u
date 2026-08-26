@@ -99,6 +99,16 @@ export const PROVIDERS = {
     defaults: { context: 131072, maxOutput: 8192 },
     fallbackModels: ['glm-4.6', 'glm-4.5-air'],
   },
+  // Any OpenAI-compatible endpoint the user points us at. It has no base of
+  // its own — the URL arrives per request and is stored per user — and no
+  // suggestion list, since we cannot know what an arbitrary gateway serves.
+  custom: {
+    base: '',
+    envVar: 'CUSTOM_API_KEY',
+    requiresBaseUrl: true,
+    defaults: { context: 128000, maxOutput: 8192 },
+    fallbackModels: [],
+  },
 };
 
 // 'nvidia' was accepted as an alias before nvidia_nim became the canonical id.
@@ -107,6 +117,35 @@ const ALIASES = { nvidia: 'nvidia_nim' };
 export function getProvider(name) {
   const key = ALIASES[name] || name;
   return PROVIDERS[key] || PROVIDERS.openai;
+}
+
+/**
+ * Tidy a user-typed endpoint into the collection root we can append to.
+ *
+ * People paste whatever their gateway's docs show, so accept a full chat
+ * endpoint or a stray trailing slash and reduce both to the base that
+ * `${base}/models` and `${base}/chat/completions` can be built from.
+ */
+export function normalizeBaseUrl(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  let url = raw.trim();
+  if (!url) return '';
+  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  url = url.replace(/\/+$/, '');
+  url = url.replace(/\/(chat\/completions|completions|models)$/i, '');
+  return url;
+}
+
+/** True when this provider cannot be used without a user-supplied base URL. */
+export function requiresBaseUrl(name) {
+  return !!getProvider(name).requiresBaseUrl;
+}
+
+// Overlay a per-request base URL. An explicit URL wins even for a known
+// provider, so a corporate proxy can stand in front of any of them.
+function withBase(p, baseUrl) {
+  const base = normalizeBaseUrl(baseUrl);
+  return base ? { ...p, base } : p;
 }
 
 /** The env var a provider's API key is expected to arrive in. */
@@ -159,24 +198,36 @@ function extractModels(p, body) {
  * `source` is 'live' when the provider answered, 'fallback' otherwise — the
  * client uses it to prompt for a missing key.
  */
-export async function listModels(providerName, apiKey) {
-  const p = getProvider(providerName);
+export async function listModels(providerName, apiKey, baseUrl) {
+  const p = withBase(getProvider(providerName), baseUrl);
   let models = [];
+  let error = null;
+
+  // A custom endpoint has no default and no suggestions, so say what is
+  // missing rather than returning a silently empty dropdown.
+  if (p.requiresBaseUrl && !p.base) {
+    return { models: [], source: 'fallback', error: 'Base URL required' };
+  }
 
   if (apiKey || p.keyOptional) {
     try {
       const resp = await fetch(listUrl(p, apiKey), { headers: authHeaders(p, apiKey) });
-      if (resp.ok) models = extractModels(p, await resp.json());
-    } catch (_) {
-      // fall through to the suggestion list
+      if (resp.ok) {
+        models = extractModels(p, await resp.json());
+        if (models.length === 0) error = 'Endpoint returned no models';
+      } else {
+        error = `HTTP ${resp.status} from ${p.base}/models`;
+      }
+    } catch (e) {
+      error = `Could not reach ${p.base}/models — ${e.message}`;
     }
+  } else {
+    error = 'API key required';
   }
 
   if (models.length > 0) return { models, source: 'live' };
-  return {
-    models: (p.fallbackModels || []).map((id) => model(id, id, p.defaults)),
-    source: 'fallback',
-  };
+  const fallback = (p.fallbackModels || []).map((id) => model(id, id, p.defaults));
+  return { models: fallback, source: 'fallback', error };
 }
 
 /** Read the assistant's reply out of a provider-shaped chat response. */
@@ -197,11 +248,15 @@ function chatBody(p, modelId) {
  * Two-step credential check: validate the key against the model list, then
  * send one real chat message so the configured model is exercised too.
  */
-export async function testConnection(providerName, apiKey, modelId) {
-  const p = getProvider(providerName);
+export async function testConnection(providerName, apiKey, modelId, baseUrl) {
+  const p = withBase(getProvider(providerName), baseUrl);
   const endpointUrl = p.base;
   let keyOk = false;
   let error = null;
+
+  if (p.requiresBaseUrl && !p.base) {
+    return { ok: false, error: 'Base URL required', endpointUrl: '', llmResponse: null, keyOk: false };
+  }
 
   if (!apiKey) {
     if (p.keyOptional) keyOk = true;

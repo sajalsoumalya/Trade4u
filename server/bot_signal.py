@@ -67,6 +67,10 @@ class SignalEmitter:
         agent_config["deep_think_llm"] = d_model
         agent_config["quick_think_llm"] = q_model
         agent_config["api_key"] = config.get('api_key', '')
+        # Only set for a custom endpoint; leaving it None lets each provider's
+        # client fall back to its own default host.
+        if config.get('backend_url'):
+            agent_config["backend_url"] = config['backend_url']
         agent_config["max_debate_rounds"] = 1
         agent_config["data_vendors"] = {
             "core_stock_apis": "yfinance",
@@ -135,9 +139,12 @@ class SignalEmitter:
             api_key = self.config.get('api_key')
             if not api_key:
                 return None, None
-            from tradingagents.llm_clients.openai_client import _PROVIDER_CONFIG
-            cfg = _PROVIDER_CONFIG.get(provider)
-            base_url = cfg[0] if cfg else 'https://api.openai.com/v1'
+            # A configured base URL wins; otherwise use the provider's default.
+            base_url = self.config.get('backend_url')
+            if not base_url:
+                from tradingagents.llm_clients.openai_client import _PROVIDER_CONFIG
+                cfg = _PROVIDER_CONFIG.get(provider)
+                base_url = cfg[0] if cfg else 'https://api.openai.com/v1'
             prompt = (
                 f"Given a {action.upper()} signal for {symbol} at ${price:.2f}, "
                 f"suggest take-profit % and stop-loss % as two comma-separated numbers only. "
@@ -248,6 +255,8 @@ def main():
     parser.add_argument('--stop-loss', type=float, default=2)
     parser.add_argument('--take-profit', type=float, default=5)
     parser.add_argument('--api-key', default=None)
+    parser.add_argument('--backend-url', default=None,
+                        help='OpenAI-compatible base URL (required for --provider custom)')
 
     args = parser.parse_args()
 
@@ -258,6 +267,7 @@ def main():
         'stop_loss': args.stop_loss,
         'take_profit': args.take_profit,
         'api_key': args.api_key or '',
+        'backend_url': args.backend_url or '',
     }
 
     emitter = SignalEmitter(config)

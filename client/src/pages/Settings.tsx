@@ -17,7 +17,11 @@ const llmProviders = [
   { id: 'xai', name: 'xAI (Grok)' },
   { id: 'qwen', name: 'Qwen' },
   { id: 'glm', name: 'GLM (Z.ai)' },
+  { id: 'custom', name: 'Custom (OpenAI-compatible)' },
 ];
+
+// The only provider without a built-in endpoint: the user supplies one.
+const needsBaseUrl = (provider: string) => provider === 'custom';
 
 function maskApiKey(key: string): string {
   if (!key) return 'Not set';
@@ -82,6 +86,10 @@ export default function Settings() {
   const [fallbackConnectionStatus, setFallbackConnectionStatus] = useState<ConnStatus | null>(null);
   const [testingFallbackConn, setTestingFallbackConn] = useState(false);
   const [providerKeys, setProviderKeys] = useState<Record<string, boolean>>({});
+  const [customBaseUrl, setCustomBaseUrl] = useState('');
+  const [fallbackCustomBaseUrl, setFallbackCustomBaseUrl] = useState('');
+  const [modelsError, setModelsError] = useState('');
+  const [fallbackModelsError, setFallbackModelsError] = useState('');
 
   const hasConfig = llmProvider && quickModel && deepModel;
 
@@ -109,6 +117,8 @@ export default function Settings() {
       if (config.fallbackQuickModel && config.fallbackQuickModel !== 'minimax-m2.5-free') setFallbackQuickModel(config.fallbackQuickModel);
       if (config.fallbackDeepModel && config.fallbackDeepModel !== 'minimax-m2.5-free') setFallbackDeepModel(config.fallbackDeepModel);
       if (config.providerKeys) setProviderKeys(config.providerKeys);
+      if (config.customBaseUrl) setCustomBaseUrl(config.customBaseUrl);
+      if (config.fallbackCustomBaseUrl) setFallbackCustomBaseUrl(config.fallbackCustomBaseUrl);
     }).catch(() => {
       // Server unreachable — keep Zustand persisted state as-is
     }).finally(() => {
@@ -123,14 +133,22 @@ export default function Settings() {
       setModels([]);
       return;
     }
+    // Nothing to query until a custom endpoint has been given a URL.
+    if (needsBaseUrl(llmProvider) && !customBaseUrl.trim()) {
+      setModels([]);
+      setModelsError('Enter a base URL to load models');
+      return;
+    }
 
     const timer = setTimeout(() => {
       setLoadingModels(true);
       setProviderChanged(false);
-      fetchModelsFromProvider(llmProvider, apiKey || undefined)
+      setModelsError('');
+      fetchModelsFromProvider(llmProvider, apiKey || undefined, customBaseUrl || undefined, false)
         .then(data => {
           setModels(data.models || []);
           setModelsSource(data.source || '');
+          setModelsError(data.error || '');
           const m = data.models || [];
           if (m.length > 0 && initialConfigLoaded.current) {
             const { quickModel: qm, deepModel: dm } = useAppStore.getState();
@@ -143,7 +161,7 @@ export default function Settings() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [llmProvider, apiKey]);
+  }, [llmProvider, apiKey, customBaseUrl]);
 
   useEffect(() => {
     const isOpencode = fallbackProvider === 'opencode';
@@ -152,14 +170,21 @@ export default function Settings() {
       setFallbackModels([]);
       return;
     }
+    if (needsBaseUrl(fallbackProvider) && !fallbackCustomBaseUrl.trim()) {
+      setFallbackModels([]);
+      setFallbackModelsError('Enter a base URL to load models');
+      return;
+    }
 
     const timer = setTimeout(() => {
       setLoadingFallbackModels(true);
       setFallbackProviderChanged(false);
-      fetchModelsFromProvider(fallbackProvider, fallbackApiKey || undefined)
+      setFallbackModelsError('');
+      fetchModelsFromProvider(fallbackProvider, fallbackApiKey || undefined, fallbackCustomBaseUrl || undefined, true)
         .then(data => {
           setFallbackModels(data.models || []);
           setFallbackModelsSource(data.source || '');
+          setFallbackModelsError(data.error || '');
           const m = data.models || [];
           if (m.length > 0 && initialConfigLoaded.current) {
             const { fallbackQuickModel: fqm, fallbackDeepModel: fdm } = useAppStore.getState();
@@ -172,7 +197,7 @@ export default function Settings() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [fallbackProvider, fallbackApiKey]);
+  }, [fallbackProvider, fallbackApiKey, fallbackCustomBaseUrl]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -184,11 +209,14 @@ export default function Settings() {
     // way updating just the Main engine never forces you to set up the Fallback
     // or shows a spurious "fallback key required" error.
     const isConfigured = (provider: string, key: string) =>
-      provider === 'opencode' || (!!key && key.trim() !== '' && key !== 'Not set');
+      (provider === 'opencode' || (!!key && key.trim() !== '' && key !== 'Not set')) &&
+      // A custom engine is only "configured" once it has somewhere to call.
+      (!needsBaseUrl(provider) ||
+        !!(provider === fallbackProvider ? fallbackCustomBaseUrl : customBaseUrl).trim());
 
     if (isConfigured(llmProvider, apiKey)) {
       try {
-        setConnectionStatus(await testConnection(llmProvider, apiKey, false, quickModel || deepModel || undefined));
+        setConnectionStatus(await testConnection(llmProvider, apiKey, false, quickModel || deepModel || undefined, customBaseUrl || undefined));
       } catch (e: any) {
         setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
       }
@@ -198,7 +226,7 @@ export default function Settings() {
 
     if (isConfigured(fallbackProvider, fallbackApiKey)) {
       try {
-        setFallbackConnectionStatus(await testConnection(fallbackProvider, fallbackApiKey, true, fallbackQuickModel || fallbackDeepModel || undefined));
+        setFallbackConnectionStatus(await testConnection(fallbackProvider, fallbackApiKey, true, fallbackQuickModel || fallbackDeepModel || undefined, fallbackCustomBaseUrl || undefined));
       } catch (e: any) {
         setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
       }
@@ -218,6 +246,8 @@ export default function Settings() {
         fallbackApiKey,
         fallbackQuickModel,
         fallbackDeepModel,
+        customBaseUrl,
+        fallbackCustomBaseUrl,
       });
 
       // Apply the new config to every bot and restart the running ones so the
@@ -249,7 +279,7 @@ export default function Settings() {
     setTestingConn(true);
     setConnectionStatus(null);
     try {
-      const result = await testConnection(llmProvider, apiKey, false, quickModel || deepModel || undefined);
+      const result = await testConnection(llmProvider, apiKey, false, quickModel || deepModel || undefined, customBaseUrl || undefined);
       setConnectionStatus(result);
     } catch (e: any) {
       setConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
@@ -261,7 +291,7 @@ export default function Settings() {
     setTestingFallbackConn(true);
     setFallbackConnectionStatus(null);
     try {
-      const result = await testConnection(fallbackProvider, fallbackApiKey, true, fallbackQuickModel || fallbackDeepModel || undefined);
+      const result = await testConnection(fallbackProvider, fallbackApiKey, true, fallbackQuickModel || fallbackDeepModel || undefined, fallbackCustomBaseUrl || undefined);
       setFallbackConnectionStatus(result);
     } catch (e: any) {
       setFallbackConnectionStatus({ ok: false, error: e.message || 'Server unreachable' });
@@ -522,6 +552,9 @@ export default function Settings() {
   const activeQuickModelDetails = isMain ? quickModelDetails : fallbackQuickModelDetails;
   const activeDeepModelDetails = isMain ? deepModelDetails : fallbackDeepModelDetails;
 
+  const activeBaseUrl = isMain ? customBaseUrl : fallbackCustomBaseUrl;
+  const activeModelsError = isMain ? modelsError : fallbackModelsError;
+  const setActiveBaseUrl = isMain ? setCustomBaseUrl : setFallbackCustomBaseUrl;
   const setActiveProvider = isMain ? setLlmProvider : setFallbackProvider;
   const setActiveApiKey = isMain ? setApiKey : setFallbackApiKey;
   const setActiveQuickModel = isMain ? setQuickModel : setFallbackQuickModel;
@@ -539,6 +572,7 @@ export default function Settings() {
     setActiveModels([]);
     // Restore saved key for the selected provider, if any
     setActiveApiKey(providerKeys[id] ? '●●●●●●●●' : '');
+    (isMain ? setModelsError : setFallbackModelsError)('');
     setActiveQuickModel('');
     setActiveDeepModel('');
     setActiveConnectionStatus(null);
@@ -548,9 +582,10 @@ export default function Settings() {
     setActiveLoadingModels(true);
     setActiveProviderChanged(false);
     setActiveConnectionStatus(null);
-    fetchModelsFromProvider(activeProvider, activeApiKey || undefined)
+    fetchModelsFromProvider(activeProvider, activeApiKey || undefined, activeBaseUrl || undefined, !isMain)
       .then(data => {
         setActiveModels(data.models || []);
+        (isMain ? setModelsError : setFallbackModelsError)(data.error || '');
         const m = data.models || [];
         if (m.length > 0) {
           const st = useAppStore.getState();
@@ -615,6 +650,30 @@ export default function Settings() {
           </div>
         </div>
 
+        {needsBaseUrl(activeProvider) && (
+          <div className="mb-4">
+            <label className="block text-xs text-muted mb-1.5 font-medium">Base URL</label>
+            <div className="relative">
+              <Activity className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input
+                type="url"
+                value={activeBaseUrl}
+                onChange={(e) => setActiveBaseUrl(e.target.value)}
+                spellCheck={false}
+                autoComplete="off"
+                className="w-full bg-background border border-border rounded-lg pl-9 pr-3 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-primary"
+                placeholder="https://your-gateway.example.com/v1"
+              />
+            </div>
+            <p className="text-[10px] text-muted mt-1.5">
+              Any OpenAI-compatible endpoint. Models are read from
+              <span className="font-mono text-[#848E9C]"> {'{base}'}/models</span> and chat from
+              <span className="font-mono text-[#848E9C]"> {'{base}'}/chat/completions</span>. A trailing
+              <span className="font-mono text-[#848E9C]"> /chat/completions</span> is trimmed for you.
+            </p>
+          </div>
+        )}
+
         <div className="mb-4">
           <label className="block text-xs text-muted mb-1.5 font-medium">API Key</label>
           <div className="relative">
@@ -628,7 +687,8 @@ export default function Settings() {
         </div>
 
         <div className="flex items-center gap-2 mb-4">
-          <button type="button" onClick={fetchActiveModels} disabled={activeLoadingModels}
+          <button type="button" onClick={fetchActiveModels}
+            disabled={activeLoadingModels || (needsBaseUrl(activeProvider) && !activeBaseUrl.trim())}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 text-accent text-xs font-medium border border-accent/30 hover:bg-accent/20 disabled:opacity-50 transition-all">
             <RefreshCw className={`w-3 h-3 ${activeLoadingModels ? 'animate-spin' : ''}`} /> {activeLoadingModels ? 'Loading...' : 'Fetch Models'}
           </button>
@@ -637,7 +697,12 @@ export default function Settings() {
           )}
         </div>
 
-        {activeModelsSource === 'fallback' && activeProvider !== 'opencode' && activeProvider !== 'openrouter' && (
+        {activeModelsError && (
+          <p className="text-[10px] text-[#F6465D] mb-4 -mt-1">{activeModelsError}</p>
+        )}
+
+        {!activeModelsError && activeModelsSource === 'fallback' && !needsBaseUrl(activeProvider)
+          && activeProvider !== 'opencode' && activeProvider !== 'openrouter' && (
           <p className="text-[10px] text-[#F0B90B] mb-4 -mt-1">
             Showing suggested models — enter a valid {providerLabel(activeProvider)} API key, then click Fetch Models to load live ones.
           </p>

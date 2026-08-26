@@ -18,7 +18,7 @@ export function startAIEngine(bot, io) {
   // A bot's own pinned provider/models win; otherwise fall back to the user's
   // saved config. Shared with the analysis route and the Settings connection
   // test so all three resolve the same key for the same provider.
-  const { provider, quickModel: qModel, deepModel: dModel, apiKey } = resolveEngineConfig(bot.uid, {
+  const { provider, quickModel: qModel, deepModel: dModel, apiKey, baseUrl } = resolveEngineConfig(bot.uid, {
     provider: bot.provider,
     quickModel: bot.quickModel,
     deepModel: bot.deepModel,
@@ -36,10 +36,15 @@ export function startAIEngine(bot, io) {
     '--take-profit', String(bot.takeProfit || 5),
   ];
 
-  logger.info('botEngine', `[${bot.id}] Starting — provider=${provider} qModel=${qModel} dModel=${dModel} hasKey=${!!apiKey}`);
+  logger.info('botEngine', `[${bot.id}] Starting — provider=${provider} qModel=${qModel} dModel=${dModel} hasKey=${!!apiKey} baseUrl=${baseUrl || '(default)'}`);
 
   if (apiKey) {
     args.push('--api-key', apiKey);
+  }
+  // Only a custom provider supplies one; without it the Python client falls
+  // back to the provider's own default endpoint.
+  if (baseUrl) {
+    args.push('--backend-url', baseUrl);
   }
 
   const providerEnvVar = envVarFor(provider);

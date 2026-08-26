@@ -12,6 +12,8 @@ parser.add_argument('--provider', type=str, default='opencode', help='LLM provid
 parser.add_argument('--deep-model', type=str, default='minimax-m2.5-free', help='Deep thinking model')
 parser.add_argument('--quick-model', type=str, default='minimax-m2.5-free', help='Quick thinking model')
 parser.add_argument('--api-key', type=str, default=None, help='API key for the LLM provider')
+parser.add_argument('--backend-url', type=str, default=None,
+                    help='OpenAI-compatible base URL (required for --provider custom)')
 args = parser.parse_args()
 
 # Load environment variables from .env file. Optional: when this runs as a
@@ -34,6 +36,8 @@ config["quick_think_llm"] = args.quick_model
 config["max_debate_rounds"] = 1
 if args.api_key:
     config["api_key"] = args.api_key
+if args.backend_url:
+    config["backend_url"] = args.backend_url
 # Leave backend_url unset (None): each provider's client resolves its own
 # default endpoint. Hardcoding OpenCode's URL here routed every provider
 # (OpenAI/Anthropic/Google/DeepSeek) to opencode.ai, so a saved key for any

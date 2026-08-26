@@ -6,6 +6,9 @@ from .base_client import BaseLLMClient
 _OPENAI_COMPATIBLE = (
     "openai", "xai", "deepseek", "qwen", "glm", "ollama", "openrouter",
     "opencode", "nvidia_nim",
+    # Any user-supplied OpenAI-compatible endpoint; its base_url arrives from
+    # config rather than a built-in default.
+    "custom",
 )
 
 
